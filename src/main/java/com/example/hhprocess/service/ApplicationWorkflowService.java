@@ -38,6 +38,7 @@ public class ApplicationWorkflowService {
     private final HistoryService historyService;
     private final NotificationService notificationService;
     private final ApplicationMapper applicationMapper;
+    private final CurrentUserService currentUserService;
 
     public ApplicationResponse create(CreateApplicationRequest request) {
         Vacancy vacancy = vacancyService.findEntityById(request.getVacancyId());
@@ -114,28 +115,28 @@ public class ApplicationWorkflowService {
     public ApplicationResponse rejectByHr(Long id, DecisionRequest request) {
         JobApplication application = findEntityById(id);
         ensureState(application, Set.of(ApplicationStatus.UNDER_REVIEW, ApplicationStatus.NEEDS_REVIEW));
-        return updateStatus(application, ApplicationStatus.HR_REJECTED, "HR", request.getComment(), NotificationType.HR_REJECTION,
+        return updateStatus(application, ApplicationStatus.HR_REJECTED, currentUserService.getCurrentUsernameOrSystem(), request.getComment(), NotificationType.HR_REJECTION,
                 "HR decision: application rejected. Reason: " + request.getComment());
     }
 
     public ApplicationResponse invite(Long id, DecisionRequest request) {
         JobApplication application = findEntityById(id);
         ensureState(application, Set.of(ApplicationStatus.UNDER_REVIEW, ApplicationStatus.NEEDS_REVIEW));
-        return updateStatus(application, ApplicationStatus.INVITED, "HR", request.getComment(), NotificationType.INVITATION,
+        return updateStatus(application, ApplicationStatus.INVITED, currentUserService.getCurrentUsernameOrSystem(), request.getComment(), NotificationType.INVITATION,
                 "You are invited to the next stage. Comment: " + request.getComment());
     }
 
     public ApplicationResponse reserve(Long id, DecisionRequest request) {
         JobApplication application = findEntityById(id);
         ensureState(application, Set.of(ApplicationStatus.UNDER_REVIEW, ApplicationStatus.NEEDS_REVIEW));
-        return updateStatus(application, ApplicationStatus.IN_RESERVE, "HR", request.getComment(), NotificationType.RESERVE,
+        return updateStatus(application, ApplicationStatus.IN_RESERVE, currentUserService.getCurrentUsernameOrSystem(), request.getComment(), NotificationType.RESERVE,
                 "Your application was moved to reserve. Comment: " + request.getComment());
     }
 
     public ApplicationResponse acceptInvitation(Long id, DecisionRequest request) {
         JobApplication application = findEntityById(id);
         ensureState(application, Set.of(ApplicationStatus.INVITED));
-        return updateStatus(application, ApplicationStatus.ACCEPTED, "CANDIDATE", request.getComment(), NotificationType.ACCEPTANCE,
+        return updateStatus(application, ApplicationStatus.ACCEPTED, currentUserService.getCurrentUsernameOrSystem(), request.getComment(), NotificationType.ACCEPTANCE,
                 "Candidate accepted invitation. Comment: " + request.getComment());
     }
 
