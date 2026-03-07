@@ -2,18 +2,23 @@ spring:
   application:
     name: hh-process
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:hh_process}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASS:postgres}
+    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?currentSchema=${POSTGRES_SCHEMA}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASS}
   jpa:
     hibernate:
       ddl-auto: validate
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: s408194
         format_sql: true
     open-in-view: false
   flyway:
     enabled: true
+    schemas: ${POSTGRES_SCHEMA}
+    baseline-on-migrate: true
+    baseline-version: 0
 
 server:
   port: 8080
