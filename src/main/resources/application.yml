@@ -2,7 +2,7 @@ spring:
   application:
     name: hh-process
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?currentSchema=${POSTGRES_SCHEMA}
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASS}
   jpa:
