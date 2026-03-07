@@ -75,7 +75,8 @@ cmd_start() {
 
   load_env
   echo "Starting $JAR_NAME..."
-  nohup $JAVA_BIN $JAVA_OPTS -jar "$JAR_NAME" >> "$LOG_FILE" 2>&1 &
+  : > "$LOG_FILE"
+  nohup $JAVA_BIN $JAVA_OPTS -jar "$JAR_NAME" > "$LOG_FILE" 2>&1 &
   echo $! > "$PID_FILE"
   echo "Started (PID $(cat "$PID_FILE"))"
 }
