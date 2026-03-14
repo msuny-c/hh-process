@@ -28,7 +28,7 @@ import java.util.List;
 @EnableConfigurationProperties(JwtProperties.class)
 public class SecurityConfig {
 
-    @Value("${app.websocket.allowed-origins:http://localhost:3000}")
+    @Value("${app.websocket.allowed-origins}")
     private String allowedOrigins;
 
     @Bean
