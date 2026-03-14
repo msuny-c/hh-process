@@ -1,0 +1,20 @@
+CREATE UNIQUE INDEX uq_active_application
+    ON applications (candidate_id, vacancy_id)
+    WHERE status NOT IN ('SCREENING_FAILED', 'REJECTED_BY_RECRUITER', 'INVITATION_RESPONDED', 'CLOSED_BY_TIMEOUT');
+
+ALTER TABLE users ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE users ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
+ALTER TABLE candidates ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE recruiters ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE vacancies ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE vacancies ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
+ALTER TABLE applications ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE applications ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
+ALTER TABLE applications ALTER COLUMN invitation_sent_at TYPE TIMESTAMPTZ USING invitation_sent_at AT TIME ZONE 'UTC';
+ALTER TABLE applications ALTER COLUMN invitation_expires_at TYPE TIMESTAMPTZ USING invitation_expires_at AT TIME ZONE 'UTC';
+ALTER TABLE applications ALTER COLUMN response_received_at TYPE TIMESTAMPTZ USING response_received_at AT TIME ZONE 'UTC';
+ALTER TABLE applications ALTER COLUMN closed_at TYPE TIMESTAMPTZ USING closed_at AT TIME ZONE 'UTC';
+ALTER TABLE screening_results ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE invitation_responses ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE notifications ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE application_status_history ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';

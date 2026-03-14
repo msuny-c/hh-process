@@ -1,8 +1,10 @@
-target/
 .git
 .gitignore
-*.md
+target
+*.iml
 .idea
 .vscode
-*.iml
-.DS_Store
+.cursor
+*.md
+scripts
+docs.md

@@ -1,0 +1,10 @@
+package ru.itmo.hhprocess.enums;
+
+public enum NotificationType {
+    SCREENING_RESULT,
+    NEW_APPLICATION,
+    APPLICATION_REJECTED,
+    INVITATION,
+    INVITATION_RESPONSE,
+    INVITATION_TIMEOUT
+}

@@ -1,126 +1,80 @@
-# hh-process
+# HH Process — сервис обработки откликов
 
-Spring Boot + PostgreSQL проект для бизнес-процесса **обработки откликов на вакансию**.
-
-## Что реализовано
-
-- создание вакансий
-- создание кандидатов
-- подача отклика
-- автоматическая валидация отклика
-- решения HR: отказ, приглашение, резерв
-- принятие приглашения кандидатом
-- закрытие приглашения по таймауту
-- история смены статусов
-- лог уведомлений
-- JWT authentication / authorization
-- refresh token
-- logout
-- OpenAPI / Swagger UI
-- Flyway миграции
-
-## JWT auth
-
-Открытые endpoint:
-
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/logout`
-- Swagger/OpenAPI
-
-Защищённые endpoint работают с заголовком:
-
-```
-Authorization: Bearer <access_token>
-```
-
-Роли:
-
-- `USER` — кандидатские операции
-- `HR` — HR-операции и просмотр служебных данных
-
-Пример регистрации HR-пользователя:
-
-```json
-{
-  "email": "hr@example.com",
-  "password": "Admin123!",
-  "role": "HR"
-}
-```
-
-## Статусы отклика
-
-- `NEW`
-- `NEEDS_REVIEW`
-- `UNDER_REVIEW`
-- `AUTO_REJECTED`
-- `HR_REJECTED`
-- `INVITED`
-- `IN_RESERVE`
-- `ACCEPTED`
-- `EXPIRED`
+- JWT auth
+- роли `CANDIDATE`, `RECRUITER`, `ADMIN`
+- PostgreSQL + Flyway
+- REST API
+- WebSocket для push уведомлений
+- в admin оставлена только ручная job закрытия просроченных приглашений
+- срок жизни приглашения зашит в коде: **48 часов**
 
 ## Запуск
 
-Нужны:
-
-- Java 17+
-- Maven 3.9+
-- PostgreSQL 14+
-
-Создай БД:
-
-```sql
-create database hh_process;
-```
-
-Можно использовать значения по умолчанию, либо задать переменные окружения:
-
-- `POSTGRES_HOST`
-- `POSTGRES_PORT`
-- `POSTGRES_DB`
-- `POSTGRES_USER`
-- `POSTGRES_PASS`
-- `JWT_SECRET`
-- `JWT_ACCESS_EXPIRATION`
-- `JWT_REFRESH_EXPIRATION`
-
-Затем:
-
+### 1. PostgreSQL
 ```bash
-mvn clean package
-java -jar target/hh-process-0.0.1-SNAPSHOT.jar
+docker compose up -d postgres
 ```
 
-Swagger UI:
+### 2. Переменные окружения
+```bash
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export POSTGRES_DB=hh_process
+export POSTGRES_USER=postgres
+export POSTGRES_PASS=postgres
+```
 
-- `http://localhost:8080/swagger-ui.html`
+### 3. Приложение
+```bash
+mvn spring-boot:run
+```
 
-## Основные endpoint
+## Seed-пользователи
+Создаются миграцией `V3__seed_users.sql`.
+
+| Роль | Email | Пароль |
+|---|---|---|
+| ADMIN | admin@example.com | password123 |
+| RECRUITER | recruiter@example.com | password123 |
+
+Кандидат создается через `POST /api/v1/auth/register/candidate`.
+
+## Основные endpoint'ы
 
 ### Auth
-
-- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/register/candidate`
 - `POST /api/v1/auth/login`
-- `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/logout`
-- `GET /api/v1/auth/me`
+- `GET /api/v1/me` — текущий пользователь (по JWT)
 
-### Business API
+### Candidate
+- `POST /api/v1/candidates/vacancies/{vacancyId}` — отклик на вакансию (body: resumeText, coverLetter)
+- `GET /api/v1/candidates/applications`
+- `GET /api/v1/candidates/applications/{id}`
+- `POST /api/v1/candidates/applications/{id}/invitation-response`
+- `GET /api/v1/notifications`
+- `PATCH /api/v1/notifications/{id}/read`
 
-- `POST /api/v1/vacancies` (HR)
-- `GET /api/v1/vacancies`
-- `POST /api/v1/candidates`
-- `GET /api/v1/candidates` (HR)
-- `POST /api/v1/applications`
-- `GET /api/v1/applications` (HR)
-- `POST /api/v1/applications/{id}/validate` (HR)
-- `POST /api/v1/applications/{id}/auto-reject` (HR)
-- `POST /api/v1/applications/{id}/reject` (HR)
-- `POST /api/v1/applications/{id}/invite` (HR)
-- `POST /api/v1/applications/{id}/reserve` (HR)
-- `POST /api/v1/applications/{id}/accept`
-- `POST /api/v1/applications/{id}/expire` (HR)
-- `GET /api/v1/applications/{id}/history` (HR)
+### Recruiter
+- `POST /api/v1/recruiters/vacancies`
+- `GET /api/v1/recruiters/vacancies`
+- `PATCH /api/v1/recruiters/vacancies/{id}/status`
+- `GET /api/v1/recruiters/applications`
+- `GET /api/v1/recruiters/applications/{id}`
+- `POST /api/v1/recruiters/applications/{id}/reject`
+- `POST /api/v1/recruiters/applications/{id}/invite`
+
+### Admin
+- `POST /api/v1/admin/jobs/close-expired-invitations`
+
+## WebSocket
+- endpoint: `/ws`
+- user notifications: `/user/queue/notifications`
+- JWT можно передать в STOMP header `Authorization: Bearer <token>`
+
+## Swagger
+- `http://localhost:8080/swagger-ui.html`
+
+## Curl-сценарий
+```bash
+bash scripts/test-api.sh
+```
