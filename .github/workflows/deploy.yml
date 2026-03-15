@@ -5,6 +5,9 @@ on:
     branches: ["main"]
   workflow_dispatch: {}
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -124,7 +127,7 @@ jobs:
           [ -z "$PORT" ] && PORT=8080
           ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
-            "i=0; while [ \$i -lt 180 ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; echo 'Port ${PORT} not open'; exit 1"
+            "i=0; while [ \$i -lt 60 ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; echo 'Port ${PORT} not open'; exit 1"
 
       - name: Fetch app.log from server
         if: always()
@@ -136,11 +139,7 @@ jobs:
           ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=10 \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "cat ~/apps/blps/app.log 2>/dev/null || echo '(app.log not found or empty)'" > app.log 2>/dev/null || true
-          test -f app.log || echo "Could not fetch app.log from server" > app.log
-
-      - name: Ensure app.log exists for artifact
-        if: always()
-        run: test -f app.log || echo "app.log not available" > app.log
+          test -f app.log || echo "app.log not available" > app.log
 
       - name: Upload app.log artifact
         if: always()
