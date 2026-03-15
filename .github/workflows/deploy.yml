@@ -23,15 +23,7 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: Cache Maven build output
-        id: cache-build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: maven-build-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}-${{ hashFiles('**/*.java') }}
-
       - name: Build JAR
-        if: steps.cache-build.outputs.cache-hit != 'true'
         run: mvn -B clean package -DskipTests
 
       - name: Detect JAR name
