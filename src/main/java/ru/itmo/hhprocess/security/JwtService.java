@@ -29,14 +29,32 @@ public class JwtService {
         this.signingKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(properties.secret()));
     }
 
+    private static final String CLAIM_TYPE = "type";
+    private static final String TYPE_ACCESS = "access";
+    private static final String TYPE_REFRESH = "refresh";
+
     public String generateAccessToken(UserEntity user) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(user.getEmail())
                 .claim("role", user.getRole().name())
                 .claim("userId", user.getId().toString())
+                .claim(CLAIM_TYPE, TYPE_ACCESS)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(properties.accessTokenExpiration())))
+                .signWith(signingKey)
+                .compact();
+    }
+
+    public String generateRefreshToken(UserEntity user) {
+        Instant now = Instant.now();
+        return Jwts.builder()
+                .subject(user.getEmail())
+                .claim("role", user.getRole().name())
+                .claim("userId", user.getId().toString())
+                .claim(CLAIM_TYPE, TYPE_REFRESH)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusMillis(properties.refreshTokenExpiration())))
                 .signWith(signingKey)
                 .compact();
     }
@@ -50,20 +68,46 @@ public class JwtService {
 
     public Authentication resolveStatelessAuthentication(String jwt) {
         Claims claims = parseClaims(jwt);
-        if (claims.getExpiration().before(new Date())) {
+        if (!TYPE_ACCESS.equals(claims.get(CLAIM_TYPE, String.class))) {
+            return null;
+        }
+        if (claims.getExpiration() != null && claims.getExpiration().before(new Date())) {
             return null;
         }
         String email = claims.getSubject();
-        if (email == null) {
+        if (email == null || email.isBlank()) {
             return null;
         }
 
-        UUID userId = UUID.fromString(claims.get("userId", String.class));
-        UserRole role = UserRole.valueOf(claims.get("role", String.class));
+        String userIdStr = claims.get("userId", String.class);
+        String roleStr = claims.get("role", String.class);
+        if (userIdStr == null || userIdStr.isBlank() || roleStr == null || roleStr.isBlank()) {
+            return null;
+        }
+        UUID userId;
+        UserRole role;
+        try {
+            userId = UUID.fromString(userIdStr);
+            role = UserRole.valueOf(roleStr);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
         JwtPrincipal principal = new JwtPrincipal(userId, email, role);
 
         var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
+    }
+
+    public String validateRefreshToken(String token) {
+        Claims claims = parseClaims(token);
+        if (!TYPE_REFRESH.equals(claims.get(CLAIM_TYPE, String.class))) {
+            return null;
+        }
+        if (claims.getExpiration() == null || claims.getExpiration().before(new Date())) {
+            return null;
+        }
+        String email = claims.getSubject();
+        return (email != null && !email.isBlank()) ? email : null;
     }
 
     private Claims parseClaims(String token) {

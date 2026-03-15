@@ -3,6 +3,7 @@ package ru.itmo.hhprocess.service;
 import lombok.RequiredArgsConstructor;
 import ru.itmo.hhprocess.dto.auth.*;
 import ru.itmo.hhprocess.entity.CandidateEntity;
+import ru.itmo.hhprocess.service.RefreshTokenService.RefreshResult;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.enums.UserRole;
@@ -10,6 +11,7 @@ import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.repository.CandidateRepository;
 import ru.itmo.hhprocess.repository.UserRepository;
 import ru.itmo.hhprocess.security.JwtPrincipal;
+import ru.itmo.hhprocess.security.JwtProperties;
 import ru.itmo.hhprocess.security.JwtService;
 
 import org.springframework.http.HttpStatus;
@@ -31,6 +33,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final JwtProperties jwtProperties;
+    private final RefreshTokenService refreshTokenService;
 
     @Transactional
     public RegisterResponse registerCandidate(RegisterCandidateRequest request) {
@@ -76,8 +80,23 @@ public class AuthService {
                         ErrorCode.AUTH_INVALID_CREDENTIALS, "Invalid email or password"));
 
         String accessToken = jwtService.generateAccessToken(user);
+        String refreshToken = refreshTokenService.create(user);
+        int expiresIn = (int) (jwtProperties.accessTokenExpiration() / 1000);
+
         return LoginResponse.builder()
                 .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .expiresIn(expiresIn)
+                .build();
+    }
+
+    @Transactional
+    public RefreshResponse refresh(RefreshRequest request) {
+        RefreshResult result = refreshTokenService.validateAndRotate(request.getRefreshToken());
+        return RefreshResponse.builder()
+                .accessToken(result.accessToken())
+                .refreshToken(result.refreshToken())
+                .expiresIn(result.expiresIn())
                 .build();
     }
 

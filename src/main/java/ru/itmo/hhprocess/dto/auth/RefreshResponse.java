@@ -5,7 +5,7 @@ import lombok.Value;
 
 @Value
 @Builder
-public class LoginResponse {
+public class RefreshResponse {
     String accessToken;
     String refreshToken;
     int expiresIn;

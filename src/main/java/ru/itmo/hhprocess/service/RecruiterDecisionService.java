@@ -87,6 +87,7 @@ public class RecruiterDecisionService {
         application.setStatus(ApplicationStatus.REJECTED_BY_RECRUITER);
         application.setRecruiterComment(request.getComment());
         application.setClosedAt(Instant.now());
+        applicationRepository.save(application);
 
         historyService.record(application,
                 ApplicationStatus.ON_RECRUITER_REVIEW,
@@ -115,6 +116,7 @@ public class RecruiterDecisionService {
         application.setInvitationText(request.getMessage());
         application.setInvitationSentAt(now);
         application.setInvitationExpiresAt(expiresAt);
+        applicationRepository.save(application);
 
         historyService.record(application,
                 ApplicationStatus.ON_RECRUITER_REVIEW,

@@ -43,7 +43,7 @@ public class SecurityConfig {
             .exceptionHandling(e -> e.authenticationEntryPoint(entryPoint))
             .authenticationProvider(authProvider)
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/v1/auth/register/**", "/api/v1/auth/login").permitAll()
+                .requestMatchers("/api/v1/auth/register/**", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
