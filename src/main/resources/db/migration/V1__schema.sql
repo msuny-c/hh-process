@@ -1,4 +1,10 @@
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE OR REPLACE FUNCTION gen_random_uuid() RETURNS uuid AS $$
+  SELECT (
+    substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-4' || substr(h, 13, 3) || '-' ||
+    substr('89ab', 1 + (random() * 4)::int, 1) || substr(h, 17, 3) || '-' || substr(h, 21, 12)
+  )::uuid
+  FROM (SELECT md5(random()::text || clock_timestamp()::text) AS h) t;
+$$ LANGUAGE sql VOLATILE;
 
 CREATE TABLE users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
