@@ -6,22 +6,22 @@ CREATE TABLE users (
     password_hash VARCHAR(255)        NOT NULL,
     role          VARCHAR(32)         NOT NULL,
     enabled       BOOLEAN             NOT NULL DEFAULT TRUE,
-    created_at    TIMESTAMP           NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMP           NOT NULL DEFAULT now()
+    created_at    TIMESTAMPTZ         NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ         NOT NULL DEFAULT now()
 );
 
 CREATE TABLE candidates (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id    UUID UNIQUE NOT NULL REFERENCES users (id),
     full_name  VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP    NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE recruiters (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id    UUID UNIQUE NOT NULL REFERENCES users (id),
     full_name  VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP    NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE vacancies (
@@ -32,8 +32,8 @@ CREATE TABLE vacancies (
     status              VARCHAR(32)  NOT NULL,
     required_skills     JSONB        NOT NULL DEFAULT '[]',
     screening_threshold INT          NOT NULL DEFAULT 75,
-    created_at          TIMESTAMP    NOT NULL DEFAULT now(),
-    updated_at          TIMESTAMP    NOT NULL DEFAULT now()
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE applications (
@@ -45,12 +45,13 @@ CREATE TABLE applications (
     status                VARCHAR(32)  NOT NULL,
     recruiter_comment     TEXT,
     invitation_text       TEXT,
-    invitation_sent_at    TIMESTAMP,
-    invitation_expires_at TIMESTAMP,
-    response_received_at  TIMESTAMP,
-    closed_at             TIMESTAMP,
-    created_at            TIMESTAMP    NOT NULL DEFAULT now(),
-    updated_at            TIMESTAMP    NOT NULL DEFAULT now()
+    invitation_sent_at    TIMESTAMPTZ,
+    invitation_expires_at TIMESTAMPTZ,
+    response_received_at  TIMESTAMPTZ,
+    closed_at             TIMESTAMPTZ,
+    version               BIGINT       NOT NULL DEFAULT 0,
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE screening_results (
@@ -60,7 +61,7 @@ CREATE TABLE screening_results (
     passed         BOOLEAN     NOT NULL,
     matched_skills JSONB,
     details_json   JSONB,
-    created_at     TIMESTAMP   NOT NULL DEFAULT now()
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE invitation_responses (
@@ -69,7 +70,7 @@ CREATE TABLE invitation_responses (
     candidate_id   UUID        NOT NULL REFERENCES candidates (id),
     response_type  VARCHAR(32) NOT NULL,
     message        TEXT,
-    created_at     TIMESTAMP   NOT NULL DEFAULT now()
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE notifications (
@@ -79,7 +80,7 @@ CREATE TABLE notifications (
     type           VARCHAR(64) NOT NULL,
     message        TEXT        NOT NULL,
     is_read        BOOLEAN     NOT NULL DEFAULT FALSE,
-    created_at     TIMESTAMP   NOT NULL DEFAULT now()
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE application_status_history (
@@ -90,5 +91,5 @@ CREATE TABLE application_status_history (
     reason_code        VARCHAR(64),
     reason_text        TEXT,
     changed_by_user_id UUID                 REFERENCES users (id),
-    created_at         TIMESTAMP   NOT NULL DEFAULT now()
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
