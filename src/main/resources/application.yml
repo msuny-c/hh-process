@@ -2,7 +2,7 @@ spring:
   application:
     name: hh-process
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?currentSchema=${POSTGRES_SCHEMA}
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
   jpa:
@@ -12,12 +12,14 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+        default_schema: ${POSTGRES_SCHEMA}
     open-in-view: false
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 0
+    schemas: ${POSTGRES_SCHEMA}
   jackson:
     property-naming-strategy: SNAKE_CASE
 
