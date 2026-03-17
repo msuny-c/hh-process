@@ -1,0 +1,91 @@
+#import "@preview/codly:1.3.0": *
+#import "@preview/codly-languages:0.1.1": *
+#import "@preview/sicons:16.0.0": *
+#import "title.typ": titlepage
+
+#set page(margin: 1.7cm)
+#set text(region: "RU", lang: "RU")
+#set par(justify: true, leading: 0.7em)
+
+#show link: set text(fill: blue)
+#show link: underline
+
+#show: codly-init.with()
+
+#codly(languages: codly-languages)
+#codly(zebra-fill: none)
+
+#let banner(body) = box(
+  width: 100%,
+  inset: 12pt,
+  fill: rgb("#dff0df"),
+  stroke: (paint: rgb("#b8d8b8"), thickness: 1pt),
+  radius: 6pt,
+)[
+  #body
+]
+
+#titlepage(
+  lab_no: 1,
+  subject: "бизнес-логика программных систем",
+  variant: "3212",
+  student: "Григорий Садовой\nБайрамгулов Мунир",
+  teacher: "Кривоносов Егор Дмитриевич",
+)
+
+= Условие задания
+#v(4pt)
+#banner[
+  #strong[Вариант №3212:] hh.ru — работа, поиск персонала и публикация вакансий —
+  #link("https://hh.ru/")[https://hh.ru/].
+  Бизнес-процесс: обработка отзывов на вакансию.
+]
+
+Описать бизнес-процесс в соответствии с нотацией BPMN 2.0, после чего реализовать его в виде\ приложения на базе Spring Boot.
+
+#strong[Порядок выполнения работы:]
+
++ Выбрать один из бизнес-процессов, реализуемых сайтом из варианта задания.
++ Утвердить выбранный бизнес-процесс у преподавателя.
++ Специфицировать модель реализуемого бизнес-процесса в соответствии с требованиями BPMN 2.0.
++ Разработать приложение на базе Spring Boot, реализующее описанный на предыдущем шаге бизнес-процесс. Приложение должно использовать СУБД PostgreSQL для хранения данных, для всех публичных интерфейсов должны быть разработаны REST API.
++ Разработать набор curl-скриптов, либо набор запросов для REST клиента Insomnia для тестирования публичных интерфейсов разработанного программного модуля. Запросы Insomnia оформить в виде файла экспорта.
++ Развернуть разработанное приложение на сервере #text(fill: rgb("#ff4fa3"))[helios].
+
+#strong[Содержание отчёта:]
+
++ Текст задания.
++ Модель потока управления для автоматизируемого бизнес-процесса.
++ UML-диаграммы классов и пакетов разработанного приложения.
++ Спецификация REST API для всех публичных интерфейсов разработанного приложения.
++ Исходный код системы или ссылка на репозиторий с исходным кодом.
++ Выводы по работе.
+
+= Модель BPMN
+\
+#image("HH.ru.png")
+
+= UML-диаграммы
+
+= Исходный код
+#v(4pt)
+#let gh_button(url) = link(url)[
+  #box(
+    fill: rgb("#f6f8fa"),
+    stroke: 1pt + rgb("#d0d7de"),
+    inset: (x: 10pt, y: 6pt),
+    radius: 999pt,
+  )[
+    #box(baseline: 0%)[
+      #sicon(slug: "github", size: 0.9em, icon-color: "default")
+    ]
+    #h(0.4em)
+    #text(size: 16pt)[#url]
+  ]
+]
+
+#gh_button("https://github.com/msuny-c/hh-process")
+
+= Вывод по работе
+
+
