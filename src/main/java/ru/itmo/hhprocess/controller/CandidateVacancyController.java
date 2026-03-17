@@ -8,6 +8,7 @@ import ru.itmo.hhprocess.service.ApplicationService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
 
 import java.util.UUID;
 
@@ -18,6 +19,7 @@ public class CandidateVacancyController {
 
     private final ApplicationService applicationService;
 
+    @Operation(summary = "Подать заявку на вакансию")
     @PostMapping("/{vacancyId}")
     @ResponseStatus(HttpStatus.CREATED)
     public CreateApplicationResponse apply(

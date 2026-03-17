@@ -30,7 +30,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtService jwtService;
 
-    @Value("${app.websocket.allowed-origins:http://localhost:3000}")
+    @Value("${app.websocket.allowed-origins}")
     private String allowedOrigins;
 
     @Override
