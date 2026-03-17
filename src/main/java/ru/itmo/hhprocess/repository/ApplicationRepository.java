@@ -22,6 +22,8 @@ public interface ApplicationRepository extends JpaRepository<ApplicationEntity, 
     @EntityGraph(attributePaths = {"vacancy", "candidate"})
     List<ApplicationEntity> findByCandidateId(UUID candidateId);
 
+    boolean existsByCandidateIdAndVacancyId(UUID candidateId, UUID vacancyId);
+
     boolean existsByCandidateIdAndVacancyIdAndStatusNotIn(UUID candidateId, UUID vacancyId, List<ApplicationStatus> terminalStatuses);
 
     @EntityGraph(attributePaths = {"vacancy", "candidate", "vacancy.recruiter"})

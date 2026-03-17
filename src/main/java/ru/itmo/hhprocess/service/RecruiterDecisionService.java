@@ -107,6 +107,11 @@ public class RecruiterDecisionService {
     public InviteResponse invite(UUID applicationId, InviteRequest request) {
         RecruiterEntity recruiter = vacancyService.getRecruiterForCurrentUser();
         ApplicationEntity application = findAndCheckOwnership(applicationId, recruiter);
+        if (application.getStatus() == ApplicationStatus.INVITED
+                || application.getStatus() == ApplicationStatus.INVITATION_RESPONDED) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                    "Invitation already sent for this application");
+        }
         ensureStatus(application, ApplicationStatus.ON_RECRUITER_REVIEW);
 
         Instant now = Instant.now();

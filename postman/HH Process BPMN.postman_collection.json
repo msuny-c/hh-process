@@ -49,9 +49,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"200 OK\", function () { pm.response.to.have.status(200); });",
                   "const json = pm.response.json();",
-                  "pm.environment.set(\"admin_token\", json.access_token);"
+                  "if (json) {",
+                  "  if (json.access_token) pm.environment.set(\"admin_token\", json.access_token);",
+                  "  if (json.refresh_token) pm.environment.set(\"admin_refresh_token\", json.refresh_token);",
+                  "}",
+                  "pm.test(\"200 OK\", function () { pm.response.to.have.status(200); });"
                 ]
               }
             }
@@ -97,9 +100,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"200 OK\", function () { pm.response.to.have.status(200); });",
                   "const json = pm.response.json();",
-                  "pm.environment.set(\"recruiter_token\", json.access_token);"
+                  "if (json) {",
+                  "  if (json.access_token) pm.environment.set(\"recruiter_token\", json.access_token);",
+                  "  if (json.refresh_token) pm.environment.set(\"recruiter_refresh_token\", json.refresh_token);",
+                  "}",
+                  "pm.test(\"200 OK\", function () { pm.response.to.have.status(200); });"
                 ]
               }
             }
@@ -158,9 +164,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });",
                   "const json = pm.response.json();",
-                  "pm.environment.set(\"candidate_user_id\", json.user_id);"
+                  "if (pm.response.code === 201 && json && (json.user_id || json.userId)) pm.environment.set(\"candidate_user_id\", json.user_id || json.userId);",
+                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });"
                 ]
               }
             }
@@ -206,9 +212,64 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"200 OK\", function () { pm.response.to.have.status(200); });",
                   "const json = pm.response.json();",
-                  "pm.environment.set(\"candidate_token\", json.access_token);"
+                  "if (json) {",
+                  "  if (json.access_token) pm.environment.set(\"candidate_token\", json.access_token);",
+                  "  if (json.refresh_token) pm.environment.set(\"candidate_refresh_token\", json.refresh_token);",
+                  "}",
+                  "pm.test(\"200 OK\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Exchange refresh token for new access_token and refresh_token (use candidate_refresh_token or set body to another role's refresh token).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{candidate_refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json) {",
+                  "  if (json.access_token) pm.environment.set(\"candidate_token\", json.access_token);",
+                  "  if (json.refresh_token) pm.environment.set(\"candidate_refresh_token\", json.refresh_token);",
+                  "}",
+                  "pm.test(\"200 OK\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"expires_in present\", function () { pm.expect(pm.response.json()).to.have.property(\"expires_in\"); });"
                 ]
               }
             }
@@ -392,9 +453,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });",
                   "const json = pm.response.json();",
-                  "pm.environment.set(\"vacancy_id\", json.id);"
+                  "if (pm.response.code === 201 && json && json.id !== undefined) pm.environment.set(\"vacancy_id\", json.id);",
+                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });"
                 ]
               }
             }
@@ -450,8 +511,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });",
-                  "pm.environment.set(\"closed_vacancy_id\", pm.response.json().id);"
+                  "const json = pm.response.json();",
+                  "if (pm.response.code === 201 && json && json.id) pm.environment.set(\"closed_vacancy_id\", json.id);",
+                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });"
                 ]
               }
             }
@@ -566,8 +628,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });",
-                  "pm.environment.set(\"strict_vacancy_id\", pm.response.json().id);"
+                  "const json = pm.response.json();",
+                  "if (pm.response.code === 201 && json && json.id) pm.environment.set(\"strict_vacancy_id\", json.id);",
+                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });"
                 ]
               }
             }
@@ -623,8 +686,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });",
-                  "pm.environment.set(\"reject_vacancy_id\", pm.response.json().id);"
+                  "const json = pm.response.json();",
+                  "if (pm.response.code === 201 && json && json.id) pm.environment.set(\"reject_vacancy_id\", json.id);",
+                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });"
                 ]
               }
             }
@@ -728,9 +792,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });",
                   "const json = pm.response.json();",
-                  "pm.environment.set(\"application_id\", json.application_id);",
+                  "if (pm.response.code === 201 && json) {",
+                  "  const appId = json.application_id || json.applicationId;",
+                  "  if (appId) pm.environment.set(\"application_id\", appId);",
+                  "}",
+                  "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });",
                   "pm.test(\"status is IN_PROGRESS\", function () { pm.expect(json.status).to.eql(\"IN_PROGRESS\"); });"
                 ]
               }
@@ -972,7 +1039,7 @@
                 "exec": [
                   "pm.test(\"200 OK\", function () { pm.response.to.have.status(200); });",
                   "const json = pm.response.json();",
-                  "pm.environment.set(\"application_invite_expires_at\", json.expires_at);",
+                  "if (json && (json.expires_at !== undefined)) pm.environment.set(\"application_invite_expires_at\", json.expires_at);",
                   "pm.test(\"status is INVITED\", function () { pm.expect(json.status).to.eql(\"INVITED\"); });"
                 ]
               }
@@ -1205,7 +1272,8 @@
                 "exec": [
                   "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });",
                   "const json = pm.response.json();",
-                  "pm.environment.set(\"failed_application_id\", json.application_id);",
+                  "const appId = json && (json.application_id || json.applicationId);",
+                  "if (pm.response.code === 201 && appId) pm.environment.set(\"failed_application_id\", appId);",
                   "pm.test(\"status is REJECTED\", function () { pm.expect(json.status).to.eql(\"REJECTED\"); });"
                 ]
               }
@@ -1356,7 +1424,8 @@
                 "exec": [
                   "pm.test(\"201 Created\", function () { pm.response.to.have.status(201); });",
                   "const json = pm.response.json();",
-                  "pm.environment.set(\"reject_application_id\", json.application_id);",
+                  "const appId = json && (json.application_id || json.applicationId);",
+                  "if (pm.response.code === 201 && appId) pm.environment.set(\"reject_application_id\", appId);",
                   "pm.test(\"status is IN_PROGRESS\", function () { pm.expect(json.status).to.eql(\"IN_PROGRESS\"); });"
                 ]
               }
@@ -1599,7 +1668,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"200 OK\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"closedCount exists\", function () { pm.expect(pm.response.json()).to.have.property(\"closedCount\"); });"
+                  "pm.test(\"closed_count exists\", function () { pm.expect(pm.response.json()).to.have.property(\"closed_count\"); });"
                 ]
               }
             }
