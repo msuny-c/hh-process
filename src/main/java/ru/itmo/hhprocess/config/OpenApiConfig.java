@@ -13,14 +13,14 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class OpenApiConfig {
 
-    @Value("${build.name}")
-    private String buildName;
+    @Value("${app.openapi.title}")
+    private String openApiTitle;
 
-    @Value("${build.version}")
-    private String buildVersion;
+    @Value("${app.openapi.version}")
+    private String openApiVersion;
 
-    @Value("${build.description}")
-    private String buildDescription;
+    @Value("${app.openapi.description}")
+    private String openApiDescription;
 
     @Bean
     public ModelResolver modelResolver(ObjectMapper objectMapper) {
@@ -32,9 +32,9 @@ public class OpenApiConfig {
         final String scheme = "bearerAuth";
         return new OpenAPI()
                 .info(new Info()
-                        .title(buildName)
-                        .version(buildVersion)
-                        .description(buildDescription))
+                        .title(openApiTitle)
+                        .version(openApiVersion)
+                        .description(openApiDescription))
                 .addSecurityItem(new SecurityRequirement().addList(scheme))
                 .schemaRequirement(scheme, new SecurityScheme()
                         .name(scheme)

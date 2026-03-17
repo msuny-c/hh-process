@@ -40,6 +40,10 @@ management:
       show-details: when-authorized
 
 app:
+  openapi:
+    title: @project.name@
+    version: @project.version@
+    description: @project.description@
   security:
     jwt:
       secret: ${JWT_SECRET}
