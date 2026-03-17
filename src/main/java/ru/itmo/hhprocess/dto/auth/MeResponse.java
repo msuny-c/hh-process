@@ -11,5 +11,7 @@ import java.util.UUID;
 public class MeResponse {
     UUID userId;
     String email;
+    String firstName;
+    String lastName;
     List<String> roles;
 }

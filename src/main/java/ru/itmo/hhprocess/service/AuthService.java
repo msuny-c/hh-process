@@ -98,11 +98,16 @@ public class AuthService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public MeResponse me() {
         JwtPrincipal principal = getCurrentPrincipal();
+        UserEntity user = userRepository.findById(principal.userId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, ErrorCode.INTERNAL_ERROR, "User not found"));
         return MeResponse.builder()
-                .userId(principal.userId())
-                .email(principal.email())
+                .userId(user.getId())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
                 .roles(principal.roles())
                 .build();
     }
