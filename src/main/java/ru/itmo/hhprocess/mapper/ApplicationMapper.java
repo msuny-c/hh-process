@@ -34,7 +34,7 @@ public interface ApplicationMapper {
 
     @Mapping(target = "applicationId", source = "a.id")
     @Mapping(target = "vacancyId", source = "a.vacancy.id")
-    @Mapping(target = "candidateId", source = "a.candidate.id")
+    @Mapping(target = "candidateId", source = "a.candidateUser.id")
     @Mapping(target = "status", expression = "java(a.getStatus().name())")
     @Mapping(target = "resumeText", source = "a.resumeText")
     @Mapping(target = "coverLetter", source = "a.coverLetter")

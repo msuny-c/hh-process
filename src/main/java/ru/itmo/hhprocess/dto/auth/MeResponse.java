@@ -3,6 +3,7 @@ package ru.itmo.hhprocess.dto.auth;
 import lombok.Builder;
 import lombok.Value;
 
+import java.util.List;
 import java.util.UUID;
 
 @Value
@@ -10,5 +11,5 @@ import java.util.UUID;
 public class MeResponse {
     UUID userId;
     String email;
-    String role;
+    List<String> roles;
 }

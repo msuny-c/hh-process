@@ -15,9 +15,9 @@ import java.util.UUID;
 
 public interface VacancyRepository extends JpaRepository<VacancyEntity, UUID> {
 
-    List<VacancyEntity> findByRecruiterId(UUID recruiterId);
+    List<VacancyEntity> findByRecruiterUserId(UUID recruiterUserId);
 
-    List<VacancyEntity> findByRecruiterIdAndStatus(UUID recruiterId, VacancyStatus status);
+    List<VacancyEntity> findByRecruiterUserIdAndStatus(UUID recruiterUserId, VacancyStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select v from VacancyEntity v where v.id = :id")

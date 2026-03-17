@@ -15,7 +15,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = {"application", "candidate"})
+@ToString(exclude = {"application", "candidateUser"})
 public class InvitationResponseEntity {
 
     @Id
@@ -28,8 +28,8 @@ public class InvitationResponseEntity {
     private ApplicationEntity application;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "candidate_id", nullable = false)
-    private CandidateEntity candidate;
+    @JoinColumn(name = "candidate_user_id", nullable = false)
+    private UserEntity candidateUser;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "response_type", nullable = false)

@@ -37,7 +37,7 @@ public class TimeoutBatchProcessor {
                     "TIMEOUT", "Invitation expired by timeout", null);
 
             notificationService.create(
-                    application.getVacancy().getRecruiter().getUser(),
+                    application.getVacancy().getRecruiterUser(),
                     application,
                     NotificationType.INVITATION_TIMEOUT,
                     "Invitation expired for vacancy: " + application.getVacancy().getTitle());

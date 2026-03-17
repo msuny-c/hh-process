@@ -2,7 +2,10 @@ package ru.itmo.hhprocess.service;
 
 import lombok.RequiredArgsConstructor;
 import ru.itmo.hhprocess.dto.recruiter.*;
-import ru.itmo.hhprocess.entity.*;
+import ru.itmo.hhprocess.entity.ApplicationEntity;
+import ru.itmo.hhprocess.entity.ScreeningResultEntity;
+import ru.itmo.hhprocess.entity.UserEntity;
+import ru.itmo.hhprocess.entity.VacancyEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.enums.NotificationType;
@@ -38,21 +41,21 @@ public class RecruiterDecisionService {
 
     @Transactional(readOnly = true)
     public List<RecruiterApplicationResponse> getApplications(ApplicationStatus status, UUID vacancyId) {
-        RecruiterEntity recruiter = vacancyService.getRecruiterForCurrentUser();
+        UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
         List<ApplicationEntity> applications;
 
         if (vacancyId != null) {
             VacancyEntity vacancy = vacancyService.findById(vacancyId);
-            if (!vacancy.getRecruiter().getId().equals(recruiter.getId())) {
+            if (!vacancy.getRecruiterUser().getId().equals(recruiterUser.getId())) {
                 throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED, "Not your vacancy");
             }
             applications = status != null
-                    ? applicationRepository.findByRecruiterIdAndVacancyIdAndStatus(recruiter.getId(), vacancyId, status)
-                    : applicationRepository.findByRecruiterIdAndVacancyId(recruiter.getId(), vacancyId);
+                    ? applicationRepository.findByRecruiterUserIdAndVacancyIdAndStatus(recruiterUser.getId(), vacancyId, status)
+                    : applicationRepository.findByRecruiterUserIdAndVacancyId(recruiterUser.getId(), vacancyId);
         } else if (status != null) {
-            applications = applicationRepository.findByRecruiterIdAndStatus(recruiter.getId(), status);
+            applications = applicationRepository.findByRecruiterUserIdAndStatus(recruiterUser.getId(), status);
         } else {
-            applications = applicationRepository.findByRecruiterId(recruiter.getId());
+            applications = applicationRepository.findByRecruiterUserId(recruiterUser.getId());
         }
 
         if (applications.isEmpty()) {
@@ -71,7 +74,7 @@ public class RecruiterDecisionService {
 
     @Transactional(readOnly = true)
     public RecruiterApplicationResponse getApplication(UUID applicationId) {
-        ApplicationEntity application = findAndCheckOwnership(applicationId, vacancyService.getRecruiterForCurrentUser());
+        ApplicationEntity application = findAndCheckOwnership(applicationId, vacancyService.getRecruiterUserForCurrentUser());
         return applicationMapper.toRecruiterResponse(
                 application,
                 screeningResultRepository.findByApplicationId(application.getId()).orElse(null)
@@ -80,8 +83,8 @@ public class RecruiterDecisionService {
 
     @Transactional
     public RejectResponse reject(UUID applicationId, RejectRequest request) {
-        RecruiterEntity recruiter = vacancyService.getRecruiterForCurrentUser();
-        ApplicationEntity application = findAndCheckOwnership(applicationId, recruiter);
+        UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
+        ApplicationEntity application = findAndCheckOwnership(applicationId, recruiterUser);
         ensureStatus(application, ApplicationStatus.ON_RECRUITER_REVIEW);
 
         application.setStatus(ApplicationStatus.REJECTED_BY_RECRUITER);
@@ -92,9 +95,9 @@ public class RecruiterDecisionService {
         historyService.record(application,
                 ApplicationStatus.ON_RECRUITER_REVIEW,
                 ApplicationStatus.REJECTED_BY_RECRUITER,
-                "RECRUITER_REJECTED", request.getComment(), recruiter.getUser());
+                "RECRUITER_REJECTED", request.getComment(), recruiterUser);
 
-        notificationService.create(application.getCandidate().getUser(), application,
+        notificationService.create(application.getCandidateUser(), application,
                 NotificationType.APPLICATION_REJECTED, "Your application has been rejected");
 
         return RejectResponse.builder()
@@ -105,8 +108,8 @@ public class RecruiterDecisionService {
 
     @Transactional
     public InviteResponse invite(UUID applicationId, InviteRequest request) {
-        RecruiterEntity recruiter = vacancyService.getRecruiterForCurrentUser();
-        ApplicationEntity application = findAndCheckOwnership(applicationId, recruiter);
+        UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
+        ApplicationEntity application = findAndCheckOwnership(applicationId, recruiterUser);
         if (application.getStatus() == ApplicationStatus.INVITED
                 || application.getStatus() == ApplicationStatus.INVITATION_RESPONDED) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
@@ -126,9 +129,9 @@ public class RecruiterDecisionService {
         historyService.record(application,
                 ApplicationStatus.ON_RECRUITER_REVIEW,
                 ApplicationStatus.INVITED,
-                "INVITATION_SENT", request.getMessage(), recruiter.getUser());
+                "INVITATION_SENT", request.getMessage(), recruiterUser);
 
-        notificationService.create(application.getCandidate().getUser(), application,
+        notificationService.create(application.getCandidateUser(), application,
                 NotificationType.INVITATION, "You have been invited: " + request.getMessage());
 
         return InviteResponse.builder()
@@ -138,12 +141,12 @@ public class RecruiterDecisionService {
                 .build();
     }
 
-    private ApplicationEntity findAndCheckOwnership(UUID applicationId, RecruiterEntity recruiter) {
+    private ApplicationEntity findAndCheckOwnership(UUID applicationId, UserEntity recruiterUser) {
         ApplicationEntity application = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                         ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
 
-        if (!application.getVacancy().getRecruiter().getId().equals(recruiter.getId())) {
+        if (!application.getVacancy().getRecruiterUser().getId().equals(recruiterUser.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED,
                     "Application does not belong to your vacancy");
         }

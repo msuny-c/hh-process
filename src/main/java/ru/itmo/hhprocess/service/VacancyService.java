@@ -4,12 +4,12 @@ import lombok.RequiredArgsConstructor;
 import ru.itmo.hhprocess.dto.recruiter.CreateVacancyRequest;
 import ru.itmo.hhprocess.dto.recruiter.UpdateVacancyStatusRequest;
 import ru.itmo.hhprocess.dto.recruiter.VacancyResponse;
-import ru.itmo.hhprocess.entity.RecruiterEntity;
+import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.entity.VacancyEntity;
 import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.mapper.VacancyMapper;
-import ru.itmo.hhprocess.repository.RecruiterRepository;
+import ru.itmo.hhprocess.repository.UserRepository;
 import ru.itmo.hhprocess.repository.VacancyRepository;
 import ru.itmo.hhprocess.security.JwtPrincipal;
 
@@ -25,15 +25,15 @@ import java.util.UUID;
 public class VacancyService {
 
     private final VacancyRepository vacancyRepository;
-    private final RecruiterRepository recruiterRepository;
+    private final UserRepository userRepository;
     private final AuthService authService;
     private final VacancyMapper vacancyMapper;
 
     @Transactional
     public VacancyResponse create(CreateVacancyRequest request) {
-        RecruiterEntity recruiter = getRecruiterForCurrentUser();
+        UserEntity recruiterUser = getRecruiterUserForCurrentUser();
         VacancyEntity vacancy = vacancyRepository.save(VacancyEntity.builder()
-                .recruiter(recruiter)
+                .recruiterUser(recruiterUser)
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .status(ru.itmo.hhprocess.enums.VacancyStatus.ACTIVE)
@@ -45,18 +45,18 @@ public class VacancyService {
 
     @Transactional(readOnly = true)
     public List<VacancyResponse> getMyVacancies() {
-        RecruiterEntity recruiter = getRecruiterForCurrentUser();
-        return vacancyRepository.findByRecruiterId(recruiter.getId()).stream()
+        UserEntity recruiterUser = getRecruiterUserForCurrentUser();
+        return vacancyRepository.findByRecruiterUserId(recruiterUser.getId()).stream()
                 .map(vacancyMapper::toResponse)
                 .toList();
     }
 
     @Transactional
     public VacancyResponse updateStatus(UUID vacancyId, UpdateVacancyStatusRequest request) {
-        RecruiterEntity recruiter = getRecruiterForCurrentUser();
+        UserEntity recruiterUser = getRecruiterUserForCurrentUser();
         VacancyEntity vacancy = findByIdForUpdate(vacancyId);
 
-        if (!vacancy.getRecruiter().getId().equals(recruiter.getId())) {
+        if (!vacancy.getRecruiterUser().getId().equals(recruiterUser.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED,
                     "You can only manage your own vacancies");
         }
@@ -80,10 +80,14 @@ public class VacancyService {
     }
 
     @Transactional(readOnly = true)
-    public RecruiterEntity getRecruiterForCurrentUser() {
+    public UserEntity getRecruiterUserForCurrentUser() {
         JwtPrincipal principal = authService.getCurrentPrincipal();
-        return recruiterRepository.findByUserId(principal.userId())
-                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN,
-                        ErrorCode.AUTH_ACCESS_DENIED, "Recruiter profile not found"));
+        UserEntity user = userRepository.findById(principal.userId())
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
+                        ErrorCode.AUTH_INVALID_CREDENTIALS, "Authentication required"));
+        if (!principal.hasRole("RECRUITER")) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED, "Recruiter access required");
+        }
+        return user;
     }
 }

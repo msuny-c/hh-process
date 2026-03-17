@@ -19,38 +19,38 @@ import java.util.UUID;
 
 public interface ApplicationRepository extends JpaRepository<ApplicationEntity, UUID> {
 
-    @EntityGraph(attributePaths = {"vacancy", "candidate"})
-    List<ApplicationEntity> findByCandidateId(UUID candidateId);
+    @EntityGraph(attributePaths = {"vacancy", "candidateUser"})
+    List<ApplicationEntity> findByCandidateUserId(UUID candidateUserId);
 
-    boolean existsByCandidateIdAndVacancyId(UUID candidateId, UUID vacancyId);
+    boolean existsByCandidateUserIdAndVacancyId(UUID candidateUserId, UUID vacancyId);
 
-    boolean existsByCandidateIdAndVacancyIdAndStatusNotIn(UUID candidateId, UUID vacancyId, List<ApplicationStatus> terminalStatuses);
+    boolean existsByCandidateUserIdAndVacancyIdAndStatusNotIn(UUID candidateUserId, UUID vacancyId, List<ApplicationStatus> terminalStatuses);
 
-    @EntityGraph(attributePaths = {"vacancy", "candidate", "vacancy.recruiter"})
-    @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.recruiter.id = :recruiterId")
-    List<ApplicationEntity> findByRecruiterId(@Param("recruiterId") UUID recruiterId);
+    @EntityGraph(attributePaths = {"vacancy", "candidateUser", "vacancy.recruiterUser"})
+    @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.recruiterUser.id = :recruiterUserId")
+    List<ApplicationEntity> findByRecruiterUserId(@Param("recruiterUserId") UUID recruiterUserId);
 
-    @EntityGraph(attributePaths = {"vacancy", "candidate", "vacancy.recruiter"})
-    @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.recruiter.id = :recruiterId AND a.status = :status")
-    List<ApplicationEntity> findByRecruiterIdAndStatus(@Param("recruiterId") UUID recruiterId, @Param("status") ApplicationStatus status);
+    @EntityGraph(attributePaths = {"vacancy", "candidateUser", "vacancy.recruiterUser"})
+    @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.recruiterUser.id = :recruiterUserId AND a.status = :status")
+    List<ApplicationEntity> findByRecruiterUserIdAndStatus(@Param("recruiterUserId") UUID recruiterUserId, @Param("status") ApplicationStatus status);
 
-    @EntityGraph(attributePaths = {"vacancy", "candidate", "vacancy.recruiter"})
-    @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.recruiter.id = :recruiterId AND a.vacancy.id = :vacancyId")
-    List<ApplicationEntity> findByRecruiterIdAndVacancyId(@Param("recruiterId") UUID recruiterId, @Param("vacancyId") UUID vacancyId);
+    @EntityGraph(attributePaths = {"vacancy", "candidateUser", "vacancy.recruiterUser"})
+    @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.recruiterUser.id = :recruiterUserId AND a.vacancy.id = :vacancyId")
+    List<ApplicationEntity> findByRecruiterUserIdAndVacancyId(@Param("recruiterUserId") UUID recruiterUserId, @Param("vacancyId") UUID vacancyId);
 
-    @EntityGraph(attributePaths = {"vacancy", "candidate", "vacancy.recruiter"})
-    @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.recruiter.id = :recruiterId AND a.vacancy.id = :vacancyId AND a.status = :status")
-    List<ApplicationEntity> findByRecruiterIdAndVacancyIdAndStatus(@Param("recruiterId") UUID recruiterId,
+    @EntityGraph(attributePaths = {"vacancy", "candidateUser", "vacancy.recruiterUser"})
+    @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.recruiterUser.id = :recruiterUserId AND a.vacancy.id = :vacancyId AND a.status = :status")
+    List<ApplicationEntity> findByRecruiterUserIdAndVacancyIdAndStatus(@Param("recruiterUserId") UUID recruiterUserId,
                                                                     @Param("vacancyId") UUID vacancyId,
                                                                     @Param("status") ApplicationStatus status);
 
-    @EntityGraph(attributePaths = {"vacancy", "vacancy.recruiter", "vacancy.recruiter.user", "candidate", "candidate.user"})
+    @EntityGraph(attributePaths = {"vacancy", "vacancy.recruiterUser", "candidateUser"})
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
     @Query("SELECT a FROM ApplicationEntity a WHERE a.status = :status AND a.invitationExpiresAt < :now AND a.responseReceivedAt IS NULL")
     List<ApplicationEntity> findExpiredInvitationsForUpdate(@Param("status") ApplicationStatus status, @Param("now") Instant now, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"vacancy", "candidate", "candidate.user"})
+    @EntityGraph(attributePaths = {"vacancy", "candidateUser"})
     @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.id = :vacancyId AND a.status IN :statuses")
     List<ApplicationEntity> findByVacancyIdAndStatusIn(@Param("vacancyId") UUID vacancyId, @Param("statuses") List<ApplicationStatus> statuses);
 }

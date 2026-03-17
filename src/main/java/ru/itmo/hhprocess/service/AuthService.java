@@ -2,13 +2,11 @@ package ru.itmo.hhprocess.service;
 
 import lombok.RequiredArgsConstructor;
 import ru.itmo.hhprocess.dto.auth.*;
-import ru.itmo.hhprocess.entity.CandidateEntity;
 import ru.itmo.hhprocess.service.RefreshTokenService.RefreshResult;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.enums.ErrorCode;
-import ru.itmo.hhprocess.enums.UserRole;
 import ru.itmo.hhprocess.exception.ApiException;
-import ru.itmo.hhprocess.repository.CandidateRepository;
+import ru.itmo.hhprocess.repository.RoleRepository;
 import ru.itmo.hhprocess.repository.UserRepository;
 import ru.itmo.hhprocess.security.JwtPrincipal;
 import ru.itmo.hhprocess.security.JwtProperties;
@@ -29,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private final UserRepository userRepository;
-    private final CandidateRepository candidateRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
@@ -44,23 +42,23 @@ public class AuthService {
                     "User with email " + email + " already exists");
         }
 
+        var candidateRole = roleRepository.findByCode("CANDIDATE")
+                .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR,
+                        "Role CANDIDATE is not configured"));
+
         UserEntity user = UserEntity.builder()
                 .email(email)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .role(UserRole.CANDIDATE)
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
                 .enabled(true)
                 .build();
+        user.getRoles().add(candidateRole);
         user = userRepository.save(user);
-
-        CandidateEntity candidate = CandidateEntity.builder()
-                .user(user)
-                .fullName(request.getFullName())
-                .build();
-        candidateRepository.save(candidate);
 
         return RegisterResponse.builder()
                 .userId(user.getId())
-                .role(UserRole.CANDIDATE.name())
+                .role("CANDIDATE")
                 .build();
     }
 
@@ -105,7 +103,7 @@ public class AuthService {
         return MeResponse.builder()
                 .userId(principal.userId())
                 .email(principal.email())
-                .role(principal.role().name())
+                .roles(principal.roles())
                 .build();
     }
 

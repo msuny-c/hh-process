@@ -5,7 +5,6 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import ru.itmo.hhprocess.entity.UserEntity;
-import ru.itmo.hhprocess.enums.UserRole;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -35,10 +34,11 @@ public class JwtService {
 
     public String generateAccessToken(UserEntity user) {
         Instant now = Instant.now();
+        List<String> roles = user.getRoles().stream().map(r -> r.getCode()).toList();
         return Jwts.builder()
                 .subject(user.getEmail())
-                .claim("role", user.getRole().name())
                 .claim("userId", user.getId().toString())
+                .claim("roles", roles)
                 .claim(CLAIM_TYPE, TYPE_ACCESS)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(properties.accessTokenExpiration())))
@@ -48,10 +48,11 @@ public class JwtService {
 
     public String generateRefreshToken(UserEntity user) {
         Instant now = Instant.now();
+        List<String> roles = user.getRoles().stream().map(r -> r.getCode()).toList();
         return Jwts.builder()
                 .subject(user.getEmail())
-                .claim("role", user.getRole().name())
                 .claim("userId", user.getId().toString())
+                .claim("roles", roles)
                 .claim(CLAIM_TYPE, TYPE_REFRESH)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(properties.refreshTokenExpiration())))
@@ -80,21 +81,22 @@ public class JwtService {
         }
 
         String userIdStr = claims.get("userId", String.class);
-        String roleStr = claims.get("role", String.class);
-        if (userIdStr == null || userIdStr.isBlank() || roleStr == null || roleStr.isBlank()) {
+        @SuppressWarnings("unchecked")
+        List<String> roles = (List<String>) claims.get("roles");
+        if (userIdStr == null || userIdStr.isBlank() || roles == null || roles.isEmpty()) {
             return null;
         }
         UUID userId;
-        UserRole role;
         try {
             userId = UUID.fromString(userIdStr);
-            role = UserRole.valueOf(roleStr);
         } catch (IllegalArgumentException e) {
             return null;
         }
-        JwtPrincipal principal = new JwtPrincipal(userId, email, role);
+        JwtPrincipal principal = new JwtPrincipal(userId, email, roles);
 
-        var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
+        var authorities = roles.stream()
+                .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
+                .toList();
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
     }
 

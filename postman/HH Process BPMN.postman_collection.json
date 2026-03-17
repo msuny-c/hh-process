@@ -137,7 +137,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{candidate_email}}\",\n  \"password\": \"{{candidate_password}}\",\n  \"full_name\": \"{{candidate_full_name}}\"\n}",
+              "raw": "{\n  \"email\": \"{{candidate_email}}\",\n  \"password\": \"{{candidate_password}}\",\n  \"first_name\": \"{{candidate_first_name}}\",\n  \"last_name\": \"{{candidate_last_name}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -155,7 +155,8 @@
                   "const ts = Date.now();",
                   "pm.environment.set(\"candidate_email\", `candidate.${ts}@example.com`);",
                   "pm.environment.set(\"candidate_password\", pm.environment.get(\"candidate_password\") || \"password123\");",
-                  "pm.environment.set(\"candidate_full_name\", `Postman Candidate ${ts}`);"
+                  "pm.environment.set(\"candidate_first_name\", \"Postman\");",
+                  "pm.environment.set(\"candidate_last_name\", `Candidate ${ts}`);"
                 ]
               }
             },

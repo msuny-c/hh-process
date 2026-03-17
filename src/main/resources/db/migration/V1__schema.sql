@@ -10,29 +10,27 @@ CREATE TABLE users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email         VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255)        NOT NULL,
-    role          VARCHAR(32)         NOT NULL,
+    first_name    VARCHAR(255)        NOT NULL,
+    last_name     VARCHAR(255)        NOT NULL,
     enabled       BOOLEAN             NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMPTZ         NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ         NOT NULL DEFAULT now()
 );
 
-CREATE TABLE candidates (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    UUID UNIQUE NOT NULL REFERENCES users (id),
-    full_name  VARCHAR(255) NOT NULL,
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+CREATE TABLE roles (
+    id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code VARCHAR(64) UNIQUE NOT NULL
 );
 
-CREATE TABLE recruiters (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    UUID UNIQUE NOT NULL REFERENCES users (id),
-    full_name  VARCHAR(255) NOT NULL,
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+CREATE TABLE user_roles (
+    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    role_id UUID NOT NULL REFERENCES roles (id) ON DELETE RESTRICT,
+    PRIMARY KEY (user_id, role_id)
 );
 
 CREATE TABLE vacancies (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    recruiter_id        UUID         NOT NULL REFERENCES recruiters (id),
+    recruiter_user_id   UUID         NOT NULL REFERENCES users (id),
     title               VARCHAR(255) NOT NULL,
     description         TEXT,
     status              VARCHAR(32)  NOT NULL,
@@ -45,7 +43,7 @@ CREATE TABLE vacancies (
 CREATE TABLE applications (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     vacancy_id            UUID         NOT NULL REFERENCES vacancies (id),
-    candidate_id          UUID         NOT NULL REFERENCES candidates (id),
+    candidate_user_id     UUID         NOT NULL REFERENCES users (id),
     resume_text           TEXT         NOT NULL,
     cover_letter          TEXT,
     status                VARCHAR(32)  NOT NULL,
@@ -73,7 +71,7 @@ CREATE TABLE screening_results (
 CREATE TABLE invitation_responses (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     application_id UUID UNIQUE NOT NULL REFERENCES applications (id),
-    candidate_id   UUID        NOT NULL REFERENCES candidates (id),
+    candidate_user_id UUID     NOT NULL REFERENCES users (id),
     response_type  VARCHAR(32) NOT NULL,
     message        TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()

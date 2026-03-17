@@ -19,7 +19,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = "recruiter")
+@ToString(exclude = "recruiterUser")
 public class VacancyEntity {
 
     @Id
@@ -28,8 +28,8 @@ public class VacancyEntity {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "recruiter_id", nullable = false)
-    private RecruiterEntity recruiter;
+    @JoinColumn(name = "recruiter_user_id", nullable = false)
+    private UserEntity recruiterUser;
 
     @Column(nullable = false)
     private String title;

@@ -12,7 +12,7 @@ import ru.itmo.hhprocess.enums.VacancyStatus;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.mapper.ApplicationMapper;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
-import ru.itmo.hhprocess.repository.CandidateRepository;
+import ru.itmo.hhprocess.repository.UserRepository;
 import ru.itmo.hhprocess.security.JwtPrincipal;
 
 import org.springframework.http.HttpStatus;
@@ -28,7 +28,7 @@ import java.util.UUID;
 public class ApplicationService {
 
         private final ApplicationRepository applicationRepository;
-        private final CandidateRepository candidateRepository;
+        private final UserRepository userRepository;
         private final VacancyService vacancyService;
         private final ScreeningService screeningService;
         private final HistoryService historyService;
@@ -39,7 +39,7 @@ public class ApplicationService {
         @Transactional
         public CreateApplicationResponse create(UUID vacancyId, CreateApplicationRequest request) {
                 JwtPrincipal principal = authService.getCurrentPrincipal();
-                CandidateEntity candidate = findCandidateForUser(principal.userId());
+                UserEntity candidateUser = findUser(principal.userId());
                 VacancyEntity vacancy = vacancyService.findByIdForUpdate(vacancyId);
 
                 if (vacancy.getStatus() != VacancyStatus.ACTIVE) {
@@ -47,25 +47,25 @@ public class ApplicationService {
                                         "Vacancy is not active");
                 }
 
-                if (applicationRepository.existsByCandidateIdAndVacancyId(candidate.getId(), vacancyId)) {
+                if (applicationRepository.existsByCandidateUserIdAndVacancyId(candidateUser.getId(), vacancyId)) {
                         throw new ApiException(HttpStatus.CONFLICT, ErrorCode.APPLICATION_ALREADY_EXISTS,
                                         "You already have an application for this vacancy");
                 }
 
-                ApplicationEntity application = saveNewApplication(vacancy, candidate, request);
+                ApplicationEntity application = saveNewApplication(vacancy, candidateUser, request);
                 ScreeningResultEntity screeningResult = screeningService.performScreening(application);
 
                 return screeningResult.isPassed()
                                 ? handleScreeningPassed(application, vacancy)
-                                : handleScreeningFailed(application, candidate.getUser());
+                                : handleScreeningFailed(application, candidateUser);
         }
 
         @Transactional(readOnly = true)
         public List<CandidateApplicationResponse> getMyApplications() {
                 JwtPrincipal principal = authService.getCurrentPrincipal();
-                CandidateEntity candidate = findCandidateForUser(principal.userId());
+                UserEntity candidateUser = findUser(principal.userId());
 
-                return applicationRepository.findByCandidateId(candidate.getId()).stream()
+                return applicationRepository.findByCandidateUserId(candidateUser.getId()).stream()
                                 .map(applicationMapper::toCandidateResponse)
                                 .toList();
         }
@@ -73,10 +73,10 @@ public class ApplicationService {
         @Transactional(readOnly = true)
         public CandidateApplicationResponse getApplicationForCandidate(UUID applicationId) {
                 JwtPrincipal principal = authService.getCurrentPrincipal();
-                CandidateEntity candidate = findCandidateForUser(principal.userId());
+                UserEntity candidateUser = findUser(principal.userId());
 
                 ApplicationEntity application = findById(applicationId);
-                if (!application.getCandidate().getId().equals(candidate.getId())) {
+                if (!application.getCandidateUser().getId().equals(candidateUser.getId())) {
                         throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED,
                                         "Not your application");
                 }
@@ -90,17 +90,11 @@ public class ApplicationService {
                                                 ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
         }
 
-        private CandidateEntity findCandidateForUser(UUID userId) {
-                return candidateRepository.findByUserId(userId)
-                                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN,
-                                                ErrorCode.AUTH_ACCESS_DENIED, "Candidate profile not found"));
-        }
-
-        private ApplicationEntity saveNewApplication(VacancyEntity vacancy, CandidateEntity candidate,
+        private ApplicationEntity saveNewApplication(VacancyEntity vacancy, UserEntity candidateUser,
                         CreateApplicationRequest request) {
                 ApplicationEntity application = ApplicationEntity.builder()
                                 .vacancy(vacancy)
-                                .candidate(candidate)
+                                .candidateUser(candidateUser)
                                 .resumeText(request.getResumeText())
                                 .coverLetter(request.getCoverLetter())
                                 .status(ApplicationStatus.SCREENING_IN_PROGRESS)
@@ -112,6 +106,12 @@ public class ApplicationService {
                                 null, "Application created", null);
 
                 return application;
+        }
+
+        private UserEntity findUser(UUID userId) {
+                return userRepository.findById(userId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
+                                                ErrorCode.AUTH_INVALID_CREDENTIALS, "Authentication required"));
         }
 
         private CreateApplicationResponse handleScreeningFailed(ApplicationEntity application,
@@ -144,7 +144,7 @@ public class ApplicationService {
                                 ApplicationStatus.ON_RECRUITER_REVIEW,
                                 "SCREENING_PASSED", "Auto-screening passed", null);
 
-                UserEntity recruiterUser = vacancy.getRecruiter().getUser();
+                UserEntity recruiterUser = vacancy.getRecruiterUser();
                 notificationService.create(recruiterUser, application,
                                 NotificationType.NEW_APPLICATION,
                                 "New application received for vacancy: " + vacancy.getTitle());

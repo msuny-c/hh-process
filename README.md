@@ -79,10 +79,10 @@ mvn spring-boot:run
 
 ### Auth
 
-- `POST /api/v1/auth/register/candidate` — регистрация кандидата (body: `email`, `password`, `full_name`)
+- `POST /api/v1/auth/register/candidate` — регистрация кандидата (body: `email`, `password`, `first_name`, `last_name`)
 - `POST /api/v1/auth/login` — вход (body: `email`, `password`). Ответ: `access_token`, `refresh_token`, `expires_in` (секунды жизни access-токена)
 - `POST /api/v1/auth/refresh` — обновление пары токенов (body: `refresh_token`). Ответ: `access_token`, `refresh_token`, `expires_in`
-- `GET /api/v1/me` — текущий пользователь (заголовок `Authorization: Bearer <access_token>`)
+- `GET /api/v1/me` — текущий пользователь (заголовок `Authorization: Bearer <access_token>`). Ответ: `user_id`, `email`, `roles` (массив)
 
 ### Кандидат
 
