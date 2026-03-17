@@ -74,7 +74,6 @@ public class InvitationResponseService {
         historyService.record(application,
                 ApplicationStatus.INVITED,
                 ApplicationStatus.INVITATION_RESPONDED,
-                "CANDIDATE_RESPONDED", request.getResponseType() + ": " + request.getMessage(),
                 candidateUser);
 
         return InvitationResponseResponse.builder()

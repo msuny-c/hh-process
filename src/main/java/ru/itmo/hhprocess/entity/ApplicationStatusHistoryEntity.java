@@ -5,7 +5,6 @@ import lombok.*;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 
 import java.time.Instant;
-import java.util.UUID;
 
 @Entity
 @Table(name = "application_status_history")
@@ -19,9 +18,9 @@ import java.util.UUID;
 public class ApplicationStatusHistoryEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @EqualsAndHashCode.Include
-    private UUID id;
+    private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "application_id", nullable = false)
@@ -34,12 +33,6 @@ public class ApplicationStatusHistoryEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "new_status", nullable = false)
     private ApplicationStatus newStatus;
-
-    @Column(name = "reason_code")
-    private String reasonCode;
-
-    @Column(name = "reason_text", columnDefinition = "text")
-    private String reasonText;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "changed_by_user_id")

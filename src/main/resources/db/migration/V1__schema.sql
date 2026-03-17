@@ -10,7 +10,7 @@ CREATE TABLE users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email         VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255)        NOT NULL,
-    first_name    VARCHAR(255)        NOT NULL,
+    first_name     VARCHAR(255)        NOT NULL,
     last_name     VARCHAR(255)        NOT NULL,
     enabled       BOOLEAN             NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMPTZ         NOT NULL DEFAULT now(),
@@ -18,13 +18,13 @@ CREATE TABLE users (
 );
 
 CREATE TABLE roles (
-    id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id   BIGSERIAL PRIMARY KEY,
     code VARCHAR(64) UNIQUE NOT NULL
 );
 
 CREATE TABLE user_roles (
-    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    role_id UUID NOT NULL REFERENCES roles (id) ON DELETE RESTRICT,
+    user_id UUID    NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    role_id BIGINT  NOT NULL REFERENCES roles (id) ON DELETE RESTRICT,
     PRIMARY KEY (user_id, role_id)
 );
 
@@ -59,7 +59,7 @@ CREATE TABLE applications (
 );
 
 CREATE TABLE screening_results (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id             BIGSERIAL PRIMARY KEY,
     application_id UUID UNIQUE NOT NULL REFERENCES applications (id),
     score          INT         NOT NULL,
     passed         BOOLEAN     NOT NULL,
@@ -88,12 +88,10 @@ CREATE TABLE notifications (
 );
 
 CREATE TABLE application_status_history (
-    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                 BIGSERIAL PRIMARY KEY,
     application_id     UUID        NOT NULL REFERENCES applications (id),
     old_status         VARCHAR(32),
     new_status         VARCHAR(32) NOT NULL,
-    reason_code        VARCHAR(64),
-    reason_text        TEXT,
     changed_by_user_id UUID                 REFERENCES users (id),
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -95,7 +95,7 @@ public class RecruiterDecisionService {
         historyService.record(application,
                 ApplicationStatus.ON_RECRUITER_REVIEW,
                 ApplicationStatus.REJECTED_BY_RECRUITER,
-                "RECRUITER_REJECTED", request.getComment(), recruiterUser);
+                recruiterUser);
 
         notificationService.create(application.getCandidateUser(), application,
                 NotificationType.APPLICATION_REJECTED, "Your application has been rejected");
@@ -129,7 +129,7 @@ public class RecruiterDecisionService {
         historyService.record(application,
                 ApplicationStatus.ON_RECRUITER_REVIEW,
                 ApplicationStatus.INVITED,
-                "INVITATION_SENT", request.getMessage(), recruiterUser);
+                recruiterUser);
 
         notificationService.create(application.getCandidateUser(), application,
                 NotificationType.INVITATION, "You have been invited: " + request.getMessage());

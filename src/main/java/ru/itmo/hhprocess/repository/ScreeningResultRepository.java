@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface ScreeningResultRepository extends JpaRepository<ScreeningResultEntity, UUID> {
+public interface ScreeningResultRepository extends JpaRepository<ScreeningResultEntity, Long> {
 
     Optional<ScreeningResultEntity> findByApplicationId(UUID applicationId);
 

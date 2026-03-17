@@ -103,7 +103,7 @@ public class ApplicationService {
 
                 historyService.record(application, null,
                                 ApplicationStatus.SCREENING_IN_PROGRESS,
-                                null, "Application created", null);
+                                null);
 
                 return application;
         }
@@ -123,7 +123,7 @@ public class ApplicationService {
                 historyService.record(application,
                                 ApplicationStatus.SCREENING_IN_PROGRESS,
                                 ApplicationStatus.SCREENING_FAILED,
-                                "SCREENING_FAILED", "Auto-screening not passed", null);
+                                null);
 
                 notificationService.create(candidateUser, application,
                                 NotificationType.SCREENING_RESULT, "Your application has been rejected");
@@ -142,7 +142,7 @@ public class ApplicationService {
                 historyService.record(application,
                                 ApplicationStatus.SCREENING_IN_PROGRESS,
                                 ApplicationStatus.ON_RECRUITER_REVIEW,
-                                "SCREENING_PASSED", "Auto-screening passed", null);
+                                null);
 
                 UserEntity recruiterUser = vacancy.getRecruiterUser();
                 notificationService.create(recruiterUser, application,

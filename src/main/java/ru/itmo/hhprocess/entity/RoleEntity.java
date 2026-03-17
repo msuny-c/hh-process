@@ -13,8 +13,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.UUID;
-
 @Entity
 @Table(name = "roles")
 @Getter
@@ -26,9 +24,9 @@ import java.util.UUID;
 public class RoleEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @EqualsAndHashCode.Include
-    private UUID id;
+    private Long id;
 
     @Column(nullable = false, unique = true, length = 64)
     private String code;

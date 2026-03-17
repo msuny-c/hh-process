@@ -8,7 +8,7 @@ import ru.itmo.hhprocess.entity.ApplicationStatusHistoryEntity;
 import java.util.List;
 import java.util.UUID;
 
-public interface ApplicationStatusHistoryRepository extends JpaRepository<ApplicationStatusHistoryEntity, UUID> {
+public interface ApplicationStatusHistoryRepository extends JpaRepository<ApplicationStatusHistoryEntity, Long> {
 
     @EntityGraph(attributePaths = {"application", "changedByUser"})
     List<ApplicationStatusHistoryEntity> findByApplicationIdOrderByCreatedAtAsc(UUID applicationId);

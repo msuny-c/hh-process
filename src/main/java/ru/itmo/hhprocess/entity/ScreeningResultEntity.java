@@ -8,7 +8,6 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @Entity
 @Table(name = "screening_results")
@@ -22,9 +21,9 @@ import java.util.UUID;
 public class ScreeningResultEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @EqualsAndHashCode.Include
-    private UUID id;
+    private Long id;
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "application_id", nullable = false, unique = true)

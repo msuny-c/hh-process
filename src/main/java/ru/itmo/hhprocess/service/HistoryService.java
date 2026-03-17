@@ -18,13 +18,11 @@ public class HistoryService {
 
     @Transactional
     public void record(ApplicationEntity application, ApplicationStatus oldStatus, ApplicationStatus newStatus,
-                       String reasonCode, String reasonText, UserEntity changedBy) {
+                       UserEntity changedBy) {
         historyRepository.save(ApplicationStatusHistoryEntity.builder()
                 .application(application)
                 .oldStatus(oldStatus)
                 .newStatus(newStatus)
-                .reasonCode(reasonCode)
-                .reasonText(reasonText)
                 .changedByUser(changedBy)
                 .build());
     }
