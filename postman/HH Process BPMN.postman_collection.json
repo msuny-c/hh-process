@@ -1,16 +1,16 @@
 {
   "info": {
-    "name": "HH Process BPMN API",
+    "name": "HH Process BPMN",
     "_postman_id": "9f1a2323-00bd-4465-94ba-704bf1788031",
     "description": "HH Process BPMN API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "01 Auth & Setup",
+      "name": "01 Авторизация и настройка",
       "item": [
         {
-          "name": "Login Admin",
+          "name": "Вход как администратор",
           "request": {
             "method": "POST",
             "header": [
@@ -61,7 +61,7 @@
           ]
         },
         {
-          "name": "Login Recruiter",
+          "name": "Вход как рекрутер",
           "request": {
             "method": "POST",
             "header": [
@@ -112,7 +112,7 @@
           ]
         },
         {
-          "name": "Register Candidate (auto-generated email)",
+          "name": "Регистрация кандидата (email генерируется автоматически)",
           "request": {
             "method": "POST",
             "header": [
@@ -174,7 +174,7 @@
           ]
         },
         {
-          "name": "Login Candidate",
+          "name": "Вход как кандидат",
           "request": {
             "method": "POST",
             "header": [
@@ -225,7 +225,7 @@
           ]
         },
         {
-          "name": "Refresh Token",
+          "name": "Обновить токен",
           "request": {
             "method": "POST",
             "header": [
@@ -277,7 +277,7 @@
           ]
         },
         {
-          "name": "Me as Admin",
+          "name": "Профиль администратора",
           "request": {
             "method": "GET",
             "header": [],
@@ -318,7 +318,7 @@
           ]
         },
         {
-          "name": "Me as Recruiter",
+          "name": "Профиль рекрутера",
           "request": {
             "method": "GET",
             "header": [],
@@ -359,7 +359,7 @@
           ]
         },
         {
-          "name": "Me as Candidate",
+          "name": "Профиль кандидата",
           "request": {
             "method": "GET",
             "header": [],
@@ -402,10 +402,10 @@
       ]
     },
     {
-      "name": "02 Recruiter Vacancies",
+      "name": "02 Вакансии рекрутера",
       "item": [
         {
-          "name": "Create Vacancy - Happy Path",
+          "name": "Создать вакансию — успешный сценарий",
           "request": {
             "method": "POST",
             "header": [
@@ -463,7 +463,7 @@
           ]
         },
         {
-          "name": "Create Vacancy - Closed Path",
+          "name": "Создать вакансию — закрытый сценарий",
           "request": {
             "method": "POST",
             "header": [
@@ -521,7 +521,7 @@
           ]
         },
         {
-          "name": "Close Vacancy",
+          "name": "Закрыть вакансию",
           "request": {
             "method": "PATCH",
             "header": [
@@ -580,7 +580,7 @@
           ]
         },
         {
-          "name": "Create Vacancy - Screening Fail Path",
+          "name": "Создать вакансию — сценарий с провалом скрининга",
           "request": {
             "method": "POST",
             "header": [
@@ -638,7 +638,7 @@
           ]
         },
         {
-          "name": "Create Vacancy - Recruiter Reject Path",
+          "name": "Создать вакансию — сценарий с отказом рекрутера",
           "request": {
             "method": "POST",
             "header": [
@@ -696,7 +696,7 @@
           ]
         },
         {
-          "name": "List My Vacancies",
+          "name": "Список моих вакансий",
           "request": {
             "method": "GET",
             "header": [],
@@ -740,10 +740,10 @@
       ]
     },
     {
-      "name": "03 BPMN - Screening Passed -> Invite -> Respond",
+      "name": "03 BPMN — Скрининг пройден -> Приглашение -> Ответ",
       "item": [
         {
-          "name": "Candidate Submit Application - Happy Path",
+          "name": "Кандидат подаёт отклик — успешный сценарий",
           "request": {
             "method": "POST",
             "header": [
@@ -806,7 +806,7 @@
           ]
         },
         {
-          "name": "Candidate Get My Applications",
+          "name": "Кандидат получает свои отклики",
           "request": {
             "method": "GET",
             "header": [],
@@ -848,7 +848,7 @@
           ]
         },
         {
-          "name": "Candidate Get Application By ID",
+          "name": "Кандидат получает отклик по ID",
           "request": {
             "method": "GET",
             "header": [],
@@ -891,7 +891,7 @@
           ]
         },
         {
-          "name": "Recruiter List Applications For Happy Vacancy",
+          "name": "Рекрутер получает список откликов по успешной вакансии",
           "request": {
             "method": "GET",
             "header": [],
@@ -943,7 +943,7 @@
           ]
         },
         {
-          "name": "Recruiter Get Application By ID",
+          "name": "Рекрутер получает отклик по ID",
           "request": {
             "method": "GET",
             "header": [],
@@ -987,7 +987,7 @@
           ]
         },
         {
-          "name": "Recruiter Invite Candidate",
+          "name": "Рекрутер приглашает кандидата",
           "request": {
             "method": "POST",
             "header": [
@@ -1048,7 +1048,7 @@
           ]
         },
         {
-          "name": "Candidate Get Application After Invite",
+          "name": "Кандидат получает отклик после приглашения",
           "request": {
             "method": "GET",
             "header": [],
@@ -1094,7 +1094,7 @@
           ]
         },
         {
-          "name": "Candidate Respond To Invitation",
+          "name": "Кандидат отвечает на приглашение",
           "request": {
             "method": "POST",
             "header": [
@@ -1155,10 +1155,10 @@
       ]
     },
     {
-      "name": "04 BPMN - Vacancy Closed",
+      "name": "04 BPMN — Вакансия закрыта",
       "item": [
         {
-          "name": "Candidate Submit Application To Closed Vacancy",
+          "name": "Кандидат подаёт отклик на закрытую вакансию",
           "request": {
             "method": "POST",
             "header": [
@@ -1218,10 +1218,10 @@
       ]
     },
     {
-      "name": "05 BPMN - Screening Failed",
+      "name": "05 BPMN — Скрининг не пройден",
       "item": [
         {
-          "name": "Candidate Submit Application - Screening Fail",
+          "name": "Кандидат подаёт отклик — скрининг не пройден",
           "request": {
             "method": "POST",
             "header": [
@@ -1282,7 +1282,7 @@
           ]
         },
         {
-          "name": "Candidate Get Notifications After Screening Fail",
+          "name": "Кандидат получает уведомления после провала скрининга",
           "request": {
             "method": "GET",
             "header": [],
@@ -1325,7 +1325,7 @@
           ]
         },
         {
-          "name": "Candidate Mark Notification As Read",
+          "name": "Кандидат отмечает уведомление как прочитанное",
           "request": {
             "method": "PATCH",
             "header": [],
@@ -1370,10 +1370,10 @@
       ]
     },
     {
-      "name": "06 BPMN - Recruiter Reject",
+      "name": "06 BPMN — Отказ рекрутера",
       "item": [
         {
-          "name": "Candidate Submit Application - Recruiter Reject Flow",
+          "name": "Кандидат подаёт отклик — сценарий отказа рекрутера",
           "request": {
             "method": "POST",
             "header": [
@@ -1434,7 +1434,7 @@
           ]
         },
         {
-          "name": "Recruiter Reject Application",
+          "name": "Рекрутер отклоняет отклик",
           "request": {
             "method": "POST",
             "header": [
@@ -1493,7 +1493,7 @@
           ]
         },
         {
-          "name": "Candidate Get Notifications After Recruiter Reject",
+          "name": "Кандидат получает уведомления после отказа рекрутера",
           "request": {
             "method": "GET",
             "header": [],
@@ -1538,10 +1538,10 @@
       ]
     },
     {
-      "name": "07 Notifications",
+      "name": "07 Уведомления",
       "item": [
         {
-          "name": "Recruiter Get Notifications",
+          "name": "Рекрутер получает уведомления",
           "request": {
             "method": "GET",
             "header": [],
@@ -1584,7 +1584,7 @@
           ]
         },
         {
-          "name": "Recruiter Mark Notification As Read",
+          "name": "Рекрутер отмечает уведомление как прочитанное",
           "request": {
             "method": "PATCH",
             "header": [],
@@ -1629,10 +1629,10 @@
       ]
     },
     {
-      "name": "08 Admin",
+      "name": "08 Администрирование",
       "item": [
         {
-          "name": "Admin Run Close Expired Invitations Job",
+          "name": "Администратор запускает задачу закрытия просроченных приглашений",
           "request": {
             "method": "POST",
             "header": [],

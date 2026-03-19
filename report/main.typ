@@ -65,7 +65,138 @@
 \
 #image("HH.ru.png")
 
+
+
+= Прецеденты
+
+#let uc-table(title, actor, pre, main, post) = [
+  #text(size: 9pt)[
+    #table(
+      columns: (1fr, 2.3fr),
+      inset: 6pt,
+      stroke: 0.6pt,
+      align: left + top,
+      [*Поле*], [*Описание*],
+      [*Название*], [#title],
+      [*Актор*], [#actor],
+      [*Предусловие*], [#pre],
+      [*Основное действие*], [#main],
+      [*Постусловие*], [#post],
+    )
+  ]
+]
+
+== Регистрация кандидата
+#uc-table(
+  [Регистрация кандидата],
+  [Кандидат],
+  [Пользователь ещё не зарегистрирован.],
+  [`POST /api/v1/auth/register/candidate`.],
+  [В системе создан пользователь с ролью `CANDIDATE`, после чего он может авторизоваться.],
+)
+
+== Авторизация пользователя
+#uc-table(
+  [Авторизация пользователя],
+  [Кандидат / Рекрутер / Администратор],
+  [Пользователь существует в системе. Для кандидата при необходимости выполняется `POST /api/v1/auth/register/candidate`; для рекрутера и администратора используются seed-учётные записи.],
+  [`POST /api/v1/auth/login`; `GET /api/v1/me`.],
+  [Получены `access_token` и `refresh_token`, подтверждена роль текущего пользователя.],
+)
+
+== Создание вакансии
+#uc-table(
+  [Создание вакансии],
+  [Рекрутер],
+  [Рекрутер авторизован. Запросы: `POST /api/v1/auth/login`; `GET /api/v1/me`.],
+  [`POST /api/v1/recruiters/vacancies`.],
+  [Вакансия создана и доступна для дальнейшей работы с откликами.],
+)
+
+== Просмотр вакансий рекрутером
+#uc-table(
+  [Просмотр вакансий рекрутером],
+  [Рекрутер],
+  [Рекрутер авторизован. Запросы: `POST /api/v1/auth/login`; `GET /api/v1/me`.],
+  [`GET /api/v1/recruiters/vacancies`.],
+  [Получен список вакансий, созданных текущим рекрутером.],
+)
+
+== Отклик на вакансию
+#uc-table(
+  [Отклик на вакансию],
+  [Кандидат],
+  [Кандидат зарегистрирован и авторизован, в системе есть активная вакансия. Запросы: `POST /api/v1/auth/register/candidate`; `POST /api/v1/auth/login`; `GET /api/v1/me`; `POST /api/v1/recruiters/vacancies`.],
+  [`POST /api/v1/candidates/vacancies/{vacancyId}`.],
+  [Отклик создан, запускается автоскрининг, заявка появляется в списке откликов кандидата.],
+)
+
+== Просмотр кандидатом своих откликов
+#uc-table(
+  [Просмотр кандидатом своих откликов],
+  [Кандидат],
+  [Кандидат авторизован, ранее был создан хотя бы один отклик. Запросы: `POST /api/v1/auth/register/candidate`; `POST /api/v1/auth/login`; `POST /api/v1/candidates/vacancies/{vacancyId}`.],
+  [`GET /api/v1/candidates/applications`; `GET /api/v1/candidates/applications/{id}`.],
+  [Получен список откликов кандидата и детальная информация по выбранному отклику.],
+)
+
+== Просмотр рекрутером откликов
+#uc-table(
+  [Просмотр рекрутером откликов],
+  [Рекрутер],
+  [Рекрутер авторизован, по его вакансии уже есть отклик. Запросы: `POST /api/v1/auth/login`; `POST /api/v1/recruiters/vacancies`; `POST /api/v1/candidates/vacancies/{vacancyId}`.],
+  [`GET /api/v1/recruiters/applications`; `GET /api/v1/recruiters/applications/{id}`.],
+  [Получен список откликов по вакансиям рекрутера и детали выбранной заявки.],
+)
+
+== Отказ кандидату
+#uc-table(
+  [Отказ кандидату],
+  [Рекрутер],
+  [Рекрутер авторизован, существует отклик по его вакансии. Запросы: `POST /api/v1/auth/login`; `POST /api/v1/recruiters/vacancies`; `POST /api/v1/candidates/vacancies/{vacancyId}`; `GET /api/v1/recruiters/applications`.],
+  [`POST /api/v1/recruiters/applications/{id}/reject`.],
+  [Заявка отклонена, кандидату создано уведомление об отказе.],
+)
+
+== Приглашение кандидата
+#uc-table(
+  [Приглашение кандидата],
+  [Рекрутер],
+  [Рекрутер авторизован, существует отклик по его вакансии. Запросы: `POST /api/v1/auth/login`; `POST /api/v1/recruiters/vacancies`; `POST /api/v1/candidates/vacancies/{vacancyId}`; `GET /api/v1/recruiters/applications`.],
+  [`POST /api/v1/recruiters/applications/{id}/invite`.],
+  [Создано приглашение, кандидату отправлено уведомление, запускается ожидание ответа в течение 48 часов.],
+)
+
+== Ответ на приглашение
+#uc-table(
+  [Ответ на приглашение],
+  [Кандидат],
+  [Кандидат зарегистрирован и авторизован, рекрутер ранее отправил приглашение. Запросы: `POST /api/v1/auth/register/candidate`; `POST /api/v1/auth/login`; `POST /api/v1/recruiters/vacancies`; `POST /api/v1/candidates/vacancies/{vacancyId}`; `POST /api/v1/recruiters/applications/{id}/invite`.],
+  [`POST /api/v1/candidates/applications/{id}/invitation-response`; `GET /api/v1/candidates/applications/{id}`.],
+  [Ответ кандидата сохранён, статус заявки обновлён.],
+)
+
+== Просмотр уведомлений
+#uc-table(
+  [Просмотр уведомлений],
+  [Кандидат / Рекрутер],
+  [Пользователь авторизован, в системе уже есть хотя бы одно уведомление. Запросы: `POST /api/v1/auth/login`; один из бизнес-запросов, создающих уведомление, например `POST /api/v1/recruiters/applications/{id}/reject` или `POST /api/v1/recruiters/applications/{id}/invite`.],
+  [`GET /api/v1/notifications`; `PATCH /api/v1/notifications/{id}/read`.],
+  [Получен список уведомлений, выбранное уведомление отмечено как прочитанное.],
+)
+
+== Закрытие просроченных приглашений
+#uc-table(
+  [Закрытие просроченных приглашений],
+  [Администратор],
+  [Администратор авторизован, в системе есть приглашения с истёкшим сроком действия. Запросы: `POST /api/v1/auth/login`; предварительно должен быть выполнен сценарий `POST /api/v1/recruiters/applications/{id}/invite`.],
+  [`POST /api/v1/admin/jobs/close-expired-invitations`.],
+  [Просроченные приглашения закрыты, в ответе возвращается количество обработанных записей `closed_count`.],
+)
+
 = UML-диаграммы
+\
+#image("java.png")
 
 = Исходный код
 #v(4pt)
