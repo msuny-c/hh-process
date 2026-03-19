@@ -199,7 +199,7 @@ def get_notifications(api: API, ctx: SessionCtx) -> List[Dict[str, Any]]:
 
 
 def mark_notification_read(api: API, ctx: SessionCtx, notification_id: str) -> Dict[str, Any]:
-    return api.json('PATCH', f'/api/v1/notifications/{notification_id}/read', token=ctx.access_token, expected=[200])
+    return api.json('PATCH', f'/api/v1/notifications/{notification_id}/read', token=ctx.access_token, expected=[200, 204])
 
 
 def close_expired(api: API, admin: SessionCtx) -> Dict[str, Any]:
