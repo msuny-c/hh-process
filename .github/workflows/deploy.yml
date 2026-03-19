@@ -1,4 +1,4 @@
-name: Build & Deploy blps
+name: Build, Test & Deploy blps
 
 on:
   push:
@@ -7,9 +7,82 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  POSTGRES_HOST: localhost
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: postgres
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_SCHEMA: public
+  JWT_SECRET: c3VwZXItc2VjcmV0LWZvci1naXRodWItYWN0aW9ucy10ZXN0cy0zMi1ieXRlcw==
+  SERVER_PORT: 8080
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies for API tests
+        run: python -m pip install --upgrade pip requests
+
+      - name: Build application
+        run: mvn -B clean package -DskipTests
+
+      - name: Start application
+        run: |
+          nohup java -jar target/*.jar > app-ci.log 2>&1 &
+          echo $! > app.pid
+
+      - name: Wait for healthcheck
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8080/actuator/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Application did not become healthy in time"
+          exit 1
+
+      - name: Run API tests from test/
+        run: python test/test.py
+
+      - name: Upload CI app log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-app-log-${{ github.run_id }}
+          path: app-ci.log
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     outputs:
       jar_name: ${{ steps.vars.outputs.jar_name }}
@@ -143,8 +216,8 @@ jobs:
           path: app.log
 
   notify-telegram-on-failure:
-    needs: [build, deploy]
-    if: failure() && (needs.deploy.result == 'failure')
+    needs: [test, build, deploy]
+    if: failure() && (needs.deploy.result == 'failure' || needs.test.result == 'failure')
     runs-on: ubuntu-latest
     steps:
       - name: Download app.log artifact
@@ -152,6 +225,12 @@ jobs:
         continue-on-error: true
         with:
           name: app-log-${{ github.run_id }}
+
+      - name: Download CI app log artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: ci-app-log-${{ github.run_id }}
 
       - name: Send Telegram notification
         env:
@@ -162,17 +241,17 @@ jobs:
             echo "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_IDS not set, skipping notification"
             exit 0
           fi
-          # chat not found: используйте числовой chat_id. Напишите боту /start, затем откройте:
-          # https://api.telegram.org/bot<TOKEN>/getUpdates — в message.chat.id будет ваш chat_id.
-          # Для групп/каналов добавьте бота в чат; для канала бот должен быть админом.
           if [ -f app.log ] && [ -s app.log ] && [ $(wc -c < app.log) -gt 2000000 ]; then
             tail -c 2000000 app.log > app_truncated.log && mv app_truncated.log app.log
+          fi
+          if [ -f app-ci.log ] && [ -s app-ci.log ] && [ $(wc -c < app-ci.log) -gt 2000000 ]; then
+            tail -c 2000000 app-ci.log > app_ci_truncated.log && mv app_ci_truncated.log app-ci.log
           fi
           REPO="${{ github.repository }}"
           RUN_URL="${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}"
           BRANCH="${{ github.ref_name }}"
           COMMIT="${{ github.sha }}"
-          MSG="❌ *Деплой наебнулся:* \`$REPO\`
+          MSG="❌ *Пайплайн упал:* \`$REPO\`
           Ветка: \`$BRANCH\`
           Коммит: \`${COMMIT:0:7}\`
           [Смотреть запуск]($RUN_URL)"
@@ -191,17 +270,19 @@ jobs:
             if echo "$RESP" | jq -e '.ok == false' >/dev/null 2>&1; then
               echo "Telegram error for ${CHAT_ID}: $(echo "$RESP" | jq -r '.description // .')"
             fi
-            if [ -f app.log ] && [ -s app.log ]; then
-              RESP2=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-                -F "chat_id=${CHAT_ID}" -F "document=@app.log" -F "caption=app.log")
-              if echo "$RESP2" | jq -e '.ok == false' >/dev/null 2>&1; then
-                echo "Telegram sendDocument error for ${CHAT_ID}: $(echo "$RESP2" | jq -r '.description // .')"
+            for log in app.log app-ci.log; do
+              if [ -f "$log" ] && [ -s "$log" ]; then
+                RESP2=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+                  -F "chat_id=${CHAT_ID}" -F "document=@${log}" -F "caption=${log}")
+                if echo "$RESP2" | jq -e '.ok == false' >/dev/null 2>&1; then
+                  echo "Telegram sendDocument error for ${CHAT_ID}: $(echo "$RESP2" | jq -r '.description // .')"
+                fi
               fi
-            fi
+            done
           done
 
   notify-telegram-on-success:
-    needs: [build, deploy]
+    needs: [test, build, deploy]
     if: success() && (needs.deploy.result == 'success')
     runs-on: ubuntu-latest
     steps:
@@ -218,7 +299,7 @@ jobs:
           RUN_URL="${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}"
           BRANCH="${{ github.ref_name }}"
           COMMIT="${{ github.sha }}"
-          MSG="✅ *Деплой прошел:* \`$REPO\`
+          MSG="✅ *Деплой успешен:* \`$REPO\`
           Ветка: \`$BRANCH\`
           Коммит: \`${COMMIT:0:7}\`
           [Смотреть запуск]($RUN_URL)"
