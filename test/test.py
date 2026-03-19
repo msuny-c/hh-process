@@ -198,8 +198,8 @@ def get_notifications(api: API, ctx: SessionCtx) -> List[Dict[str, Any]]:
     return data
 
 
-def mark_notification_read(api: API, ctx: SessionCtx, notification_id: str) -> Dict[str, Any]:
-    return api.json('PATCH', f'/api/v1/notifications/{notification_id}/read', token=ctx.access_token, expected=[200, 204])
+def mark_notification_read(api: API, ctx: SessionCtx, notification_id: str) -> None:
+    api.request('PATCH', f'/api/v1/notifications/{notification_id}/read', token=ctx.access_token, expected=[204])
 
 
 def close_expired(api: API, admin: SessionCtx) -> Dict[str, Any]:
@@ -347,10 +347,12 @@ def main() -> int:
         target = latest_notification_for_application(cand_notifications, state['reject_application_id'])
         if not target:
             raise CheckError('Candidate notification for rejected application not found')
-        marked = mark_notification_read(api, candidate, target['id'])
-        if marked.get('read') is not True:
-            raise CheckError(f'Notification was not marked as read: {marked}')
-        ok('11. Просмотр уведомлений', f"candidate={len(cand_notifications)}, recruiter={len(rec_notifications)}")
+        mark_notification_read(api, candidate, target['id'])
+        cand_notifications_after = get_notifications(api, candidate)
+        updated = find_by_id(cand_notifications_after, 'id', target['id'])
+        if updated.get('read') is not True:
+            raise CheckError(f'Notification was not marked as read: {updated}')
+        ok('11. Просмотр уведомлений', f"candidate={len(cand_notifications_after)}, recruiter={len(rec_notifications)}")
     run_case('11. Просмотр уведомлений', case11)
 
     def case12():
