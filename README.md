@@ -1,123 +1,125 @@
 # HH Process — сервис обработки откликов на вакансии
 
-- **JWT auth**: access- и refresh-токены (оба в формате JWT)
-- Роли: `CANDIDATE`, `RECRUITER`, `ADMIN`
-- PostgreSQL + Flyway, схема задаётся через `POSTGRES_SCHEMA`
-- REST API, ответы в **snake_case**
-- WebSocket (STOMP) для push-уведомлений
-- Автоскрининг резюме по списку навыков вакансии
-- Срок приглашения: **48 часов**; просроченные закрываются джобой или по расписанию
+Spring Boot сервис для обработки жизненного цикла откликов на вакансии: регистрации кандидатов, создания/статусов вакансий рекрутёром, принятия решений по заявкам, а также уведомлений (REST + WebSocket).
 
-## Требования
+## Конфигурация
 
-- Java 17+
-- Maven 3.x
-- Docker и Docker Compose (для БД или полного стека)
+Список используемых переменных окружения (берутся из `.env`):
 
-## Запуск
-
-### Вариант 1: Docker Compose (БД + приложение)
-
-Создайте файл `.env` в корне проекта (можно скопировать с `.env.example`):
-
-```bash
+```text
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
 POSTGRES_DB=postgres
 POSTGRES_SCHEMA=public
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
-JWT_SECRET=<base64-не-короче-32-байт-для-HS256>
+
+JWT_SECRET=... (base64-строка)
+JWT_ACCESS_EXPIRATION (мс, по умолчанию 900000)
+JWT_REFRESH_EXPIRATION (мс, по умолчанию 604800000)
+
+WS_ALLOWED_ORIGINS=http://localhost:3000 (через запятую)
 ```
 
-Опционально: `JWT_ACCESS_EXPIRATION` (мс, по умолчанию 900000), `JWT_REFRESH_EXPIRATION` (мс, по умолчанию 604800000), `WS_ALLOWED_ORIGINS`.
+Сервер слушает порт `8080`.
 
-Запуск:
+## Авторизация (JWT)
 
-```bash
-docker compose up --build
-```
+Все защищенные endpoint’ы принимают заголовок:
 
-Приложение: `http://localhost:8080`, БД: `localhost:5432`.
+`Authorization: Bearer <access_token>`
 
-### Вариант 2: Локально только БД, приложение — через Maven
+Роли определяют доступ к группам API:
+- `/api/v1/candidates/**` -> `CANDIDATE`
+- `/api/v1/recruiters/**` -> `RECRUITER`
+- `/api/v1/admin/**` -> `ADMIN`
 
-```bash
-docker compose up -d postgres
-```
+## REST API
 
-Переменные окружения для приложения:
-
-```bash
-export POSTGRES_HOST=localhost
-export POSTGRES_PORT=5432
-export POSTGRES_DB=postgres
-export POSTGRES_SCHEMA=public
-export POSTGRES_USER=postgres
-export POSTGRES_PASSWORD=postgres
-export JWT_SECRET="<base64-секрет-не-короче-32-байт>"
-```
-
-Запуск приложения:
-
-```bash
-mvn spring-boot:run
-```
-
-## Seed-пользователи
-
-Создаются миграцией `V3__seed.sql`.
-
-| Роль      | Email                | Пароль     |
-|-----------|----------------------|------------|
-| ADMIN     | admin@example.com    | password123 |
-| RECRUITER | recruiter@example.com | password123 |
-
-Кандидаты создаются через `POST /api/v1/auth/register/candidate`.
-
-## API
+Базовый префикс: `/api/v1`
 
 ### Auth
 
-- `POST /api/v1/auth/register/candidate` — регистрация кандидата (body: `email`, `password`, `first_name`, `last_name`)
-- `POST /api/v1/auth/login` — вход (body: `email`, `password`). Ответ: `access_token`, `refresh_token`, `expires_in` (секунды жизни access-токена)
-- `POST /api/v1/auth/refresh` — обновление пары токенов (body: `refresh_token`). Ответ: `access_token`, `refresh_token`, `expires_in`
-- `GET /api/v1/me` — текущий пользователь (заголовок `Authorization: Bearer <access_token>`). Ответ: `user_id`, `email`, `roles` (массив)
+- `POST /api/v1/auth/register/candidate` (регистрация кандидата)
+- `POST /api/v1/auth/login` (выдача access/refresh токенов)
+- `POST /api/v1/auth/refresh` (обновление токена)
+- `GET /api/v1/me` (профиль текущего пользователя)
+
+Пример логина:
+
+```bash
+curl -sS -X POST http://localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"password123"}'
+```
 
 ### Кандидат
 
-- `POST /api/v1/candidates/vacancies/{vacancyId}` — отклик (body: `resume_text`, `cover_letter`)
-- `GET /api/v1/candidates/applications` — список своих откликов
-- `GET /api/v1/candidates/applications/{id}` — отклик по id
-- `POST /api/v1/candidates/applications/{id}/invitation-response` — ответ на приглашение (body: `response_type`, `message`)
+- `POST /api/v1/candidates/vacancies/{vacancyId}` (подача заявки)
+- `GET /api/v1/candidates/applications` (свои заявки)
+- `GET /api/v1/candidates/applications/{applicationId}` (заявка по id)
+- `POST /api/v1/candidates/applications/{applicationId}/invitation-response` (ответ на приглашение)
+
+Тела запросов:
+
+`CreateApplicationRequest`:
+```json
+{ "resume_text": "...", "cover_letter": "..." }
+```
+
+`InvitationResponseRequest`:
+```json
+{ "response_type": "INVITATION_ACCEPTED|INVITATION_REJECTED", "message": "..." }
+```
 
 ### Рекрутер
 
-- `POST /api/v1/recruiters/vacancies` — создание вакансии (body: `title`, `description`, `required_skills`, `screening_threshold`)
-- `GET /api/v1/recruiters/vacancies` — свои вакансии
-- `PATCH /api/v1/recruiters/vacancies/{id}/status` — смена статуса (body: `status`, например `CLOSED`)
-- `GET /api/v1/recruiters/applications` — список откликов (query: `status`, `vacancy_id`)
-- `GET /api/v1/recruiters/applications/{id}` — отклик по id
-- `POST /api/v1/recruiters/applications/{id}/reject` — отказ (body: `comment`)
-- `POST /api/v1/recruiters/applications/{id}/invite` — приглашение (body: `message`)
+- `POST /api/v1/recruiters/vacancies` (создать вакансию)
+- `GET /api/v1/recruiters/vacancies` (свои вакансии)
+- `PATCH /api/v1/recruiters/vacancies/{vacancyId}/status` (обновить статус)
+- `GET /api/v1/recruiters/applications` (заявки по вакансиям; фильтры `status` и `vacancy_id`)
+- `GET /api/v1/recruiters/applications/{applicationId}` (заявка по id)
+- `POST /api/v1/recruiters/applications/{applicationId}/reject` (отклонить заявку)
+- `POST /api/v1/recruiters/applications/{applicationId}/invite` (пригласить кандидата)
 
-### Уведомления (любая авторизованная роль)
+Тело запроса `CreateVacancyRequest`:
+```json
+{ "title":"...", "description":"...", "required_skills":["..."], "screening_threshold": 75 }
+```
 
-- `GET /api/v1/notifications` — список уведомлений
-- `PATCH /api/v1/notifications/{id}/read` — отметить прочитанным
+Тело `UpdateVacancyStatusRequest`:
+```json
+{ "status": "OPEN|CLOSED|..."}
+```
+
+Тело `RejectRequest`:
+```json
+{ "comment":"..." }
+```
+
+Тело `InviteRequest`:
+```json
+{ "message":"..." }
+```
+
+### Уведомления
+
+- `GET /api/v1/notifications` (список уведомлений текущего пользователя)
+- `PATCH /api/v1/notifications/{notificationId}/read` (пометить прочитанным)
 
 ### Admin
 
-- `POST /api/v1/admin/jobs/close-expired-invitations` — вручную закрыть просроченные приглашения (ответ: `closed_count`)
+- `POST /api/v1/admin/jobs/close-expired-invitations` (закрыть просроченные приглашения)
 
-## WebSocket
+## Данные и схема БД
 
-- Endpoint: `/ws` (SockJS + STOMP)
-- Подписка на уведомления: `/user/queue/notifications`
-- При подключении передать JWT в заголовке: `Authorization: Bearer <access_token>`
+Миграции лежат в `src/main/resources/db/migration` и выполняются Flyway при старте.
 
-## Дополнительно
-
-- **Swagger UI**: `http://localhost:8080/swagger-ui.html`
-- **Actuator**: `GET /actuator/health`, `GET /actuator/info`
-- **Postman**: коллекция и окружение в папке `postman/`
+Основные таблицы:
+- `users`, `roles`, `user_roles`
+- `vacancies`
+- `applications`
+- `screening_results`
+- `invitation_responses`
+- `notifications`
+- `application_status_history`
