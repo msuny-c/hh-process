@@ -1,6 +1,7 @@
 package ru.itmo.hhprocess.dto.candidate;
 
 import jakarta.validation.constraints.NotNull;
+import ru.itmo.hhprocess.validation.NullOrNotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import ru.itmo.hhprocess.enums.ResponseType;
@@ -11,6 +12,7 @@ public class InvitationResponseRequest {
     @NotNull(message = "Response type is required")
     private ResponseType responseType;
 
+    @NullOrNotBlank(message = "Message must not be blank when provided")
     @Size(max = 5_000, message = "Message must not exceed 5000 characters")
     private String message;
 }

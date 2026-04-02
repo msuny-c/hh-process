@@ -8,7 +8,8 @@ public enum ApplicationStatus {
     REJECTED_BY_RECRUITER,
     INVITED,
     INVITATION_RESPONDED,
-    CLOSED_BY_TIMEOUT;
+    CLOSED_BY_TIMEOUT,
+    CLOSED_BY_VACANCY;
 
     public String toExternalStatus() {
         return switch (this) {
@@ -16,7 +17,14 @@ public enum ApplicationStatus {
             case SCREENING_FAILED, REJECTED_BY_RECRUITER -> "REJECTED";
             case INVITED -> "INVITED";
             case INVITATION_RESPONDED -> "RESPONDED";
-            case CLOSED_BY_TIMEOUT -> "CLOSED";
+            case CLOSED_BY_TIMEOUT, CLOSED_BY_VACANCY -> "CLOSED";
         };
+    }
+
+    public boolean isTerminal() {
+        return this == SCREENING_FAILED
+                || this == REJECTED_BY_RECRUITER
+                || this == CLOSED_BY_TIMEOUT
+                || this == CLOSED_BY_VACANCY;
     }
 }

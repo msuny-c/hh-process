@@ -12,4 +12,8 @@ public class InviteResponse {
     UUID applicationId;
     String status;
     Instant expiresAt;
+    UUID interviewId;
+    Instant scheduledAt;
+    Integer durationMinutes;
+    UUID scheduleSlotId;
 }

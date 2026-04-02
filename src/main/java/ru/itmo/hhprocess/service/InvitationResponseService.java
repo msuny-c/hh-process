@@ -9,8 +9,6 @@ import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 import ru.itmo.hhprocess.repository.InvitationResponseRepository;
-import ru.itmo.hhprocess.repository.UserRepository;
-import ru.itmo.hhprocess.security.JwtPrincipal;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,17 +23,15 @@ public class InvitationResponseService {
 
     private final ApplicationRepository applicationRepository;
     private final InvitationResponseRepository invitationResponseRepository;
-    private final UserRepository userRepository;
     private final HistoryService historyService;
+    private final NotificationService notificationService;
     private final AuthService authService;
 
     @Transactional
     public InvitationResponseResponse respond(UUID applicationId, InvitationResponseRequest request) {
-        JwtPrincipal principal = authService.getCurrentPrincipal();
-        UserEntity candidateUser = userRepository.findById(principal.userId())
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
-                        ErrorCode.AUTH_INVALID_CREDENTIALS, "Authentication required"));
-        if (!principal.hasRole("CANDIDATE")) {
+        UserEntity candidateUser = authService.getCurrentUser();
+        boolean candidate = candidateUser.getRoles().stream().anyMatch(r -> "CANDIDATE".equals(r.getCode()));
+        if (!candidate) {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED, "Candidate access required");
         }
 
@@ -75,6 +71,10 @@ public class InvitationResponseService {
                 ApplicationStatus.INVITED,
                 ApplicationStatus.INVITATION_RESPONDED,
                 candidateUser);
+
+        notificationService.create(application.getVacancy().getRecruiterUser(), application,
+                ru.itmo.hhprocess.enums.NotificationType.INVITATION_RESPONSE,
+                "Candidate responded to interview invitation");
 
         return InvitationResponseResponse.builder()
                 .applicationId(application.getId())

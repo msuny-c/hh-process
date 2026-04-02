@@ -8,3 +8,5 @@ target
 *.md
 scripts
 docs.md
+
+transaction-logs

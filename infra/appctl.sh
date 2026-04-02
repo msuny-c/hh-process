@@ -7,6 +7,8 @@ PID_FILE="$APP_DIR/app.pid"
 LOG_FILE="$APP_DIR/app.log"
 ENV_FILE="$APP_DIR/app.env"
 JAVA_BIN="${JAVA_BIN:-java}"
+NARAYANA_LOG_DIR="${NARAYANA_LOG_DIR:-$APP_DIR/transaction-logs}"
+APP_SECURITY_USERS_XML="${APP_SECURITY_USERS_XML:-$APP_DIR/data/users.xml}"
 JAVA_OPTS="${JAVA_OPTS:--Xms256m -Xmx512m --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED}"
 
 cd "$APP_DIR"
@@ -22,6 +24,13 @@ load_env() {
     . "$ENV_FILE"
     set +a
   fi
+  NARAYANA_LOG_DIR="${NARAYANA_LOG_DIR:-$APP_DIR/transaction-logs}"
+  APP_SECURITY_USERS_XML="${APP_SECURITY_USERS_XML:-$APP_DIR/data/users.xml}"
+APP_SECURITY_USERS_XML="${APP_SECURITY_USERS_XML:-$APP_DIR/data/users.xml}"
+}
+
+ensure_runtime_dirs() {
+  mkdir -p "$NARAYANA_LOG_DIR" "$(dirname "$APP_SECURITY_USERS_XML")"
 }
 
 get_pid() {
@@ -74,9 +83,10 @@ cmd_start() {
   fi
 
   load_env
+  ensure_runtime_dirs
   echo "Starting $JAR_NAME..."
   : > "$LOG_FILE"
-  nohup $JAVA_BIN $JAVA_OPTS -jar "$JAR_NAME" > "$LOG_FILE" 2>&1 &
+  nohup $JAVA_BIN $JAVA_OPTS -Dnarayana.log-dir="$NARAYANA_LOG_DIR" -Dapp.security.users-xml-path="$APP_SECURITY_USERS_XML" -jar "$JAR_NAME" > "$LOG_FILE" 2>&1 &
   echo $! > "$PID_FILE"
   echo "Started (PID $(cat "$PID_FILE"))"
 }

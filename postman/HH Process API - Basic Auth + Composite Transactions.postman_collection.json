@@ -1,0 +1,1629 @@
+{
+  "info": {
+    "name": "HH Process API — Basic Auth + Composite Transactions",
+    "_postman_id": "84853fb9-0d9a-4f88-b9b0-e8b64f40a054",
+    "description": "Полная коллекция для проекта: Basic Auth, XML credentials, composite transactions, schedule, negative and validation scenarios.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "{{current_username}}",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "{{current_password}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "adminUsername",
+      "value": "admin@example.com"
+    },
+    {
+      "key": "adminPassword",
+      "value": "admin123"
+    },
+    {
+      "key": "recruiterUsername",
+      "value": "recruiter@example.com"
+    },
+    {
+      "key": "recruiterPassword",
+      "value": "recruiter123"
+    },
+    {
+      "key": "current_username",
+      "value": "admin@example.com"
+    },
+    {
+      "key": "current_password",
+      "value": "admin123"
+    },
+    {
+      "key": "current_role",
+      "value": "ADMIN"
+    },
+    {
+      "key": "candidateEmail",
+      "value": ""
+    },
+    {
+      "key": "candidatePassword",
+      "value": ""
+    },
+    {
+      "key": "candidateUserId",
+      "value": ""
+    },
+    {
+      "key": "vacancyId",
+      "value": ""
+    },
+    {
+      "key": "applicationId",
+      "value": ""
+    },
+    {
+      "key": "interviewId",
+      "value": ""
+    },
+    {
+      "key": "notificationId",
+      "value": ""
+    },
+    {
+      "key": "scheduledAt",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Auth & Context",
+      "description": "Переключение ролей и проверка текущего пользователя.",
+      "item": [
+        {
+          "name": "Use Admin Credentials + GET /me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"adminUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"adminPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"ADMIN\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Profile payload contains email and role\", function () {",
+                  "  pm.expect(data).to.have.property(\"email\");",
+                  "  pm.expect(data).to.have.property(\"role\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Use Recruiter Credentials + GET /me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Profile payload contains email and role\", function () {",
+                  "  pm.expect(data).to.have.property(\"email\");",
+                  "  pm.expect(data).to.have.property(\"role\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Candidate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register/candidate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register",
+                "candidate"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{candidateEmail}}\",\n  \"password\": \"{{candidatePassword}}\",\n  \"firstName\": \"{{candidateFirstName}}\",\n  \"lastName\": \"{{candidateLastName}}\",\n  \"resumeText\": \"Java, Spring Boot, PostgreSQL, Docker, JTA\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const suffix = Date.now();",
+                  "pm.collectionVariables.set(\"candidateEmail\", `candidate_${suffix}@example.com`);",
+                  "pm.collectionVariables.set(\"candidatePassword\", \"Candidate123!\");",
+                  "pm.collectionVariables.set(\"candidateFirstName\", \"Test\");",
+                  "pm.collectionVariables.set(\"candidateLastName\", \"Candidate\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "if (data && data.userId) {",
+                  "  pm.collectionVariables.set(\"candidateUserId\", data.userId);",
+                  "}",
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Use Candidate Credentials + GET /me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Profile payload contains email and role\", function () {",
+                  "  pm.expect(data).to.have.property(\"email\");",
+                  "  pm.expect(data).to.have.property(\"role\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Recruiter Vacancies",
+      "item": [
+        {
+          "name": "Create Vacancy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/vacancies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "vacancies"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Java Backend Developer {{now}}\",\n  \"description\": \"Spring Boot, PostgreSQL, Docker, Narayana\",\n  \"requiredSkills\": [\n    \"Java\",\n    \"Spring\",\n    \"PostgreSQL\"\n  ],\n  \"screeningThreshold\": 50\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");",
+                  "",
+                  "pm.collectionVariables.set(\"now\", String(Date.now()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "if (data && data.id) {",
+                  "  pm.collectionVariables.set(\"vacancyId\", data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List My Vacancies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/vacancies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "vacancies"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Vacancies array returned\", function () {",
+                  "  pm.expect(pm.response.json()).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Vacancy Status -> OPEN",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/vacancies/{{vacancyId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "vacancies",
+                "{{vacancyId}}",
+                "status"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"OPEN\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Close Vacancy (Composite Transaction)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/vacancies/{{vacancyId}}/close",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "vacancies",
+                "{{vacancyId}}",
+                "close"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Набор завершён\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Candidate Applications",
+      "item": [
+        {
+          "name": "Apply to Vacancy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/candidates/vacancies/{{vacancyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "candidates",
+                "vacancies",
+                "{{vacancyId}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resumeText\": \"I have 5 years of Java experience\",\n  \"coverLetter\": \"Ready for interview\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "if (data && data.applicationId) {",
+                  "  pm.collectionVariables.set(\"applicationId\", data.applicationId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get My Applications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/candidates/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "candidates",
+                "applications"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const arr = pm.response.json();",
+                  "pm.test(\"Applications array returned\", function () { pm.expect(arr).to.be.an(\"array\"); });",
+                  "if (arr.length && arr[0].id) {",
+                  "  pm.collectionVariables.set(\"applicationId\", arr[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get My Application by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/candidates/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "candidates",
+                "applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Respond to Invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/candidates/applications/{{applicationId}}/invitation-response",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "candidates",
+                "applications",
+                "{{applicationId}}",
+                "invitation-response"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"responseType\": \"ACCEPT\",\n  \"message\": \"Подтверждаю участие\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Recruiter Applications & Interviews",
+      "item": [
+        {
+          "name": "List Assigned Applications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "applications"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const arr = pm.response.json();",
+                  "pm.test(\"Applications array returned\", function () { pm.expect(arr).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Assigned Application by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invite Candidate to Interview",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/applications/{{applicationId}}/invite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "applications",
+                "{{applicationId}}",
+                "invite"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scheduledAt\": \"{{scheduledAt}}\",\n  \"durationMinutes\": 60,\n  \"comment\": \"Приглашаем на интервью\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");",
+                  "",
+                  "const scheduled = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);",
+                  "pm.collectionVariables.set(\"scheduledAt\", scheduled.toISOString().slice(0,19));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "if (data && data.interviewId) pm.collectionVariables.set(\"interviewId\", data.interviewId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject Assigned Application",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/applications/{{applicationId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "applications",
+                "{{applicationId}}",
+                "reject"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Не подошёл по итогам этапа\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel Interview",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/interviews/{{interviewId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "interviews",
+                "{{interviewId}}",
+                "cancel"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Тестовая отмена\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Schedule",
+      "item": [
+        {
+          "name": "Get Recruiter Schedule This Week",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/schedule",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "schedule"
+              ],
+              "query": [
+                {
+                  "key": "weekOffset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Schedule response exists\", function () { pm.expect(data).to.be.an(\"object\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Recruiter Schedule Next Week",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/schedule",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "schedule"
+              ],
+              "query": [
+                {
+                  "key": "weekOffset",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Schedule response exists\", function () { pm.expect(data).to.be.an(\"object\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Notifications",
+      "item": [
+        {
+          "name": "Candidate Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const arr = pm.response.json();",
+                  "pm.test(\"Notifications array returned\", function () { pm.expect(arr).to.be.an(\"array\"); });",
+                  "if (arr.length && arr[0].id) pm.collectionVariables.set(\"notificationId\", arr[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Candidate Mark Notification Read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/{{notificationId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "{{notificationId}}",
+                "read"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recruiter Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const arr = pm.response.json();",
+                  "pm.test(\"Notifications array returned\", function () { pm.expect(arr).to.be.an(\"array\"); });",
+                  "if (arr.length && arr[0].id) pm.collectionVariables.set(\"notificationId\", arr[0].id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Admin Jobs",
+      "item": [
+        {
+          "name": "Close Expired Invitations",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/jobs/close-expired-invitations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "jobs",
+                "close-expired-invitations"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"adminUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"adminPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"ADMIN\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Job result contains closedCount\", function () { pm.expect(data).to.have.property(\"closedCount\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Negative & Validation",
+      "description": "Запросы для проверки валидации и некорректных последовательностей.",
+      "item": [
+        {
+          "name": "Invalid Vacancy Create (blank title)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/vacancies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "vacancies"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"   \",\n  \"description\": \"x\",\n  \"requiredSkills\": [\n    \"Java\"\n  ],\n  \"screeningThreshold\": 50\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 4xx expected\", function () {",
+                  "  pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Apply (blank resume)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/candidates/vacancies/{{vacancyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "candidates",
+                "vacancies",
+                "{{vacancyId}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resumeText\": \"   \",\n  \"coverLetter\": \"x\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 4xx expected\", function () {",
+                  "  pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Schedule Query (weekOffset out of range)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/schedule",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "schedule"
+              ],
+              "query": [
+                {
+                  "key": "weekOffset",
+                  "value": "99"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 4xx expected\", function () {",
+                  "  pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Notification Read UUID",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/not-a-uuid/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "not-a-uuid",
+                "read"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 4xx expected\", function () {",
+                  "  pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Sequence: Respond Before Invite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/candidates/applications/{{applicationId}}/invitation-response",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "candidates",
+                "applications",
+                "{{applicationId}}",
+                "invitation-response"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"responseType\": \"ACCEPT\",\n  \"message\": \"Trying too early\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"candidateEmail\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"candidatePassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"CANDIDATE\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 4xx expected\", function () {",
+                  "  pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Sequence: Invite After Vacancy Closed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recruiters/applications/{{applicationId}}/invite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recruiters",
+                "applications",
+                "{{applicationId}}",
+                "invite"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scheduledAt\": \"{{scheduledAt}}\",\n  \"durationMinutes\": 60,\n  \"comment\": \"Приглашаем на интервью\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"current_username\", pm.collectionVariables.get(\"recruiterUsername\"));",
+                  "pm.collectionVariables.set(\"current_password\", pm.collectionVariables.get(\"recruiterPassword\"));",
+                  "pm.collectionVariables.set(\"current_role\", \"RECRUITER\");",
+                  "",
+                  "const scheduled = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);",
+                  "pm.collectionVariables.set(\"scheduledAt\", scheduled.toISOString().slice(0,19));",
+                  "",
+                  "pm.collectionVariables.set(\"force_closed_flow_hint\", \"Run after Close Vacancy request\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 4xx expected\", function () {",
+                  "  pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

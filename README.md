@@ -123,3 +123,56 @@ curl -sS -X POST http://localhost:8080/api/v1/auth/login \
 - `invitation_responses`
 - `notifications`
 - `application_status_history`
+
+
+## JTA / Narayana notes
+
+- Declarative transaction management is implemented with `@Transactional` in the service layer.
+- JTA transaction manager is `Narayana` (`dev.snowdrop:narayana-spring-boot-starter`).
+- Narayana object store logs are written to `transaction-logs/` by default.
+- For Docker, the directory is mounted as a named volume.
+- For native запуск on the server, `infra/appctl.sh` creates the log directory before starting the JAR and passes `-Dnarayana.log-dir=...`.
+- `NARAYANA_NODE_IDENTIFIER` should be unique per instance if you ever run more than one app instance against the same resources.
+- PostgreSQL **must** be started with `max_prepared_transactions > 0`, otherwise XA/JTA transactions fail during the prepare phase with `ERROR: prepared transactions are disabled`.
+
+
+## Локальный прогон в Docker
+
+Если вы раньше уже поднимали проект через Docker, база может остаться в named volume `postgres_data`.
+Из-за этого локальные тесты могут падать не из-за кода, а из-за старых данных: отсутствуют роли, сидовые пользователи или старые пароли.
+
+Для полностью чистого прогона:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+В `docker-compose.yml` PostgreSQL уже запускается с `max_prepared_transactions=100`, поэтому JTA/Narayana работает локально из коробки.
+
+Начиная с миграции `V4__repair_seed_data.sql`, приложение при старте дополнительно восстанавливает базовые роли и сидовых пользователей:
+- `admin@example.com`
+- `recruiter@example.com`
+
+Это помогает и для локального Docker, и для CI/CD, если база уже существовала ранее.
+
+
+## Native / CI/CD checklist for PostgreSQL
+
+Для любого окружения без Docker у PostgreSQL должна быть включена поддержка prepared transactions. Минимум:
+
+```conf
+max_prepared_transactions = 100
+```
+
+После изменения параметра нужен restart PostgreSQL. Без этого приложение стартует, но первые write-операции под JTA будут падать на commit/prepare.
+
+
+## Composite transactional flows
+
+Additional endpoints:
+- `POST /api/v1/recruiters/interviews/{interviewId}/cancel`
+- `POST /api/v1/recruiters/vacancies/{vacancyId}/close`
+- `GET /api/v1/recruiters/schedule?weekOffset=0`
+
+`POST /api/v1/recruiters/applications/{applicationId}/invite` now also supports optional `scheduledAt` and `durationMinutes`. When they are omitted, defaults are used so older tests remain compatible.

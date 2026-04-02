@@ -20,10 +20,10 @@ public class RegisterCandidateRequest {
     private String password;
 
     @NotBlank(message = "First name is required")
-    @Size(max = 255, message = "First name must not exceed 255 characters")
+    @Size(min = 2, max = 255, message = "First name must be between 2 and 255 characters")
     private String firstName;
 
     @NotBlank(message = "Last name is required")
-    @Size(max = 255, message = "Last name must not exceed 255 characters")
+    @Size(min = 2, max = 255, message = "Last name must be between 2 and 255 characters")
     private String lastName;
 }

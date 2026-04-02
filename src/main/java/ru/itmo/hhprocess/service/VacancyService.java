@@ -11,7 +11,6 @@ import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.mapper.VacancyMapper;
 import ru.itmo.hhprocess.repository.UserRepository;
 import ru.itmo.hhprocess.repository.VacancyRepository;
-import ru.itmo.hhprocess.security.JwtPrincipal;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -55,14 +54,16 @@ public class VacancyService {
     public VacancyResponse updateStatus(UUID vacancyId, UpdateVacancyStatusRequest request) {
         UserEntity recruiterUser = getRecruiterUserForCurrentUser();
         VacancyEntity vacancy = findByIdForUpdate(vacancyId);
+        ensureOwnership(vacancy, recruiterUser);
+        vacancy.setStatus(request.getStatus());
+        return vacancyMapper.toResponse(vacancy);
+    }
 
+    public void ensureOwnership(VacancyEntity vacancy, UserEntity recruiterUser) {
         if (!vacancy.getRecruiterUser().getId().equals(recruiterUser.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED,
                     "You can only manage your own vacancies");
         }
-
-        vacancy.setStatus(request.getStatus());
-        return vacancyMapper.toResponse(vacancy);
     }
 
     @Transactional(readOnly = true)
@@ -81,11 +82,9 @@ public class VacancyService {
 
     @Transactional(readOnly = true)
     public UserEntity getRecruiterUserForCurrentUser() {
-        JwtPrincipal principal = authService.getCurrentPrincipal();
-        UserEntity user = userRepository.findById(principal.userId())
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
-                        ErrorCode.AUTH_INVALID_CREDENTIALS, "Authentication required"));
-        if (!principal.hasRole("RECRUITER")) {
+        UserEntity user = authService.getCurrentUser();
+        boolean recruiter = user.getRoles().stream().anyMatch(r -> "RECRUITER".equals(r.getCode()));
+        if (!recruiter) {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED, "Recruiter access required");
         }
         return user;

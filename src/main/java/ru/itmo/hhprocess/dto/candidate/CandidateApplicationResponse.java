@@ -17,11 +17,21 @@ public class CandidateApplicationResponse {
     Instant createdAt;
     Instant updatedAt;
     InvitationInfo invitation;
+    InterviewInfo interview;
 
     @Value
     @Builder
     public static class InvitationInfo {
         String message;
         Instant expiresAt;
+    }
+
+    @Value
+    @Builder
+    public static class InterviewInfo {
+        UUID interviewId;
+        Instant scheduledAt;
+        Integer durationMinutes;
+        String status;
     }
 }

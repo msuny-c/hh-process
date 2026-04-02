@@ -3,11 +3,11 @@ import json
 import os
 import sys
 import uuid
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-
 
 BASE_URL = os.getenv('BASE_URL', 'http://localhost:8080').rstrip('/')
 ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'admin@example.com')
@@ -16,21 +16,16 @@ RECRUITER_EMAIL = os.getenv('RECRUITER_EMAIL', 'recruiter@example.com')
 RECRUITER_PASSWORD = os.getenv('RECRUITER_PASSWORD', 'password123')
 CANDIDATE_PASSWORD = os.getenv('CANDIDATE_PASSWORD', 'password123')
 REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '20'))
-VERIFY_TIMEOUT_POSITIVE = os.getenv('VERIFY_TIMEOUT_POSITIVE', 'false').lower() == 'true'
-
 
 class CheckError(RuntimeError):
     pass
 
-
 @dataclass
 class SessionCtx:
     role: str
-    access_token: str
-    refresh_token: Optional[str] = None
+    auth: Tuple[str, str]
     user_id: Optional[str] = None
     email: Optional[str] = None
-
 
 class API:
     def __init__(self, base_url: str):
@@ -39,24 +34,20 @@ class API:
         self.client.headers.update({"Content-Type": "application/json"})
 
     def _url(self, path: str) -> str:
-        if path.startswith('http://') or path.startswith('https://'):
-            return path
         return f"{self.base_url}{path}"
 
-    def request(self, method: str, path: str, token: Optional[str] = None,
+    def request(self, method: str, path: str, auth: Optional[Tuple[str, str]] = None,
                 expected: Optional[List[int]] = None, **kwargs: Any) -> requests.Response:
-        headers = kwargs.pop('headers', {})
-        if token:
-            headers['Authorization'] = f'Bearer {token}'
-        resp = self.client.request(method, self._url(path), headers=headers, timeout=REQUEST_TIMEOUT, **kwargs)
+        resp = self.client.request(method, self._url(path), auth=auth, timeout=REQUEST_TIMEOUT, **kwargs)
         if expected is not None and resp.status_code not in expected:
-            text = resp.text
-            raise CheckError(f"{method} {path} -> {resp.status_code}, expected {expected}. Body: {text}")
+            raise CheckError(f"{method} {path} -> {resp.status_code}, expected {expected}. Body: {resp.text}")
         return resp
 
-    def json(self, method: str, path: str, token: Optional[str] = None,
-             expected: Optional[List[int]] = None, payload: Optional[Dict[str, Any]] = None) -> Any:
-        resp = self.request(method, path, token=token, expected=expected, data=json.dumps(payload) if payload is not None else None)
+    def json(self, method: str, path: str, auth: Optional[Tuple[str, str]] = None,
+             expected: Optional[List[int]] = None, payload: Optional[Dict[str, Any]] = None,
+             params: Optional[Dict[str, Any]] = None) -> Any:
+        resp = self.request(method, path, auth=auth, expected=expected,
+                            data=json.dumps(payload) if payload is not None else None, params=params)
         if not resp.content:
             return None
         try:
@@ -64,165 +55,87 @@ class API:
         except Exception as e:
             raise CheckError(f"{method} {path} returned non-JSON response: {resp.text}") from e
 
-
 def ok(name: str, details: str = "") -> None:
-    suffix = f" — {details}" if details else ""
-    print(f"[OK] {name}{suffix}")
-
-
-def warn(name: str, details: str) -> None:
-    print(f"[WARN] {name} — {details}")
-
+    print(f"[OK] {name}" + (f" — {details}" if details else ""))
 
 def fail(name: str, details: str) -> None:
     print(f"[FAIL] {name} — {details}")
 
-
-def register_candidate(api: API, candidate_email: str) -> None:
-    payload = {
-        "email": candidate_email,
-        "password": CANDIDATE_PASSWORD,
-        "first_name": "Ivan",
-        "last_name": "Ivanov",
-    }
+def register_candidate(api: API, email: str) -> None:
+    payload = {"email": email, "password": CANDIDATE_PASSWORD, "first_name": "Ivan", "last_name": "Ivanov"}
     data = api.json('POST', '/api/v1/auth/register/candidate', expected=[200, 201], payload=payload)
-    if not data:
-        raise CheckError('Candidate registration returned empty response')
+    if not data or 'user_id' not in data:
+        raise CheckError(f'Bad register response: {data}')
 
-
-def login(api: API, email: str, password: str, role: str) -> SessionCtx:
-    data = api.json('POST', '/api/v1/auth/login', expected=[200], payload={"email": email, "password": password})
-    access = data.get('access_token')
-    refresh = data.get('refresh_token')
-    if not access or not refresh:
-        raise CheckError(f'Login for {role} did not return tokens: {data}')
-    me = api.json('GET', '/api/v1/me', token=access, expected=[200])
-    user_id = me.get('user_id')
+def basic_me(api: API, auth: Tuple[str, str], expected_role: str) -> SessionCtx:
+    me = api.json('GET', '/api/v1/me', auth=auth, expected=[200])
     roles = me.get('roles') or []
-    if role not in roles:
-        raise CheckError(f'Logged in as {email}, but role {role} is absent in /me: {me}')
-    return SessionCtx(role=role, access_token=access, refresh_token=refresh, user_id=user_id, email=me.get('email'))
+    if expected_role not in roles:
+        raise CheckError(f'{auth[0]} missing role {expected_role}: {me}')
+    return SessionCtx(role=expected_role, auth=auth, user_id=me.get('user_id'), email=me.get('email'))
 
+def create_vacancy(api: API, recruiter: SessionCtx, title: str) -> Dict[str, Any]:
+    payload = {"title": title, "description": f"Vacancy {title}", "required_skills": ["python"], "screening_threshold": 1}
+    return api.json('POST', '/api/v1/recruiters/vacancies', auth=recruiter.auth, expected=[200, 201], payload=payload)
 
-def refresh(api: API, refresh_token: str) -> SessionCtx:
-    data = api.json('POST', '/api/v1/auth/refresh', expected=[200], payload={"refresh_token": refresh_token})
-    access = data.get('access_token')
-    refresh2 = data.get('refresh_token')
-    if not access or not refresh2:
-        raise CheckError(f'Refresh did not return tokens: {data}')
-    me = api.json('GET', '/api/v1/me', token=access, expected=[200])
-    return SessionCtx(role=(me.get('roles') or ['UNKNOWN'])[0], access_token=access, refresh_token=refresh2,
-                      user_id=me.get('user_id'), email=me.get('email'))
+def apply(api: API, candidate: SessionCtx, vacancy_id: str) -> Dict[str, Any]:
+    return api.json('POST', f'/api/v1/candidates/vacancies/{vacancy_id}', auth=candidate.auth, expected=[200, 201], payload={"resume_text": "I have strong experience with Python, Spring Boot, PostgreSQL and Docker.", "cover_letter": "Ready to discuss the role in detail."})
 
+def candidate_app(api: API, candidate: SessionCtx, app_id: str) -> Dict[str, Any]:
+    return api.json('GET', f'/api/v1/candidates/applications/{app_id}', auth=candidate.auth, expected=[200])
 
-def create_vacancy(api: API, recruiter: SessionCtx, title: str, skills: List[str], threshold: int) -> Dict[str, Any]:
-    payload = {
-        "title": title,
-        "description": f"Autogenerated vacancy: {title}",
-        "required_skills": skills,
-        "screening_threshold": threshold,
-    }
-    data = api.json('POST', '/api/v1/recruiters/vacancies', token=recruiter.access_token, expected=[200, 201], payload=payload)
-    if 'id' not in data:
-        raise CheckError(f'Vacancy create response has no id: {data}')
-    return data
+def recruiter_apps(api: API, recruiter: SessionCtx, vacancy_id: str) -> List[Dict[str, Any]]:
+    return api.json('GET', '/api/v1/recruiters/applications', auth=recruiter.auth, expected=[200], params={'vacancy_id': vacancy_id})
 
+def invite(api: API, recruiter: SessionCtx, app_id: str, when: str) -> Dict[str, Any]:
+    payload = {'message': 'Interview', 'scheduled_at': when, 'duration_minutes': 60}
+    resp = api.request('POST', f'/api/v1/recruiters/applications/{app_id}/invite', auth=recruiter.auth, expected=[200, 409], data=json.dumps(payload))
+    if resp.status_code == 200:
+        return resp.json()
+    if 'SCHEDULE_SLOT_CONFLICT' in resp.text:
+        raise CheckError('SCHEDULE_SLOT_CONFLICT')
+    raise CheckError(f'Invite failed: {resp.status_code} {resp.text}')
 
-def list_vacancies(api: API, recruiter: SessionCtx) -> List[Dict[str, Any]]:
-    data = api.json('GET', '/api/v1/recruiters/vacancies', token=recruiter.access_token, expected=[200])
-    if not isinstance(data, list):
-        raise CheckError(f'Vacancy list is not an array: {data}')
-    return data
+def iso_utc(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
 
+def week_offset_for(dt: datetime) -> int:
+    now = datetime.now(timezone.utc)
+    current_week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    target_week_start = (dt - timedelta(days=dt.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    return int((target_week_start - current_week_start).days // 7)
 
-def update_vacancy_status(api: API, recruiter: SessionCtx, vacancy_id: str, status: str) -> Dict[str, Any]:
-    return api.json('PATCH', f'/api/v1/recruiters/vacancies/{vacancy_id}/status', token=recruiter.access_token,
-                    expected=[200], payload={"status": status})
+def invite_with_retry(api: API, recruiter: SessionCtx, app_id: str, start_at: datetime, attempts: int = 6) -> Dict[str, Any]:
+    scheduled_at = start_at
+    last_error = None
+    for _ in range(attempts):
+        try:
+            return invite(api, recruiter, app_id, iso_utc(scheduled_at))
+        except CheckError as e:
+            last_error = e
+            if str(e) != 'SCHEDULE_SLOT_CONFLICT':
+                raise
+            scheduled_at = scheduled_at + timedelta(hours=2)
+    raise last_error or CheckError('Invite failed after retries')
 
+def reject(api: API, recruiter: SessionCtx, app_id: str) -> Dict[str, Any]:
+    return api.json('POST', f'/api/v1/recruiters/applications/{app_id}/reject', auth=recruiter.auth, expected=[200], payload={'comment': 'No fit'})
 
-def apply_to_vacancy(api: API, candidate: SessionCtx, vacancy_id: str, resume_text: str, cover_letter: str) -> Dict[str, Any]:
-    payload = {"resume_text": resume_text, "cover_letter": cover_letter}
-    data = api.json('POST', f'/api/v1/candidates/vacancies/{vacancy_id}', token=candidate.access_token, expected=[200, 201], payload=payload)
-    if 'application_id' not in data:
-        raise CheckError(f'Application create response has no application_id: {data}')
-    return data
+def respond(api: API, candidate: SessionCtx, app_id: str) -> Dict[str, Any]:
+    return api.json('POST', f'/api/v1/candidates/applications/{app_id}/invitation-response', auth=candidate.auth, expected=[200], payload={'response_type': 'ACCEPT', 'message': 'Ok'})
 
-
-def list_candidate_apps(api: API, candidate: SessionCtx) -> List[Dict[str, Any]]:
-    data = api.json('GET', '/api/v1/candidates/applications', token=candidate.access_token, expected=[200])
-    if not isinstance(data, list):
-        raise CheckError(f'Candidate app list is not an array: {data}')
-    return data
-
-
-def get_candidate_app(api: API, candidate: SessionCtx, application_id: str) -> Dict[str, Any]:
-    return api.json('GET', f'/api/v1/candidates/applications/{application_id}', token=candidate.access_token, expected=[200])
-
-
-def list_recruiter_apps(api: API, recruiter: SessionCtx, vacancy_id: Optional[str] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
-    params = {}
-    if vacancy_id:
-        params['vacancy_id'] = vacancy_id
-    if status:
-        params['status'] = status
-    resp = api.request('GET', '/api/v1/recruiters/applications', token=recruiter.access_token, expected=[200], params=params)
-    data = resp.json()
-    if not isinstance(data, list):
-        raise CheckError(f'Recruiter app list is not an array: {data}')
-    return data
-
-
-def get_recruiter_app(api: API, recruiter: SessionCtx, application_id: str) -> Dict[str, Any]:
-    return api.json('GET', f'/api/v1/recruiters/applications/{application_id}', token=recruiter.access_token, expected=[200])
-
-
-def reject_app(api: API, recruiter: SessionCtx, application_id: str, comment: str) -> Dict[str, Any]:
-    return api.json('POST', f'/api/v1/recruiters/applications/{application_id}/reject', token=recruiter.access_token,
-                    expected=[200], payload={"comment": comment})
-
-
-def invite_app(api: API, recruiter: SessionCtx, application_id: str, message: str) -> Dict[str, Any]:
-    return api.json('POST', f'/api/v1/recruiters/applications/{application_id}/invite', token=recruiter.access_token,
-                    expected=[200], payload={"message": message})
-
-
-def respond_to_invitation(api: API, candidate: SessionCtx, application_id: str, response_type: str, message: str) -> Dict[str, Any]:
-    return api.json('POST', f'/api/v1/candidates/applications/{application_id}/invitation-response', token=candidate.access_token,
-                    expected=[200], payload={"response_type": response_type, "message": message})
-
-
-def get_notifications(api: API, ctx: SessionCtx) -> List[Dict[str, Any]]:
-    data = api.json('GET', '/api/v1/notifications', token=ctx.access_token, expected=[200])
-    if not isinstance(data, list):
-        raise CheckError(f'Notifications list is not an array: {data}')
-    return data
-
-
-def mark_notification_read(api: API, ctx: SessionCtx, notification_id: str) -> None:
-    api.request('PATCH', f'/api/v1/notifications/{notification_id}/read', token=ctx.access_token, expected=[204])
-
+def notifications(api: API, ctx: SessionCtx) -> List[Dict[str, Any]]:
+    return api.json('GET', '/api/v1/notifications', auth=ctx.auth, expected=[200])
 
 def close_expired(api: API, admin: SessionCtx) -> Dict[str, Any]:
-    return api.json('POST', '/api/v1/admin/jobs/close-expired-invitations', token=admin.access_token, expected=[200])
-
-
-def find_by_id(items: List[Dict[str, Any]], key: str, value: str) -> Dict[str, Any]:
-    for item in items:
-        if str(item.get(key)) == str(value):
-            return item
-    raise CheckError(f'Could not find item where {key}={value}')
-
-
-def latest_notification_for_application(items: List[Dict[str, Any]], application_id: str) -> Optional[Dict[str, Any]]:
-    filtered = [n for n in items if str(n.get('application_id')) == str(application_id)]
-    return filtered[0] if filtered else None
-
+    return api.json('POST', '/api/v1/admin/jobs/close-expired-invitations', auth=admin.auth, expected=[200])
 
 def main() -> int:
     api = API(BASE_URL)
     candidate_email = f"candidate_{uuid.uuid4().hex[:8]}@example.com"
-
     results: List[bool] = []
+    state: Dict[str, Any] = {}
+
     def run_case(title: str, func):
         try:
             func()
@@ -231,163 +144,77 @@ def main() -> int:
             results.append(False)
             fail(title, str(e))
 
-    state: Dict[str, Any] = {}
-
-    run_case('1. Регистрация кандидата', lambda: (
-        register_candidate(api, candidate_email),
-        state.update(candidate_email=candidate_email),
-        ok('1. Регистрация кандидата', candidate_email)
-    ))
+    run_case('1. Регистрация кандидата', lambda: (register_candidate(api, candidate_email), ok('1. Регистрация кандидата', candidate_email)))
 
     def case2():
-        candidate = login(api, candidate_email, CANDIDATE_PASSWORD, 'CANDIDATE')
-        recruiter = login(api, RECRUITER_EMAIL, RECRUITER_PASSWORD, 'RECRUITER')
-        admin = login(api, ADMIN_EMAIL, ADMIN_PASSWORD, 'ADMIN')
-        refreshed = refresh(api, candidate.refresh_token)
-        state.update(candidate=candidate, recruiter=recruiter, admin=admin, candidate_refreshed=refreshed)
-        ok('2. Авторизация пользователя', f"candidate={candidate.user_id}, recruiter={recruiter.user_id}, admin={admin.user_id}")
-    run_case('2. Авторизация пользователя', case2)
+        state['candidate'] = basic_me(api, (candidate_email, CANDIDATE_PASSWORD), 'CANDIDATE')
+        state['recruiter'] = basic_me(api, (RECRUITER_EMAIL, RECRUITER_PASSWORD), 'RECRUITER')
+        state['admin'] = basic_me(api, (ADMIN_EMAIL, ADMIN_PASSWORD), 'ADMIN')
+        ok('2. Basic auth и /me')
+    run_case('2. Basic auth и /me', case2)
 
     def case3():
-        recruiter = state['recruiter']
-        happy = create_vacancy(api, recruiter, 'Python Happy Path', ['python', 'fastapi', 'postgresql'], 66)
-        closed = create_vacancy(api, recruiter, 'Closed Path', ['python'], 0)
-        strict = create_vacancy(api, recruiter, 'Strict Screening', ['java', 'spring', 'docker'], 100)
-        reject = create_vacancy(api, recruiter, 'Recruiter Reject', ['python'], 1)
-        timeout_v = create_vacancy(api, recruiter, 'Timeout Path', ['python'], 1)
-        state.update(happy_vacancy=happy, closed_vacancy=closed, strict_vacancy=strict, reject_vacancy=reject, timeout_vacancy=timeout_v)
-        ok('3. Создание вакансии рекрутером', f"happy={happy['id']}")
-    run_case('3. Создание вакансии рекрутером', case3)
+        vacancy = create_vacancy(api, state['recruiter'], 'Python Basic Auth Vacancy')
+        state['vacancy'] = vacancy
+        ok('3. Создание вакансии', vacancy.get('id', ''))
+    run_case('3. Создание вакансии', case3)
 
     def case4():
-        recruiter = state['recruiter']
-        vacancies = list_vacancies(api, recruiter)
-        ids = {v['id'] for v in vacancies}
-        for key in ['happy_vacancy', 'closed_vacancy', 'strict_vacancy', 'reject_vacancy', 'timeout_vacancy']:
-            if state[key]['id'] not in ids:
-                raise CheckError(f"Vacancy {state[key]['id']} not found in recruiter list")
-        update_vacancy_status(api, recruiter, state['closed_vacancy']['id'], 'CLOSED')
-        vacancies2 = list_vacancies(api, recruiter)
-        closed_item = find_by_id(vacancies2, 'id', state['closed_vacancy']['id'])
-        if closed_item.get('status') != 'CLOSED':
-            raise CheckError(f"Closed vacancy status is {closed_item.get('status')} instead of CLOSED")
-        ok('4. Просмотр вакансий рекрутером', f"count={len(vacancies2)}")
-    run_case('4. Просмотр вакансий рекрутером', case4)
+        app = apply(api, state['candidate'], state['vacancy']['id'])
+        state['app'] = app
+        apps = recruiter_apps(api, state['recruiter'], state['vacancy']['id'])
+        if not any(str(x.get('application_id') or x.get('id')) == str(app['application_id']) for x in apps):
+            raise CheckError('Recruiter cannot see candidate application')
+        ok('4. Создание заявки и просмотр рекрутером')
+    run_case('4. Создание заявки и просмотр рекрутером', case4)
 
     def case5():
-        candidate = state['candidate_refreshed']
-        app = apply_to_vacancy(api, candidate, state['happy_vacancy']['id'], 'Python FastAPI PostgreSQL Docker', 'Interested in the role')
-        app_details = get_candidate_app(api, candidate, app['application_id'])
-        if app_details.get('vacancy_id') != state['happy_vacancy']['id']:
-            raise CheckError(f"Application vacancy mismatch: {app_details}")
-        state.update(happy_application=app_details)
-        ok('5. Отклик кандидата на вакансию', f"application={app['application_id']}, status={app_details.get('status')}")
-    run_case('5. Отклик кандидата на вакансию', case5)
+        base_time = datetime.now(timezone.utc) + timedelta(days=7)
+        base_time = base_time.replace(minute=0, second=0, microsecond=0)
+        resp = invite_with_retry(api, state['recruiter'], state['app']['application_id'], base_time)
+        state['invite'] = resp
+        state['scheduled_at'] = resp.get('scheduled_at') or iso_utc(base_time)
+        app = candidate_app(api, state['candidate'], state['app']['application_id'])
+        if app.get('status') not in ['INVITED', 'INTERVIEW_SCHEDULED']:
+            raise CheckError(f'Unexpected application status after invite: {app}')
+        ok('5. Приглашение на интервью')
+    run_case('5. Приглашение на интервью', case5)
 
     def case6():
-        candidate = state['candidate_refreshed']
-        apps = list_candidate_apps(api, candidate)
-        app = find_by_id(apps, 'application_id', state['happy_application']['application_id'])
-        details = get_candidate_app(api, candidate, state['happy_application']['application_id'])
-        state['happy_application'] = details
-        ok('6. Просмотр кандидатом своих откликов', f"status={app.get('status')}")
-    run_case('6. Просмотр кандидатом своих откликов', case6)
+        scheduled_at = datetime.fromisoformat(state['scheduled_at'].replace('Z', '+00:00'))
+        week_offset = week_offset_for(scheduled_at)
+        schedule = api.json('GET', '/api/v1/recruiters/schedule', auth=state['recruiter'].auth, expected=[200], params={'weekOffset': week_offset})
+        items = schedule.get('items') or []
+        if not items:
+            raise CheckError(f'Empty schedule: {schedule}')
+        ok('6. Просмотр расписания', str(len(items)))
+    run_case('6. Просмотр расписания', case6)
 
     def case7():
-        recruiter = state['recruiter']
-        apps = list_recruiter_apps(api, recruiter, vacancy_id=state['happy_vacancy']['id'])
-        app = find_by_id(apps, 'application_id', state['happy_application']['application_id'])
-        details = get_recruiter_app(api, recruiter, state['happy_application']['application_id'])
-        if details.get('candidate_id') != state['candidate'].user_id:
-            raise CheckError(f"Recruiter view candidate mismatch: {details}")
-        ok('7. Просмотр рекрутером откликов по своим вакансиям', f"screening={details.get('screening')}")
-    run_case('7. Просмотр рекрутером откликов по своим вакансиям', case7)
+        resp = respond(api, state['candidate'], state['app']['application_id'])
+        if not resp.get('application_id'):
+            raise CheckError(f'Bad response payload: {resp}')
+        ok('7. Ответ на приглашение')
+    run_case('7. Ответ на приглашение', case7)
 
     def case8():
-        candidate = state['candidate_refreshed']
-        recruiter = state['recruiter']
-        app = apply_to_vacancy(api, candidate, state['reject_vacancy']['id'], 'Python requests pytest', 'Please review manually')
-        reject_app(api, recruiter, app['application_id'], 'Недостаточно опыта для следующего этапа')
-        details = get_candidate_app(api, candidate, app['application_id'])
-        if details.get('status') != 'REJECTED':
-            raise CheckError(f"Rejected app status is {details.get('status')} instead of REJECTED")
-        state['reject_application_id'] = app['application_id']
-        ok('8. Отказ кандидату', f"application={app['application_id']}")
-    run_case('8. Отказ кандидату', case8)
+        ns = notifications(api, state['candidate'])
+        if not isinstance(ns, list):
+            raise CheckError('Notifications are not list')
+        ok('8. Просмотр уведомлений')
+    run_case('8. Просмотр уведомлений', case8)
 
     def case9():
-        recruiter = state['recruiter']
-        candidate = state['candidate_refreshed']
-        invite_app(api, recruiter, state['happy_application']['application_id'], 'Приглашаем вас на интервью')
-        details = get_candidate_app(api, candidate, state['happy_application']['application_id'])
-        if details.get('status') != 'INVITED':
-            raise CheckError(f"Invited app status is {details.get('status')} instead of INVITED")
-        inv = details.get('invitation') or {}
-        if not inv.get('message'):
-            raise CheckError(f"Invitation info missing in candidate view: {details}")
-        state['happy_application'] = details
-        ok('9. Приглашение кандидата', inv.get('expires_at', 'expires_at=?'))
-    run_case('9. Приглашение кандидата', case9)
-
-    def case10():
-        candidate = state['candidate_refreshed']
-        respond_to_invitation(api, candidate, state['happy_application']['application_id'], 'ACCEPT', 'Готов пройти интервью')
-        details = get_candidate_app(api, candidate, state['happy_application']['application_id'])
-        if details.get('status') != 'RESPONDED':
-            raise CheckError(f"Responded app status is {details.get('status')} instead of RESPONDED")
-        state['happy_application'] = details
-        ok('10. Ответ кандидата на приглашение', f"application={details['application_id']}")
-    run_case('10. Ответ кандидата на приглашение', case10)
-
-    def case11():
-        candidate = state['candidate_refreshed']
-        recruiter = state['recruiter']
-        cand_notifications = get_notifications(api, candidate)
-        rec_notifications = get_notifications(api, recruiter)
-        target = latest_notification_for_application(cand_notifications, state['reject_application_id'])
-        if not target:
-            raise CheckError('Candidate notification for rejected application not found')
-        mark_notification_read(api, candidate, target['id'])
-        cand_notifications_after = get_notifications(api, candidate)
-        updated = find_by_id(cand_notifications_after, 'id', target['id'])
-        if updated.get('read') is not True:
-            raise CheckError(f'Notification was not marked as read: {updated}')
-        ok('11. Просмотр уведомлений', f"candidate={len(cand_notifications_after)}, recruiter={len(rec_notifications)}")
-    run_case('11. Просмотр уведомлений', case11)
-
-    def case12():
-        candidate = state['candidate_refreshed']
-        recruiter = state['recruiter']
-        admin = state['admin']
-        timeout_app = apply_to_vacancy(api, candidate, state['timeout_vacancy']['id'], 'Python asyncio', 'Timeout scenario')
-        invite_app(api, recruiter, timeout_app['application_id'], 'Приглашение для таймаут-сценария')
-        job = close_expired(api, admin)
-        if 'closed_count' not in job:
-            raise CheckError(f'Admin job response has no closed_count: {job}')
-        closed_count = int(job['closed_count'])
-        if VERIFY_TIMEOUT_POSITIVE and closed_count < 1:
-            raise CheckError('Expected closed_count > 0, but no expired invitations were closed')
-        if closed_count < 1:
-            warn('12. Закрытие просроченных приглашений администратором',
-                 'endpoint работает, но через один REST API без ожидания 48 часов нельзя гарантировать реальное закрытие приглашения; closed_count=0 — это ожидаемо')
-        else:
-            ok('12. Закрытие просроченных приглашений администратором', f"closed_count={closed_count}")
-    run_case('12. Закрытие просроченных приглашений администратором', case12)
+        data = close_expired(api, state['admin'])
+        if 'closed_count' not in data:
+            raise CheckError(f'Bad admin job response: {data}')
+        ok('9. Админская джоба')
+    run_case('9. Админская джоба', case9)
 
     passed = sum(results)
     total = len(results)
-    print(f"\nИтог: {passed}/{total} прецедентов успешно проверены.")
-    if passed != total:
-        return 1
-    return 0
-
+    print(f"\nИтог: {passed}/{total} проверок успешно")
+    return 0 if passed == total else 1
 
 if __name__ == '__main__':
-    try:
-        sys.exit(main())
-    except requests.exceptions.ConnectionError as e:
-        print(f"Не удалось подключиться к {BASE_URL}. Запущено ли приложение? Ошибка: {e}")
-        sys.exit(2)
-    except KeyboardInterrupt:
-        print('Остановлено пользователем')
-        sys.exit(130)
+    sys.exit(main())

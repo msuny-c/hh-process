@@ -13,6 +13,8 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
         default_schema: ${POSTGRES_SCHEMA}
+        transaction:
+          coordinator_class: jta
     open-in-view: false
   flyway:
     enabled: true
@@ -24,7 +26,7 @@ spring:
     property-naming-strategy: SNAKE_CASE
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 springdoc:
   swagger-ui:
@@ -39,16 +41,19 @@ management:
     health:
       show-details: when-authorized
 
+narayana:
+  log-dir: ${NARAYANA_LOG_DIR:${user.dir}/transaction-logs}
+  default-timeout: ${NARAYANA_DEFAULT_TIMEOUT:60}
+  node-identifier: ${NARAYANA_NODE_IDENTIFIER:hh-process}
+  shorten-node-identifier-if-necessary: true
+
 app:
   openapi:
     title: @project.name@
     version: @project.version@
     description: @project.description@
   security:
-    jwt:
-      secret: ${JWT_SECRET}
-      access-token-expiration: ${JWT_ACCESS_EXPIRATION:900000}
-      refresh-token-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+    users-xml-path: ${APP_SECURITY_USERS_XML:${user.dir}/data/users.xml}
 
   websocket:
     allowed-origins: ${WS_ALLOWED_ORIGINS:http://localhost:3000}

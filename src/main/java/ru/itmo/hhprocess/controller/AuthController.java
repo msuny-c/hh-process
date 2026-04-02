@@ -2,13 +2,18 @@ package ru.itmo.hhprocess.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import ru.itmo.hhprocess.dto.auth.*;
+import ru.itmo.hhprocess.dto.auth.MeResponse;
+import ru.itmo.hhprocess.dto.auth.RegisterCandidateRequest;
+import ru.itmo.hhprocess.dto.auth.RegisterResponse;
 import ru.itmo.hhprocess.service.AuthService;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 import io.swagger.v3.oas.annotations.Operation;
 
+@Validated
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
@@ -23,19 +28,8 @@ public class AuthController {
         return authService.registerCandidate(request);
     }
 
-    @Operation(summary = "Войти")
-    @PostMapping("/auth/login")
-    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
-        return authService.login(request);
-    }
-
-    @Operation(summary = "Обновить токен")
-    @PostMapping("/auth/refresh")
-    public RefreshResponse refresh(@Valid @RequestBody RefreshRequest request) {
-        return authService.refresh(request);
-    }
-
     @Operation(summary = "Профиль текущего пользователя")
+    @PreAuthorize("hasAuthority('PROFILE_VIEW')")
     @GetMapping("/me")
     public MeResponse me() {
         return authService.me();

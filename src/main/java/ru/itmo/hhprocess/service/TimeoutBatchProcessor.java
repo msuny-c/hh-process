@@ -1,14 +1,14 @@
 package ru.itmo.hhprocess.service;
 
 import lombok.RequiredArgsConstructor;
-import ru.itmo.hhprocess.entity.ApplicationEntity;
-import ru.itmo.hhprocess.enums.ApplicationStatus;
-import ru.itmo.hhprocess.enums.NotificationType;
-import ru.itmo.hhprocess.repository.ApplicationRepository;
-
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import ru.itmo.hhprocess.entity.ApplicationEntity;
+import ru.itmo.hhprocess.entity.InterviewEntity;
+import ru.itmo.hhprocess.enums.ApplicationStatus;
+import ru.itmo.hhprocess.enums.NotificationType;
+import ru.itmo.hhprocess.repository.ApplicationRepository;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,6 +20,8 @@ public class TimeoutBatchProcessor {
     private final ApplicationRepository applicationRepository;
     private final HistoryService historyService;
     private final NotificationService notificationService;
+    private final InterviewService interviewService;
+    private final ScheduleService scheduleService;
 
     @Transactional
     public int processExpiredBatch(int batchSize) {
@@ -28,21 +30,20 @@ public class TimeoutBatchProcessor {
                 ApplicationStatus.INVITED, now, PageRequest.of(0, batchSize));
 
         for (ApplicationEntity application : batch) {
+            InterviewEntity interview = interviewService.findActiveByApplicationId(application.getId()).orElse(null);
+            if (interview != null) {
+                interviewService.cancel(interview, "Invitation expired");
+                scheduleService.releaseForInterview(interview);
+            }
             application.setStatus(ApplicationStatus.CLOSED_BY_TIMEOUT);
             application.setClosedAt(now);
 
-            historyService.record(application,
-                    ApplicationStatus.INVITED,
-                    ApplicationStatus.CLOSED_BY_TIMEOUT,
-                    null);
-
-            notificationService.create(
-                    application.getVacancy().getRecruiterUser(),
-                    application,
-                    NotificationType.INVITATION_TIMEOUT,
+            historyService.record(application, ApplicationStatus.INVITED, ApplicationStatus.CLOSED_BY_TIMEOUT, null);
+            notificationService.create(application.getVacancy().getRecruiterUser(), application, NotificationType.INVITATION_TIMEOUT,
                     "Invitation expired for vacancy: " + application.getVacancy().getTitle());
+            notificationService.create(application.getCandidateUser(), application, NotificationType.INVITATION_TIMEOUT,
+                    "Interview invitation expired for vacancy: " + application.getVacancy().getTitle());
         }
-
         return batch.size();
     }
 }

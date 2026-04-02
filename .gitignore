@@ -42,3 +42,5 @@ logs/
 *.gcda
 coverage/
 .nyc_output/
+
+transaction-logs/

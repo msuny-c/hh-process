@@ -1,56 +1,65 @@
 package ru.itmo.hhprocess.mapper;
 
-import org.mapstruct.AfterMapping;
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.MappingTarget;
-import org.mapstruct.Named;
-
+import org.springframework.stereotype.Component;
 import ru.itmo.hhprocess.dto.candidate.CandidateApplicationResponse;
 import ru.itmo.hhprocess.dto.recruiter.RecruiterApplicationResponse;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
+import ru.itmo.hhprocess.entity.InterviewEntity;
 import ru.itmo.hhprocess.entity.ScreeningResultEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 
-@Mapper(componentModel = "spring")
-public interface ApplicationMapper {
+@Component
+public class ApplicationMapper {
 
-    @Mapping(target = "applicationId", source = "id")
-    @Mapping(target = "vacancyId", source = "vacancy.id")
-    @Mapping(target = "status", expression = "java(a.getStatus().toExternalStatus())")
-    @Mapping(target = "invitation", ignore = true)
-    CandidateApplicationResponse toCandidateResponse(ApplicationEntity a);
+    public CandidateApplicationResponse toCandidateResponse(ApplicationEntity a, InterviewEntity interview) {
+        CandidateApplicationResponse.CandidateApplicationResponseBuilder builder = CandidateApplicationResponse.builder()
+                .applicationId(a.getId())
+                .vacancyId(a.getVacancy().getId())
+                .status(a.getStatus().toExternalStatus())
+                .createdAt(a.getCreatedAt())
+                .updatedAt(a.getUpdatedAt());
 
-    @AfterMapping
-    default void setInvitationIfInvited(ApplicationEntity a,
-                                        @MappingTarget CandidateApplicationResponse.CandidateApplicationResponseBuilder target) {
         if (a.getStatus() == ApplicationStatus.INVITED && a.getInvitationText() != null) {
-            target.invitation(CandidateApplicationResponse.InvitationInfo.builder()
+            builder.invitation(CandidateApplicationResponse.InvitationInfo.builder()
                     .message(a.getInvitationText())
                     .expiresAt(a.getInvitationExpiresAt())
                     .build());
         }
+        if (interview != null) {
+            builder.interview(CandidateApplicationResponse.InterviewInfo.builder()
+                    .interviewId(interview.getId())
+                    .scheduledAt(interview.getScheduledAt())
+                    .durationMinutes(interview.getDurationMinutes())
+                    .status(interview.getStatus().name())
+                    .build());
+        }
+        return builder.build();
     }
 
-    @Mapping(target = "applicationId", source = "a.id")
-    @Mapping(target = "vacancyId", source = "a.vacancy.id")
-    @Mapping(target = "candidateId", source = "a.candidateUser.id")
-    @Mapping(target = "status", expression = "java(a.getStatus().name())")
-    @Mapping(target = "resumeText", source = "a.resumeText")
-    @Mapping(target = "coverLetter", source = "a.coverLetter")
-    @Mapping(target = "screening", source = "sr", qualifiedByName = "screeningToInfo")
-    @Mapping(target = "createdAt", source = "a.createdAt")
-    RecruiterApplicationResponse toRecruiterResponse(ApplicationEntity a, ScreeningResultEntity sr);
-
-    @Named("screeningToInfo")
-    default RecruiterApplicationResponse.ScreeningInfo screeningToInfo(ScreeningResultEntity sr) {
-        if (sr == null) {
-            return null;
+    public RecruiterApplicationResponse toRecruiterResponse(ApplicationEntity a, ScreeningResultEntity sr, InterviewEntity interview) {
+        RecruiterApplicationResponse.RecruiterApplicationResponseBuilder builder = RecruiterApplicationResponse.builder()
+                .applicationId(a.getId())
+                .vacancyId(a.getVacancy().getId())
+                .candidateId(a.getCandidateUser().getId())
+                .status(a.getStatus().name())
+                .resumeText(a.getResumeText())
+                .coverLetter(a.getCoverLetter())
+                .createdAt(a.getCreatedAt());
+        if (sr != null) {
+            builder.screening(RecruiterApplicationResponse.ScreeningInfo.builder()
+                    .score(sr.getScore())
+                    .passed(sr.isPassed())
+                    .matchedSkills(sr.getMatchedSkills())
+                    .build());
         }
-        return RecruiterApplicationResponse.ScreeningInfo.builder()
-                .score(sr.getScore())
-                .passed(sr.isPassed())
-                .matchedSkills(sr.getMatchedSkills())
-                .build();
+        if (interview != null) {
+            builder.interview(RecruiterApplicationResponse.InterviewInfo.builder()
+                    .interviewId(interview.getId())
+                    .scheduledAt(interview.getScheduledAt())
+                    .durationMinutes(interview.getDurationMinutes())
+                    .status(interview.getStatus().name())
+                    .build());
+        }
+        return builder.build();
     }
 }

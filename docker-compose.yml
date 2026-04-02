@@ -2,6 +2,10 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: hh-process-db
+    command:
+      - postgres
+      - -c
+      - max_prepared_transactions=100
     env_file:
       - .env
     ports:
@@ -12,7 +16,8 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
 
   app:
     build: .
@@ -22,7 +27,16 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      NARAYANA_LOG_DIR: /app/transaction-logs
+      APP_SECURITY_USERS_XML: /app/data/users.xml
     ports:
       - "8080:8080"
+    volumes:
+      - narayana_logs:/app/transaction-logs
+      - app_data:/app/data
+
 volumes:
   postgres_data:
+  narayana_logs:
+  app_data:

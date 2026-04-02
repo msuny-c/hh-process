@@ -20,6 +20,7 @@ public class RecruiterApplicationResponse {
     String coverLetter;
     ScreeningInfo screening;
     Instant createdAt;
+    InterviewInfo interview;
 
     @Value
     @Builder
@@ -27,5 +28,14 @@ public class RecruiterApplicationResponse {
         int score;
         boolean passed;
         List<String> matchedSkills;
+    }
+
+    @Value
+    @Builder
+    public static class InterviewInfo {
+        UUID interviewId;
+        Instant scheduledAt;
+        Integer durationMinutes;
+        String status;
     }
 }

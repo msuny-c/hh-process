@@ -13,7 +13,6 @@ import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.mapper.ApplicationMapper;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 import ru.itmo.hhprocess.repository.UserRepository;
-import ru.itmo.hhprocess.security.JwtPrincipal;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -35,11 +34,11 @@ public class ApplicationService {
         private final NotificationService notificationService;
         private final AuthService authService;
         private final ApplicationMapper applicationMapper;
+        private final InterviewService interviewService;
 
         @Transactional
         public CreateApplicationResponse create(UUID vacancyId, CreateApplicationRequest request) {
-                JwtPrincipal principal = authService.getCurrentPrincipal();
-                UserEntity candidateUser = findUser(principal.userId());
+                UserEntity candidateUser = authService.getCurrentUser();
                 VacancyEntity vacancy = vacancyService.findByIdForUpdate(vacancyId);
 
                 if (vacancy.getStatus() != VacancyStatus.ACTIVE) {
@@ -62,25 +61,23 @@ public class ApplicationService {
 
         @Transactional(readOnly = true)
         public List<CandidateApplicationResponse> getMyApplications() {
-                JwtPrincipal principal = authService.getCurrentPrincipal();
-                UserEntity candidateUser = findUser(principal.userId());
+                UserEntity candidateUser = authService.getCurrentUser();
 
                 return applicationRepository.findByCandidateUserId(candidateUser.getId()).stream()
-                                .map(applicationMapper::toCandidateResponse)
+                                .map(a -> applicationMapper.toCandidateResponse(a, interviewService.findActiveByApplicationId(a.getId()).orElse(null)))
                                 .toList();
         }
 
         @Transactional(readOnly = true)
         public CandidateApplicationResponse getApplicationForCandidate(UUID applicationId) {
-                JwtPrincipal principal = authService.getCurrentPrincipal();
-                UserEntity candidateUser = findUser(principal.userId());
+                UserEntity candidateUser = authService.getCurrentUser();
 
                 ApplicationEntity application = findById(applicationId);
                 if (!application.getCandidateUser().getId().equals(candidateUser.getId())) {
                         throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED,
                                         "Not your application");
                 }
-                return applicationMapper.toCandidateResponse(application);
+                return applicationMapper.toCandidateResponse(application, interviewService.findActiveByApplicationId(application.getId()).orElse(null));
         }
 
         @Transactional(readOnly = true)
@@ -106,12 +103,6 @@ public class ApplicationService {
                                 null);
 
                 return application;
-        }
-
-        private UserEntity findUser(UUID userId) {
-                return userRepository.findById(userId)
-                                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
-                                                ErrorCode.AUTH_INVALID_CREDENTIALS, "Authentication required"));
         }
 
         private CreateApplicationResponse handleScreeningFailed(ApplicationEntity application,

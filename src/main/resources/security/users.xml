@@ -1,0 +1,4 @@
+<users>
+  <user email="admin@example.com" passwordHash="$2a$10$7MWMMAB73G/EvLLLEDsk5eSoOuhLQET/M94o95rYiBAkOfsKCNdvK"/>
+  <user email="recruiter@example.com" passwordHash="$2a$10$7MWMMAB73G/EvLLLEDsk5eSoOuhLQET/M94o95rYiBAkOfsKCNdvK"/>
+</users>
