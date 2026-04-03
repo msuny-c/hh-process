@@ -1,22 +1,6 @@
 spring:
   application:
     name: hh-process
-  datasource:
-    type: io.agroal.springframework.boot.AgroalDataSource
-    xa:
-      data-source-class-name: org.postgresql.xa.PGXADataSource
-      properties:
-        serverName: ${POSTGRES_HOST}
-        portNumber: ${POSTGRES_PORT}
-        databaseName: ${POSTGRES_DB}
-        currentSchema: ${POSTGRES_SCHEMA}
-        user: ${POSTGRES_USER}
-        password: ${POSTGRES_PASSWORD}
-    agroal:
-      max-size: ${DB_POOL_MAX_SIZE:20}
-      min-size: ${DB_POOL_MIN_SIZE:5}
-      acquisition-timeout: PT30S
-      leak-detection-interval: PT0S
   jpa:
     hibernate:
       ddl-auto: validate
