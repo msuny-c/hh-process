@@ -26,7 +26,28 @@ load_env() {
   fi
   NARAYANA_LOG_DIR="${NARAYANA_LOG_DIR:-$APP_DIR/transaction-logs}"
   APP_SECURITY_USERS_XML="${APP_SECURITY_USERS_XML:-$APP_DIR/data/users.xml}"
-APP_SECURITY_USERS_XML="${APP_SECURITY_USERS_XML:-$APP_DIR/data/users.xml}"
+}
+
+wait_for_db() {
+  local host port
+  host="${POSTGRES_HOST:-}"
+  port="${POSTGRES_PORT:-}"
+
+  if [ -z "$host" ] || [ -z "$port" ]; then
+    return 0
+  fi
+
+  echo "Waiting for DB at ${host}:${port}..."
+  for _ in $(seq 1 60); do
+    if nc -z "$host" "$port" 2>/dev/null; then
+      echo "DB is reachable"
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "Warning: DB ${host}:${port} is still unreachable, starting app anyway" >&2
+  return 0
 }
 
 ensure_runtime_dirs() {
@@ -84,6 +105,7 @@ cmd_start() {
 
   load_env
   ensure_runtime_dirs
+  wait_for_db
   echo "Starting $JAR_NAME..."
   : > "$LOG_FILE"
   nohup $JAVA_BIN $JAVA_OPTS -Dnarayana.log-dir="$NARAYANA_LOG_DIR" -Dapp.security.users-xml-path="$APP_SECURITY_USERS_XML" -jar "$JAR_NAME" > "$LOG_FILE" 2>&1 &

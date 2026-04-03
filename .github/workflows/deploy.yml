@@ -185,7 +185,12 @@ jobs:
 
           with open('app.env', 'w') as f:
               for key, value in {**secrets, **vars}.items():
-                  if key not in ['SSH_KEY', 'SSH_HOST', 'SSH_PORT', 'SSH_USER', 'github_token']:
+                  if key not in [
+                      'SSH_KEY', 'SSH_HOST', 'SSH_PORT', 'SSH_USER',
+                      'VPS_SSH_KEY', 'VPS_SSH_HOST', 'VPS_SSH_PORT', 'VPS_SSH_USER',
+                      'HELIOS_TUNNEL_PRIVATE_KEY', 'DB_TUNNEL_REMOTE_HOST', 'DB_TUNNEL_REMOTE_PORT',
+                      'github_token'
+                  ]:
                       if value is not None:
                           value = str(value).strip()
                       f.write(f'{key}={value}\n')
@@ -199,6 +204,22 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_key
           chmod 600 ~/.ssh/id_key
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Prepare VPS SSH for DB tunnel
+        if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
+        run: |
+          if [ -z "${{ secrets.VPS_SSH_HOST }}" ] || [ -z "${{ secrets.VPS_SSH_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
+            echo "VPS tunnel secrets are not fully configured; tunnel can only be reused if it already exists on helios"
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_vps
+          chmod 600 ~/.ssh/id_vps
+          VPS_PORT="${{ secrets.VPS_SSH_PORT }}"
+          [ -z "$VPS_PORT" ] && VPS_PORT=22
+          ssh-keyscan -p "$VPS_PORT" -H "${{ secrets.VPS_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          printf '%s\n' "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" > helios_tunnel_key
+          chmod 600 helios_tunnel_key
 
       - name: Upload bundle to server
         run: |
@@ -222,6 +243,47 @@ jobs:
           ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "chmod +x ${APP_DIR}/appctl.sh"
+
+      - name: Ensure DB reverse tunnel on helios
+        if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
+        run: |
+          DB_PORT="${{ vars.POSTGRES_PORT }}"
+          [ -z "$DB_PORT" ] && DB_PORT=15432
+          REMOTE_DB_HOST="${{ vars.DB_TUNNEL_REMOTE_HOST }}"
+          [ -z "$REMOTE_DB_HOST" ] && REMOTE_DB_HOST=127.0.0.1
+          REMOTE_DB_PORT="${{ vars.DB_TUNNEL_REMOTE_PORT }}"
+          [ -z "$REMOTE_DB_PORT" ] && REMOTE_DB_PORT=5432
+          HELIOS_HOST="${{ secrets.SSH_HOST }}"
+          HELIOS_PORT="${{ secrets.SSH_PORT }}"
+          HELIOS_USER="${{ secrets.SSH_USER }}"
+
+          if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $DB_PORT"; then
+            echo "Reverse DB tunnel is already reachable on helios:127.0.0.1:$DB_PORT"
+            exit 0
+          fi
+
+          if [ -z "${{ secrets.VPS_SSH_HOST }}" ] || [ -z "${{ secrets.VPS_SSH_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
+            echo "Reverse DB tunnel is down on helios, and VPS tunnel secrets are missing. Configure VPS_SSH_HOST, VPS_SSH_USER, VPS_SSH_KEY and HELIOS_TUNNEL_PRIVATE_KEY." >&2
+            exit 1
+          fi
+
+          VPS_PORT="${{ secrets.VPS_SSH_PORT }}"
+          [ -z "$VPS_PORT" ] && VPS_PORT=22
+
+          scp -P "$VPS_PORT" -i ~/.ssh/id_vps helios_tunnel_key "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}:~/.ssh/helios_tunnel_key"
+
+          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}"             "set -eu;              mkdir -p ~/.ssh;              chmod 700 ~/.ssh;              chmod 600 ~/.ssh/helios_tunnel_key;              ssh-keyscan -p '$HELIOS_PORT' -H '$HELIOS_HOST' >> ~/.ssh/known_hosts 2>/dev/null || true;              pkill -f 'R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}' 2>/dev/null || true;              ssh -f -N -i ~/.ssh/helios_tunnel_key -p '$HELIOS_PORT'                -o ExitOnForwardFailure=yes                -o ServerAliveInterval=30                -o ServerAliveCountMax=3                -R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}                '$HELIOS_USER@$HELIOS_HOST'"
+
+          for i in {1..20}; do
+            if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $DB_PORT"; then
+              echo "Reverse DB tunnel is ready on helios:127.0.0.1:$DB_PORT"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Reverse DB tunnel did not become reachable on helios:127.0.0.1:$DB_PORT" >&2
+          exit 1
 
       - name: Restart service on server
         run: |
