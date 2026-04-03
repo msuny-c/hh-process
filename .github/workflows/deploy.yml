@@ -38,7 +38,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies for API tests
-        run: python -m pip install --upgrade pip requests
+        run: python -m pip install --upgrade pip requests "psycopg[binary]"
 
       - name: Start PostgreSQL with prepared transactions enabled
         run: |
@@ -93,6 +93,10 @@ jobs:
           python test/test.py
           python test/test_composite_transactions.py
           python test/test_security_validation.py
+          python test/test_access_matrix.py
+          python test/test_transaction_atomicity.py
+          python test/test_business_rules.py
+          python test/test_timeout_job_db_fixture.py
 
 
       - name: Upload PostgreSQL CI log
@@ -350,6 +354,9 @@ jobs:
           python test/test.py
           python test/test_composite_transactions.py
           python test/test_security_validation.py
+          python test/test_access_matrix.py
+          python test/test_transaction_atomicity.py
+          python test/test_business_rules.py
 
       - name: Fetch app.log from server
         if: always()
