@@ -22,6 +22,7 @@
         <lombok.version>1.18.42</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <narayana.version>3.4.3</narayana.version>
+        <agroal.version>2.8</agroal.version>
     </properties>
 
     <dependencies>
@@ -41,6 +42,11 @@
             <groupId>dev.snowdrop</groupId>
             <artifactId>narayana-spring-boot-starter</artifactId>
             <version>${narayana.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.agroal</groupId>
+            <artifactId>agroal-spring-boot-starter</artifactId>
+            <version>${agroal.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
