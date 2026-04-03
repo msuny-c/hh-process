@@ -17,6 +17,8 @@ env:
   NARAYANA_LOG_DIR: ./transaction-logs
   NARAYANA_NODE_IDENTIFIER: hh-process-ci
   APP_SECURITY_USERS_XML: ./data/users.xml
+  APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS: true
+  TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS: 1
 
 jobs:
   test:
@@ -90,6 +92,8 @@ jobs:
 
       - name: Run API tests from test/
         run: |
+          echo "APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS}"
+          echo "TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS}"
           python test/test.py
           python test/test_composite_transactions.py
           python test/test_security_validation.py

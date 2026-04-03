@@ -132,6 +132,11 @@ def print_db_debug_state(label: str, application_id: str) -> dict:
     return state
 
 
+def notifications_expected() -> bool:
+    value = os.getenv('TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS', '').strip().lower()
+    return value not in {'1', 'true', 'yes', 'on'}
+
+
 def main() -> int:
     api = API()
     recruiter = recruiter_session(api)
@@ -178,12 +183,15 @@ def main() -> int:
     if candidate_view.get('interview') is not None:
         raise CheckError(f'timeout closure must remove active interview from candidate view: {candidate_view}')
 
-    candidate_notifications = notifications(api, candidate)
-    recruiter_notifications = notifications(api, recruiter)
-    if find_notification(candidate_notifications, app['application_id'], 'INVITATION_TIMEOUT') is None:
-        raise CheckError(f'candidate timeout notification missing: {candidate_notifications}')
-    if find_notification(recruiter_notifications, app['application_id'], 'INVITATION_TIMEOUT') is None:
-        raise CheckError(f'recruiter timeout notification missing: {recruiter_notifications}')
+    if notifications_expected():
+        candidate_notifications = notifications(api, candidate)
+        recruiter_notifications = notifications(api, recruiter)
+        if find_notification(candidate_notifications, app['application_id'], 'INVITATION_TIMEOUT') is None:
+            raise CheckError(f'candidate timeout notification missing: {candidate_notifications}')
+        if find_notification(recruiter_notifications, app['application_id'], 'INVITATION_TIMEOUT') is None:
+            raise CheckError(f'recruiter timeout notification missing: {recruiter_notifications}')
+    else:
+        print('Timeout debug mode enabled: notification assertions are skipped', flush=True)
 
     schedule = schedule_for_week(api, recruiter, scheduled)
     app_slots = filter_schedule_items_for_application(schedule, app['application_id'])

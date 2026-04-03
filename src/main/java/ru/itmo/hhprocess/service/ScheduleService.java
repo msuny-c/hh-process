@@ -1,6 +1,7 @@
 package ru.itmo.hhprocess.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +18,7 @@ import java.time.*;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ScheduleService {
@@ -47,11 +49,38 @@ public class ScheduleService {
 
     @Transactional
     public void releaseForInterview(InterviewEntity interview) {
-        scheduleSlotRepository.releaseByInterviewId(
+        RecruiterScheduleSlotEntity existingSlot = scheduleSlotRepository.findByInterviewId(interview.getId()).orElse(null);
+        log.info(
+                "releaseForInterview start; interviewId={}; existingSlotId={}; existingSlotStatus={}; slotStartAt={}; slotEndAt={}",
+                interview.getId(),
+                existingSlot != null ? existingSlot.getId() : null,
+                existingSlot != null ? existingSlot.getStatus() : null,
+                existingSlot != null ? existingSlot.getStartAt() : null,
+                existingSlot != null ? existingSlot.getEndAt() : null
+        );
+
+        Instant releasedAt = Instant.now();
+        int updatedRows = scheduleSlotRepository.releaseByInterviewId(
                 interview.getId(),
                 ScheduleSlotStatus.RESERVED,
                 ScheduleSlotStatus.RELEASED,
-                Instant.now()
+                releasedAt
+        );
+
+        log.info(
+                "releaseForInterview bulk update executed; interviewId={}; updatedRows={}; releasedAt={}",
+                interview.getId(),
+                updatedRows,
+                releasedAt
+        );
+
+        RecruiterScheduleSlotEntity slotAfterUpdate = scheduleSlotRepository.findByInterviewId(interview.getId()).orElse(null);
+        log.info(
+                "releaseForInterview end; interviewId={}; slotId={}; visibleSlotStatus={}; visibleReleasedAt={}",
+                interview.getId(),
+                slotAfterUpdate != null ? slotAfterUpdate.getId() : null,
+                slotAfterUpdate != null ? slotAfterUpdate.getStatus() : null,
+                slotAfterUpdate != null ? slotAfterUpdate.getReleasedAt() : null
         );
     }
 

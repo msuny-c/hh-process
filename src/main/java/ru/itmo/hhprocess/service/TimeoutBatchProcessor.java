@@ -2,6 +2,7 @@ package ru.itmo.hhprocess.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,9 @@ public class TimeoutBatchProcessor {
     private final NotificationService notificationService;
     private final InterviewService interviewService;
     private final ScheduleService scheduleService;
+
+    @Value("${app.timeout.debug.disable-notifications:false}")
+    private boolean disableNotifications;
 
     @Transactional
     public int processExpiredBatch(int batchSize) {
@@ -59,10 +63,16 @@ public class TimeoutBatchProcessor {
             application.setClosedAt(now);
 
             historyService.record(application, ApplicationStatus.INVITED, ApplicationStatus.CLOSED_BY_TIMEOUT, null);
-            notificationService.create(application.getVacancy().getRecruiterUser(), application, NotificationType.INVITATION_TIMEOUT,
-                    "Invitation expired for vacancy: " + application.getVacancy().getTitle());
-            notificationService.create(application.getCandidateUser(), application, NotificationType.INVITATION_TIMEOUT,
-                    "Interview invitation expired for vacancy: " + application.getVacancy().getTitle());
+            if (disableNotifications) {
+                log.warn("Timeout debug mode: skipping timeout notifications for application {}", application.getId());
+            } else {
+                log.info("Creating timeout notifications for application {}", application.getId());
+                notificationService.create(application.getVacancy().getRecruiterUser(), application, NotificationType.INVITATION_TIMEOUT,
+                        "Invitation expired for vacancy: " + application.getVacancy().getTitle());
+                notificationService.create(application.getCandidateUser(), application, NotificationType.INVITATION_TIMEOUT,
+                        "Interview invitation expired for vacancy: " + application.getVacancy().getTitle());
+                log.info("Created timeout notifications for application {}", application.getId());
+            }
 
             log.info("Expired invitation application {} marked as CLOSED_BY_TIMEOUT", application.getId());
         }

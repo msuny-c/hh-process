@@ -29,43 +29,53 @@ public class TimeoutService {
 
         log.info("Starting closeExpiredInvitations run; batchSize={}", BATCH_SIZE);
 
-        do {
-            iteration++;
-            long batchStartedAtNanos = System.nanoTime();
-            try {
-                log.info("Starting expired invitation batch iteration {}", iteration);
-                batchClosed = batchProcessor.processExpiredBatch(BATCH_SIZE);
-                totalClosed += batchClosed;
-                long batchDurationMs = (System.nanoTime() - batchStartedAtNanos) / 1_000_000;
-                log.info(
-                        "Finished expired invitation batch iteration {}; batchClosed={}; totalClosed={}; durationMs={}",
-                        iteration,
-                        batchClosed,
-                        totalClosed,
-                        batchDurationMs
-                );
-            } catch (Exception e) {
-                long batchDurationMs = (System.nanoTime() - batchStartedAtNanos) / 1_000_000;
-                long totalDurationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
-                log.error(
-                        "Error processing expired invitation batch on iteration {}; totalClosedSoFar={}; batchDurationMs={}; totalDurationMs={}",
-                        iteration,
-                        totalClosed,
-                        batchDurationMs,
-                        totalDurationMs,
-                        e
-                );
-                break;
-            }
-        } while (batchClosed > 0);
+        try {
+            do {
+                iteration++;
+                long batchStartedAtNanos = System.nanoTime();
+                try {
+                    log.info("Starting expired invitation batch iteration {}", iteration);
+                    batchClosed = batchProcessor.processExpiredBatch(BATCH_SIZE);
+                    totalClosed += batchClosed;
+                    long batchDurationMs = (System.nanoTime() - batchStartedAtNanos) / 1_000_000;
+                    log.info(
+                            "Finished expired invitation batch iteration {}; batchClosed={}; totalClosed={}; durationMs={}",
+                            iteration,
+                            batchClosed,
+                            totalClosed,
+                            batchDurationMs
+                    );
+                } catch (Exception e) {
+                    long batchDurationMs = (System.nanoTime() - batchStartedAtNanos) / 1_000_000;
+                    long totalDurationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
+                    log.error(
+                            "Error processing expired invitation batch on iteration {}; totalClosedSoFar={}; batchDurationMs={}; totalDurationMs={}",
+                            iteration,
+                            totalClosed,
+                            batchDurationMs,
+                            totalDurationMs,
+                            e
+                    );
+                    break;
+                }
+            } while (batchClosed > 0);
 
-        long totalDurationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
-        log.info(
-                "Finished closeExpiredInvitations run; iterations={}; totalClosed={}; durationMs={}",
-                iteration,
-                totalClosed,
-                totalDurationMs
-        );
-        return totalClosed;
+            long totalDurationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
+            log.info(
+                    "Finished closeExpiredInvitations run; iterations={}; totalClosed={}; durationMs={}",
+                    iteration,
+                    totalClosed,
+                    totalDurationMs
+            );
+            return totalClosed;
+        } finally {
+            long totalDurationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
+            log.info(
+                    "Leaving runCloseExpired(); iterationsAttempted={}; totalClosedSoFar={}; durationMs={}",
+                    iteration,
+                    totalClosed,
+                    totalDurationMs
+            );
+        }
     }
 }

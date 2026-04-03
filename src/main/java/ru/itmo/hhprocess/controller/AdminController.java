@@ -1,6 +1,7 @@
 package ru.itmo.hhprocess.controller;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import ru.itmo.hhprocess.dto.admin.JobResultResponse;
 import ru.itmo.hhprocess.service.TimeoutService;
 
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
 
 @Validated
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
@@ -23,8 +25,22 @@ public class AdminController {
     @PostMapping("/jobs/close-expired-invitations")
     @PreAuthorize("hasAuthority('JOB_RUN_TIMEOUT_CLOSE')")
     public JobResultResponse closeExpiredInvitations() {
-        return JobResultResponse.builder()
-                .closedCount(timeoutService.runCloseExpired())
-                .build();
+        long startedAtNanos = System.nanoTime();
+        log.info("Admin timeout endpoint invoked");
+        try {
+            int closedCount = timeoutService.runCloseExpired();
+            long durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
+            log.info("Admin timeout endpoint completed successfully; closedCount={}; durationMs={}", closedCount, durationMs);
+            return JobResultResponse.builder()
+                    .closedCount(closedCount)
+                    .build();
+        } catch (RuntimeException e) {
+            long durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
+            log.error("Admin timeout endpoint failed after {} ms", durationMs, e);
+            throw e;
+        } finally {
+            long durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
+            log.info("Admin timeout endpoint leaving controller method; durationMs={}", durationMs);
+        }
     }
 }

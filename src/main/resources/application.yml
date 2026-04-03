@@ -57,6 +57,9 @@ app:
 
   websocket:
     allowed-origins: ${WS_ALLOWED_ORIGINS:http://localhost:3000}
+  timeout:
+    debug:
+      disable-notifications: ${APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:false}
 
 
 logging:
@@ -72,3 +75,5 @@ logging:
     org.jboss.narayana: DEBUG
     ru.itmo.hhprocess.service.TimeoutService: DEBUG
     ru.itmo.hhprocess.service.TimeoutBatchProcessor: DEBUG
+    ru.itmo.hhprocess.service.ScheduleService: DEBUG
+    ru.itmo.hhprocess.controller.AdminController: DEBUG
