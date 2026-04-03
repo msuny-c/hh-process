@@ -9,6 +9,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import ru.itmo.hhprocess.dto.auth.MeResponse;
 import ru.itmo.hhprocess.dto.auth.RegisterCandidateRequest;
 import ru.itmo.hhprocess.dto.auth.RegisterResponse;
@@ -27,6 +29,7 @@ public class AuthService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final XmlCredentialStore xmlCredentialStore;
+    private final CandidateRegistrationFinalizer candidateRegistrationFinalizer;
 
     @Transactional
     public RegisterResponse registerCandidate(RegisterCandidateRequest request) {
@@ -46,11 +49,24 @@ public class AuthService {
                 .passwordHash(passwordHash)
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
-                .enabled(true)
+                .enabled(false)
                 .build();
         user.getRoles().add(candidateRole);
         user = userRepository.save(user);
-        xmlCredentialStore.create(email, passwordHash);
+
+        final UUID userId = user.getId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    xmlCredentialStore.create(email, passwordHash);
+                    candidateRegistrationFinalizer.enableUser(userId);
+                } catch (RuntimeException ex) {
+                    candidateRegistrationFinalizer.deleteUser(userId);
+                    throw ex;
+                }
+            }
+        });
 
         return RegisterResponse.builder()
                 .userId(user.getId())

@@ -6,9 +6,9 @@ import uuid
 import requests
 
 BASE_URL = os.getenv('BASE_URL', 'http://localhost:8080').rstrip('/')
-RECRUITER = ('recruiter@example.com', 'password123')
-ADMIN = ('admin@example.com', 'password123')
-CANDIDATE_PASSWORD = 'password123'
+RECRUITER = (os.getenv('RECRUITER_EMAIL', 'recruiter@example.com'), os.getenv('RECRUITER_PASSWORD', 'password123'))
+ADMIN = (os.getenv('ADMIN_EMAIL', 'admin@example.com'), os.getenv('ADMIN_PASSWORD', 'password123'))
+CANDIDATE_PASSWORD = os.getenv('CANDIDATE_PASSWORD', 'password123')
 
 
 def req(method, path, auth=None, expected=(200,), payload=None, params=None):

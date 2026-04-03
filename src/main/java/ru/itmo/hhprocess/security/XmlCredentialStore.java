@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.Optional;
@@ -80,10 +81,24 @@ public class XmlCredentialStore {
     }
 
     private void writeAll(XmlCredentialUsers users) {
-        try (OutputStream out = Files.newOutputStream(path())) {
+        Path target = path();
+        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+        try (OutputStream out = Files.newOutputStream(tmp)) {
             xmlMapper.writerWithDefaultPrettyPrinter().writeValue(out, users);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to write users XML", e);
+        }
+
+        try {
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            try {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException ioException) {
+                throw new IllegalStateException("Failed to replace users XML", ioException);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to replace users XML", e);
         }
     }
 

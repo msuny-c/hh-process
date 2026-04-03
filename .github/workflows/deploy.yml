@@ -154,7 +154,16 @@ jobs:
         with:
           sparse-checkout: |
             infra/appctl.sh
+            test
           sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies for deployed API tests
+        run: python -m pip install --upgrade pip requests
 
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -227,6 +236,58 @@ jobs:
           ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "i=0; while [ \$i -lt 60 ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; echo 'Port ${PORT} not open'; exit 1"
+
+      - name: Run deployed API tests via SSH tunnel
+        run: |
+          PORT="${{ vars.SERVER_PORT }}"
+          [ -z "$PORT" ] && PORT=8080
+          LOCAL_PORT=18080
+
+          ssh -N \
+            -L ${LOCAL_PORT}:127.0.0.1:${PORT} \
+            -p "${{ secrets.SSH_PORT }}" \
+            -i ~/.ssh/id_key \
+            -o ExitOnForwardFailure=yes \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=3 \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" &
+          TUNNEL_PID=$!
+          trap 'kill ${TUNNEL_PID} 2>/dev/null || true' EXIT
+
+          READY=0
+          for i in {1..20}; do
+            if curl -fsS "http://127.0.0.1:${LOCAL_PORT}/actuator/health" > /dev/null; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          [ "$READY" = "1" ] || { echo "Forwarded healthcheck failed"; exit 1; }
+
+          export BASE_URL="http://127.0.0.1:${LOCAL_PORT}"
+          export REQUEST_TIMEOUT=60
+
+          ADMIN_EMAIL_VALUE="${{ vars.ADMIN_EMAIL }}"
+          [ -n "$ADMIN_EMAIL_VALUE" ] && export ADMIN_EMAIL="$ADMIN_EMAIL_VALUE"
+
+          ADMIN_PASSWORD_VALUE="${{ secrets.ADMIN_PASSWORD }}"
+          [ -z "$ADMIN_PASSWORD_VALUE" ] && ADMIN_PASSWORD_VALUE="${{ vars.ADMIN_PASSWORD }}"
+          [ -n "$ADMIN_PASSWORD_VALUE" ] && export ADMIN_PASSWORD="$ADMIN_PASSWORD_VALUE"
+
+          RECRUITER_EMAIL_VALUE="${{ vars.RECRUITER_EMAIL }}"
+          [ -n "$RECRUITER_EMAIL_VALUE" ] && export RECRUITER_EMAIL="$RECRUITER_EMAIL_VALUE"
+
+          RECRUITER_PASSWORD_VALUE="${{ secrets.RECRUITER_PASSWORD }}"
+          [ -z "$RECRUITER_PASSWORD_VALUE" ] && RECRUITER_PASSWORD_VALUE="${{ vars.RECRUITER_PASSWORD }}"
+          [ -n "$RECRUITER_PASSWORD_VALUE" ] && export RECRUITER_PASSWORD="$RECRUITER_PASSWORD_VALUE"
+
+          CANDIDATE_PASSWORD_VALUE="${{ secrets.CANDIDATE_PASSWORD }}"
+          [ -z "$CANDIDATE_PASSWORD_VALUE" ] && CANDIDATE_PASSWORD_VALUE="${{ vars.CANDIDATE_PASSWORD }}"
+          [ -n "$CANDIDATE_PASSWORD_VALUE" ] && export CANDIDATE_PASSWORD="$CANDIDATE_PASSWORD_VALUE"
+
+          python test/test.py
+          python test/test_composite_transactions.py
+          python test/test_security_validation.py
 
       - name: Fetch app.log from server
         if: always()
