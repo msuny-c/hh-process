@@ -5,14 +5,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TimeoutService {
 
-    private static final int BATCH_SIZE = 100;
-
     private final TimeoutBatchProcessor batchProcessor;
+    private final AtomicBoolean runInProgress = new AtomicBoolean(false);
 
     @Scheduled(fixedDelayString = "${app.timeout.check-interval-ms:60000}",
               initialDelayString = "${app.timeout.initial-delay-ms:30000}")
@@ -22,20 +23,25 @@ public class TimeoutService {
     }
 
     public int runCloseExpired() {
+        if (!runInProgress.compareAndSet(false, true)) {
+            log.info("Skipping closeExpiredInvitations run because another run is already in progress");
+            return 0;
+        }
+
         long startedAtNanos = System.nanoTime();
         int totalClosed = 0;
-        int batchClosed;
         int iteration = 0;
 
-        log.info("Starting closeExpiredInvitations run; batchSize={}", BATCH_SIZE);
+        log.info("Starting closeExpiredInvitations run");
 
         try {
-            do {
+            while (true) {
                 iteration++;
                 long batchStartedAtNanos = System.nanoTime();
+                int batchClosed;
                 try {
                     log.info("Starting expired invitation batch iteration {}", iteration);
-                    batchClosed = batchProcessor.processExpiredBatch(BATCH_SIZE);
+                    batchClosed = batchProcessor.processOneExpired();
                     totalClosed += batchClosed;
                     long batchDurationMs = (System.nanoTime() - batchStartedAtNanos) / 1_000_000;
                     log.info(
@@ -45,6 +51,10 @@ public class TimeoutService {
                             totalClosed,
                             batchDurationMs
                     );
+
+                    if (batchClosed == 0) {
+                        break;
+                    }
                 } catch (Exception e) {
                     long batchDurationMs = (System.nanoTime() - batchStartedAtNanos) / 1_000_000;
                     long totalDurationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
@@ -58,7 +68,7 @@ public class TimeoutService {
                     );
                     break;
                 }
-            } while (batchClosed > 0);
+            }
 
             long totalDurationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
             log.info(
@@ -69,6 +79,7 @@ public class TimeoutService {
             );
             return totalClosed;
         } finally {
+            runInProgress.set(false);
             long totalDurationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
             log.info(
                     "Leaving runCloseExpired(); iterationsAttempted={}; totalClosedSoFar={}; durationMs={}",

@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.InterviewEntity;
@@ -14,6 +15,7 @@ import ru.itmo.hhprocess.repository.ApplicationRepository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -29,53 +31,72 @@ public class TimeoutBatchProcessor {
     @Value("${app.timeout.debug.disable-notifications:false}")
     private boolean disableNotifications;
 
-    @Transactional
-    public int processExpiredBatch(int batchSize) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int processOneExpired() {
         Instant now = Instant.now();
-        List<ApplicationEntity> batch = applicationRepository.findExpiredInvitationsForUpdate(
-                ApplicationStatus.INVITED, now, PageRequest.of(0, batchSize));
+        List<UUID> ids = applicationRepository.findExpiredInvitationIds(
+                ApplicationStatus.INVITED, now, PageRequest.of(0, 1));
 
-        log.info("Timeout batch scan at {} found {} expired invitations", now, batch.size());
-        if (!batch.isEmpty()) {
-            log.info("Timeout batch selected application ids: {}",
-                    batch.stream().map(application -> application.getId().toString()).toList());
+        log.info("Timeout batch scan at {} found {} expired invitations", now, ids.size());
+        if (ids.isEmpty()) {
+            return 0;
         }
 
-        for (ApplicationEntity application : batch) {
+        UUID applicationId = ids.get(0);
+        ApplicationEntity application = applicationRepository.findDetailedById(applicationId).orElse(null);
+        if (application == null) {
+            log.warn("Expired invitation candidate application {} disappeared before processing", applicationId);
+            return 0;
+        }
+
+        if (application.getStatus() != ApplicationStatus.INVITED
+                || application.getResponseReceivedAt() != null
+                || application.getInvitationExpiresAt() == null
+                || !application.getInvitationExpiresAt().isBefore(now)) {
             log.info(
-                    "Processing expired invitation applicationId={}, status={}, invitationExpiresAt={}, responseReceivedAt={}",
+                    "Skipping expired invitation applicationId={} after recheck; status={}, invitationExpiresAt={}, responseReceivedAt={}",
                     application.getId(),
                     application.getStatus(),
                     application.getInvitationExpiresAt(),
                     application.getResponseReceivedAt()
             );
-
-            InterviewEntity interview = interviewService.findActiveByApplicationId(application.getId()).orElse(null);
-            if (interview != null) {
-                log.info("Cancelling interview {} for expired application {}", interview.getId(), application.getId());
-                interviewService.cancel(interview, "Invitation expired");
-                scheduleService.releaseForInterview(interview);
-            } else {
-                log.info("No active interview found for expired application {}", application.getId());
-            }
-
-            application.setStatus(ApplicationStatus.CLOSED_BY_TIMEOUT);
-            application.setClosedAt(now);
-
-            historyService.record(application, ApplicationStatus.INVITED, ApplicationStatus.CLOSED_BY_TIMEOUT, null);
-            if (disableNotifications) {
-                log.warn("Timeout debug mode: skipping timeout notifications for application {}", application.getId());
-            } else {
-                log.info("Creating timeout notifications for application {}", application.getId());
-                notificationService.create(application.getVacancy().getRecruiterUser(), application, NotificationType.INVITATION_TIMEOUT,
-                        "Invitation expired for vacancy: " + application.getVacancy().getTitle());
-                notificationService.create(application.getCandidateUser(), application, NotificationType.INVITATION_TIMEOUT,
-                        "Interview invitation expired for vacancy: " + application.getVacancy().getTitle());
-                log.info("Created timeout notifications for application {}", application.getId());
-            }
-
-            log.info("Expired invitation application {} marked as CLOSED_BY_TIMEOUT", application.getId());
+            return 0;
         }
-        return batch.size();
+
+        log.info(
+                "Processing expired invitation applicationId={}, status={}, invitationExpiresAt={}, responseReceivedAt={}",
+                application.getId(),
+                application.getStatus(),
+                application.getInvitationExpiresAt(),
+                application.getResponseReceivedAt()
+        );
+
+        InterviewEntity interview = interviewService.findActiveByApplicationId(application.getId()).orElse(null);
+        if (interview != null) {
+            log.info("Cancelling interview {} for expired application {}", interview.getId(), application.getId());
+            interviewService.cancel(interview, "Invitation expired");
+            scheduleService.releaseForInterview(interview);
+        } else {
+            log.info("No active interview found for expired application {}", application.getId());
+        }
+
+        application.setStatus(ApplicationStatus.CLOSED_BY_TIMEOUT);
+        application.setClosedAt(now);
+        applicationRepository.saveAndFlush(application);
+        historyService.record(application, ApplicationStatus.INVITED, ApplicationStatus.CLOSED_BY_TIMEOUT, null);
+
+        if (disableNotifications) {
+            log.warn("Timeout debug mode: skipping timeout notifications for application {}", application.getId());
+        } else {
+            log.info("Creating timeout notifications for application {}", application.getId());
+            notificationService.create(application.getVacancy().getRecruiterUser(), application, NotificationType.INVITATION_TIMEOUT,
+                    "Invitation expired for vacancy: " + application.getVacancy().getTitle());
+            notificationService.create(application.getCandidateUser(), application, NotificationType.INVITATION_TIMEOUT,
+                    "Interview invitation expired for vacancy: " + application.getVacancy().getTitle());
+            log.info("Created timeout notifications for application {}", application.getId());
+        }
+
+        log.info("Expired invitation application {} marked as CLOSED_BY_TIMEOUT", application.getId());
+        return 1;
     }
 }

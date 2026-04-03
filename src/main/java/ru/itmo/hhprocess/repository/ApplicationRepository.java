@@ -3,18 +3,14 @@ package ru.itmo.hhprocess.repository;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
-
-import jakarta.persistence.LockModeType;
-import jakarta.persistence.QueryHint;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ApplicationRepository extends JpaRepository<ApplicationEntity, UUID> {
@@ -44,11 +40,21 @@ public interface ApplicationRepository extends JpaRepository<ApplicationEntity, 
                                                                     @Param("vacancyId") UUID vacancyId,
                                                                     @Param("status") ApplicationStatus status);
 
+    @Query("""
+           SELECT a.id
+           FROM ApplicationEntity a
+           WHERE a.status = :status
+             AND a.invitationExpiresAt < :now
+             AND a.responseReceivedAt IS NULL
+           ORDER BY a.invitationExpiresAt ASC
+           """)
+    List<UUID> findExpiredInvitationIds(@Param("status") ApplicationStatus status,
+                                        @Param("now") Instant now,
+                                        Pageable pageable);
+
     @EntityGraph(attributePaths = {"vacancy", "vacancy.recruiterUser", "candidateUser"})
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
-    @Query("SELECT a FROM ApplicationEntity a WHERE a.status = :status AND a.invitationExpiresAt < :now AND a.responseReceivedAt IS NULL")
-    List<ApplicationEntity> findExpiredInvitationsForUpdate(@Param("status") ApplicationStatus status, @Param("now") Instant now, Pageable pageable);
+    @Query("SELECT a FROM ApplicationEntity a WHERE a.id = :id")
+    Optional<ApplicationEntity> findDetailedById(@Param("id") UUID id);
 
     @EntityGraph(attributePaths = {"vacancy", "candidateUser"})
     @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.id = :vacancyId AND a.status IN :statuses")
