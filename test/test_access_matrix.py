@@ -68,8 +68,8 @@ def main() -> int:
         auth=recruiter.auth,
         expected=[403],
         payload={
-            'resume_text': 'not allowed',
-            'cover_letter': 'nope',
+            'resume_text': 'I have strong experience with Python, Spring Boot, PostgreSQL and Docker.',
+            'cover_letter': 'This payload is valid, so the endpoint must fail because of access control only.',
         },
     )
     expect_status(recruiter_apply, 403, 'recruiter must not apply as candidate')
