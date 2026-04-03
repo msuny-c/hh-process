@@ -2,7 +2,6 @@ package ru.itmo.hhprocess.repository;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import ru.itmo.hhprocess.entity.RecruiterScheduleSlotEntity;
@@ -29,17 +28,4 @@ public interface RecruiterScheduleSlotRepository extends JpaRepository<Recruiter
 
     @EntityGraph(attributePaths = {"interview", "interview.application", "interview.candidateUser"})
     Optional<RecruiterScheduleSlotEntity> findByInterviewId(UUID interviewId);
-
-    @Modifying
-    @Query("""
-            update RecruiterScheduleSlotEntity s
-            set s.status = :releasedStatus,
-                s.releasedAt = :releasedAt
-            where s.interview.id = :interviewId
-              and s.status = :reservedStatus
-            """)
-    int releaseByInterviewId(@Param("interviewId") UUID interviewId,
-                             @Param("reservedStatus") ScheduleSlotStatus reservedStatus,
-                             @Param("releasedStatus") ScheduleSlotStatus releasedStatus,
-                             @Param("releasedAt") Instant releasedAt);
 }

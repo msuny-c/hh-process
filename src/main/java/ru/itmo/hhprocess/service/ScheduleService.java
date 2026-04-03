@@ -49,38 +49,42 @@ public class ScheduleService {
 
     @Transactional
     public void releaseForInterview(InterviewEntity interview) {
-        RecruiterScheduleSlotEntity existingSlot = scheduleSlotRepository.findByInterviewId(interview.getId()).orElse(null);
+        RecruiterScheduleSlotEntity slot = scheduleSlotRepository.findByInterviewId(interview.getId()).orElse(null);
         log.info(
-                "releaseForInterview start; interviewId={}; existingSlotId={}; existingSlotStatus={}; slotStartAt={}; slotEndAt={}",
+                "releaseForInterview start; interviewId={}; slotId={}; slotStatus={}; slotStartAt={}; slotEndAt={}",
                 interview.getId(),
-                existingSlot != null ? existingSlot.getId() : null,
-                existingSlot != null ? existingSlot.getStatus() : null,
-                existingSlot != null ? existingSlot.getStartAt() : null,
-                existingSlot != null ? existingSlot.getEndAt() : null
+                slot != null ? slot.getId() : null,
+                slot != null ? slot.getStatus() : null,
+                slot != null ? slot.getStartAt() : null,
+                slot != null ? slot.getEndAt() : null
         );
+
+        if (slot == null) {
+            log.info("releaseForInterview skipped; interviewId={}; reason=no slot found", interview.getId());
+            return;
+        }
+
+        if (slot.getStatus() != ScheduleSlotStatus.RESERVED) {
+            log.info(
+                    "releaseForInterview skipped; interviewId={}; slotId={}; reason=status is {}; releasedAt={}",
+                    interview.getId(),
+                    slot.getId(),
+                    slot.getStatus(),
+                    slot.getReleasedAt()
+            );
+            return;
+        }
 
         Instant releasedAt = Instant.now();
-        int updatedRows = scheduleSlotRepository.releaseByInterviewId(
-                interview.getId(),
-                ScheduleSlotStatus.RESERVED,
-                ScheduleSlotStatus.RELEASED,
-                releasedAt
-        );
+        slot.setStatus(ScheduleSlotStatus.RELEASED);
+        slot.setReleasedAt(releasedAt);
 
         log.info(
-                "releaseForInterview bulk update executed; interviewId={}; updatedRows={}; releasedAt={}",
+                "releaseForInterview entity updated; interviewId={}; slotId={}; newStatus={}; releasedAt={}",
                 interview.getId(),
-                updatedRows,
-                releasedAt
-        );
-
-        RecruiterScheduleSlotEntity slotAfterUpdate = scheduleSlotRepository.findByInterviewId(interview.getId()).orElse(null);
-        log.info(
-                "releaseForInterview end; interviewId={}; slotId={}; visibleSlotStatus={}; visibleReleasedAt={}",
-                interview.getId(),
-                slotAfterUpdate != null ? slotAfterUpdate.getId() : null,
-                slotAfterUpdate != null ? slotAfterUpdate.getStatus() : null,
-                slotAfterUpdate != null ? slotAfterUpdate.getReleasedAt() : null
+                slot.getId(),
+                slot.getStatus(),
+                slot.getReleasedAt()
         );
     }
 
