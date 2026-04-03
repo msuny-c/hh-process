@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import time
 
 import psycopg
 
@@ -68,13 +69,24 @@ def main() -> int:
     invite_data = invite_json(api, recruiter, app['application_id'], scheduled, message='Timeout interview')
     expire_invitation(app['application_id'])
 
+    # The application also has a background @Scheduled timeout processor. In CI,
+    # the scheduled job may close the expired invitation just before the manual
+    # admin endpoint is called, in which case closed_count can legitimately be 0.
+    # So here we assert the final state, not that this exact HTTP call did the work.
     job_result = run_timeout_job(api, admin)
-    if int(job_result.get('closed_count', 0)) < 1:
-        raise CheckError(f'timeout job did not close any invitations: {job_result}')
 
-    candidate_view = get_candidate_application_json(api, candidate, app['application_id'])
-    if candidate_view['status'] not in ('CLOSED', 'CLOSED_BY_TIMEOUT'):
-        raise CheckError(f'candidate must see timeout-closed application: {candidate_view}')
+    candidate_view = None
+    for _ in range(10):
+        candidate_view = get_candidate_application_json(api, candidate, app['application_id'])
+        if candidate_view['status'] in ('CLOSED', 'CLOSED_BY_TIMEOUT') and candidate_view.get('interview') is None:
+            break
+        time.sleep(1)
+        job_result = run_timeout_job(api, admin)
+
+    if candidate_view is None or candidate_view['status'] not in ('CLOSED', 'CLOSED_BY_TIMEOUT'):
+        raise CheckError(
+            f'timeout job did not close the invitation; last job_result={job_result}, candidate_view={candidate_view}'
+        )
     if candidate_view.get('interview') is not None:
         raise CheckError(f'timeout closure must remove active interview from candidate view: {candidate_view}')
 
