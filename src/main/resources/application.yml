@@ -2,9 +2,15 @@ spring:
   application:
     name: hh-process
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?currentSchema=${POSTGRES_SCHEMA}
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
+    xa:
+      data-source-class-name: org.postgresql.xa.PGXADataSource
+      properties:
+        serverName: ${POSTGRES_HOST}
+        portNumber: ${POSTGRES_PORT}
+        databaseName: ${POSTGRES_DB}
+        currentSchema: ${POSTGRES_SCHEMA}
+        user: ${POSTGRES_USER}
+        password: ${POSTGRES_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -18,6 +24,9 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?currentSchema=${POSTGRES_SCHEMA}
+    user: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 0
