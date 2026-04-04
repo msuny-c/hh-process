@@ -356,6 +356,20 @@ jobs:
           [ -z "$CANDIDATE_PASSWORD_VALUE" ] && CANDIDATE_PASSWORD_VALUE="${{ vars.CANDIDATE_PASSWORD }}"
           [ -n "$CANDIDATE_PASSWORD_VALUE" ] && export CANDIDATE_PASSWORD="$CANDIDATE_PASSWORD_VALUE"
 
+          APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS_VALUE="${{ vars.APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS }}"
+          [ -n "$APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS_VALUE" ] && export APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS="$APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS_VALUE"
+          if [ -n "${TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-}" ]; then
+            export TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS
+          elif [ -n "$APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS_VALUE" ]; then
+            case "$(echo "$APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS_VALUE" | tr '[:upper:]' '[:lower:]')" in
+              1|true|yes|on) export TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=1 ;;&
+              *) export TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=0 ;;&
+            esac
+          fi
+
+          echo "APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-}"
+          echo "TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-}"
+
           python test/test.py
           python test/test_composite_transactions.py
           python test/test_security_validation.py

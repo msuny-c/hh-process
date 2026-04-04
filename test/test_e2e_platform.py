@@ -144,6 +144,15 @@ def expire_invitation(application_id: str) -> None:
                 raise CheckError(f'failed to expire invitation for application {application_id}')
 
 
+def timeout_notifications_expected() -> bool:
+    raw_values = [
+        os.getenv('TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS', ''),
+        os.getenv('APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS', ''),
+    ]
+    normalized = {value.strip().lower() for value in raw_values if value is not None}
+    return normalized.isdisjoint({'1', 'true', 'yes', 'on'})
+
+
 def run_timeout_scenario(api: API, admin, recruiter, candidate) -> None:
     step('Admin timeout job: deterministic expiration flow')
 
@@ -179,10 +188,13 @@ def run_timeout_scenario(api: API, admin, recruiter, candidate) -> None:
     )
     ensure(candidate_view.get('interview') is None, f'timeout closure must remove interview: {candidate_view}')
 
-    candidate_notifications = notifications(api, candidate)
-    recruiter_notifications_list = notifications(api, recruiter)
-    first_notification_or_fail(candidate_notifications, app['application_id'], 'INVITATION_TIMEOUT')
-    first_notification_or_fail(recruiter_notifications_list, app['application_id'], 'INVITATION_TIMEOUT')
+    if timeout_notifications_expected():
+        candidate_notifications = notifications(api, candidate)
+        recruiter_notifications_list = notifications(api, recruiter)
+        first_notification_or_fail(candidate_notifications, app['application_id'], 'INVITATION_TIMEOUT')
+        first_notification_or_fail(recruiter_notifications_list, app['application_id'], 'INVITATION_TIMEOUT')
+    else:
+        print('[INFO] Timeout debug mode enabled: notification assertions are skipped', flush=True)
 
     schedule = schedule_for_week(api, recruiter, scheduled)
     released = assert_schedule_item(
