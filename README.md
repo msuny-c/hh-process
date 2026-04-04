@@ -176,3 +176,23 @@ Additional endpoints:
 - `GET /api/v1/recruiters/schedule?weekOffset=0`
 
 `POST /api/v1/recruiters/applications/{applicationId}/invite` now also supports optional `scheduledAt` and `durationMinutes`. When they are omitted, defaults are used so older tests remain compatible.
+
+
+## Python API tests
+
+В каталоге `test/` лежат интеграционные и e2e-сценарии для REST API.
+
+Основные команды:
+
+```bash
+python test/test.py
+python test/test_composite_transactions.py
+python test/test_security_validation.py
+python test/test_access_matrix.py
+python test/test_transaction_atomicity.py
+python test/test_business_rules.py
+python test/test_timeout_job_db_fixture.py
+python test/test_e2e_platform.py
+```
+
+`test/test_e2e_platform.py` — сквозной e2e-сценарий: несколько кандидатов, несколько вакансий, приглашение на интервью, ответ на приглашение, отмена интервью, отклонение заявки, закрытие вакансии, проверка уведомлений, расписания рекрутера и атомарности составных транзакций.

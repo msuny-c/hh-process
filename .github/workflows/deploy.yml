@@ -101,6 +101,7 @@ jobs:
           python test/test_transaction_atomicity.py
           python test/test_business_rules.py
           python test/test_timeout_job_db_fixture.py
+          python test/test_e2e_platform.py
 
 
       - name: Upload PostgreSQL CI log
@@ -361,6 +362,7 @@ jobs:
           python test/test_access_matrix.py
           python test/test_transaction_atomicity.py
           python test/test_business_rules.py
+          python test/test_e2e_platform.py
 
       - name: Fetch app.log from server
         if: always()
