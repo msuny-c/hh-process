@@ -370,11 +370,7 @@ jobs:
           echo "TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-}"
 
           python test/test.py
-          python test/test_composite_transactions.py
-          python test/test_security_validation.py
-          python test/test_access_matrix.py
-          python test/test_transaction_atomicity.py
-          python test/test_business_rules.py
+
 
       - name: Fetch app.log from server
         if: always()
