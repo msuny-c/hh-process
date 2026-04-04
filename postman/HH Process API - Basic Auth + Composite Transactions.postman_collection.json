@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "HH Process API — Basic Auth + Composite Transactions",
+    "name": "HH Process API — Базовая аутентификация + составные транзакции",
     "_postman_id": "84853fb9-0d9a-4f88-b9b0-e8b64f40a054",
     "description": "Полная коллекция для проекта: Basic Auth, XML credentials, composite transactions, schedule, negative and validation scenarios.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -88,11 +88,11 @@
   ],
   "item": [
     {
-      "name": "00 Auth & Context",
+      "name": "00 Аутентификация и контекст",
       "description": "Переключение ролей и проверка текущего пользователя.",
       "item": [
         {
-          "name": "Use Admin Credentials + GET /me",
+          "name": "Войти как админ + GET /me",
           "request": {
             "method": "GET",
             "header": [],
@@ -141,7 +141,7 @@
           ]
         },
         {
-          "name": "Use Recruiter Credentials + GET /me",
+          "name": "Войти как рекрутер + GET /me",
           "request": {
             "method": "GET",
             "header": [],
@@ -190,7 +190,7 @@
           ]
         },
         {
-          "name": "Register Candidate",
+          "name": "Регистрация кандидата",
           "request": {
             "method": "POST",
             "header": [
@@ -257,7 +257,7 @@
           ]
         },
         {
-          "name": "Use Candidate Credentials + GET /me",
+          "name": "Войти как кандидат + GET /me",
           "request": {
             "method": "GET",
             "header": [],
@@ -308,10 +308,10 @@
       ]
     },
     {
-      "name": "01 Recruiter Vacancies",
+      "name": "01 Вакансии рекрутера",
       "item": [
         {
-          "name": "Create Vacancy",
+          "name": "Создать вакансию",
           "request": {
             "method": "POST",
             "header": [
@@ -371,7 +371,7 @@
           ]
         },
         {
-          "name": "List My Vacancies",
+          "name": "Список моих вакансий",
           "request": {
             "method": "GET",
             "header": [],
@@ -419,7 +419,7 @@
           ]
         },
         {
-          "name": "Update Vacancy Status -> OPEN",
+          "name": "Изменить статус вакансии -> OPEN",
           "request": {
             "method": "PATCH",
             "header": [
@@ -473,7 +473,7 @@
           ]
         },
         {
-          "name": "Close Vacancy (Composite Transaction)",
+          "name": "Закрыть вакансию (составная транзакция)",
           "request": {
             "method": "POST",
             "header": [
@@ -529,10 +529,10 @@
       ]
     },
     {
-      "name": "02 Candidate Applications",
+      "name": "02 Заявки кандидата",
       "item": [
         {
-          "name": "Apply to Vacancy",
+          "name": "Откликнуться на вакансию",
           "request": {
             "method": "POST",
             "header": [
@@ -591,7 +591,7 @@
           ]
         },
         {
-          "name": "Get My Applications",
+          "name": "Мои заявки",
           "request": {
             "method": "GET",
             "header": [],
@@ -639,7 +639,7 @@
           ]
         },
         {
-          "name": "Get My Application by ID",
+          "name": "Моя заявка по ID",
           "request": {
             "method": "GET",
             "header": [],
@@ -683,7 +683,7 @@
           ]
         },
         {
-          "name": "Respond to Invitation",
+          "name": "Ответить на приглашение",
           "request": {
             "method": "POST",
             "header": [
@@ -739,10 +739,10 @@
       ]
     },
     {
-      "name": "03 Recruiter Applications & Interviews",
+      "name": "03 Заявки и интервью рекрутера",
       "item": [
         {
-          "name": "List Assigned Applications",
+          "name": "Список назначенных заявок",
           "request": {
             "method": "GET",
             "header": [],
@@ -787,7 +787,7 @@
           ]
         },
         {
-          "name": "Get Assigned Application by ID",
+          "name": "Назначенная заявка по ID",
           "request": {
             "method": "GET",
             "header": [],
@@ -831,7 +831,7 @@
           ]
         },
         {
-          "name": "Invite Candidate to Interview",
+          "name": "Пригласить кандидата на интервью",
           "request": {
             "method": "POST",
             "header": [
@@ -890,7 +890,7 @@
           ]
         },
         {
-          "name": "Reject Assigned Application",
+          "name": "Отклонить назначенную заявку",
           "request": {
             "method": "POST",
             "header": [
@@ -944,7 +944,7 @@
           ]
         },
         {
-          "name": "Cancel Interview",
+          "name": "Отменить интервью",
           "request": {
             "method": "POST",
             "header": [
@@ -1000,10 +1000,10 @@
       ]
     },
     {
-      "name": "04 Schedule",
+      "name": "04 Расписание",
       "item": [
         {
-          "name": "Get Recruiter Schedule This Week",
+          "name": "Расписание рекрутера на эту неделю",
           "request": {
             "method": "GET",
             "header": [],
@@ -1054,7 +1054,7 @@
           ]
         },
         {
-          "name": "Get Recruiter Schedule Next Week",
+          "name": "Расписание рекрутера на следующую неделю",
           "request": {
             "method": "GET",
             "header": [],
@@ -1107,10 +1107,10 @@
       ]
     },
     {
-      "name": "05 Notifications",
+      "name": "05 Уведомления",
       "item": [
         {
-          "name": "Candidate Notifications",
+          "name": "Уведомления кандидата",
           "request": {
             "method": "GET",
             "header": [],
@@ -1155,7 +1155,7 @@
           ]
         },
         {
-          "name": "Candidate Mark Notification Read",
+          "name": "Кандидат: отметить уведомление прочитанным",
           "request": {
             "method": "PATCH",
             "header": [],
@@ -1199,7 +1199,7 @@
           ]
         },
         {
-          "name": "Recruiter Notifications",
+          "name": "Уведомления рекрутера",
           "request": {
             "method": "GET",
             "header": [],
@@ -1246,10 +1246,10 @@
       ]
     },
     {
-      "name": "06 Admin Jobs",
+      "name": "06 Админские задания",
       "item": [
         {
-          "name": "Close Expired Invitations",
+          "name": "Закрыть просроченные приглашения",
           "request": {
             "method": "POST",
             "header": [],
@@ -1297,11 +1297,11 @@
       ]
     },
     {
-      "name": "07 Negative & Validation",
+      "name": "07 Негативные и валидация",
       "description": "Запросы для проверки валидации и некорректных последовательностей.",
       "item": [
         {
-          "name": "Invalid Vacancy Create (blank title)",
+          "name": "Неверное создание вакансии (пустой заголовок)",
           "request": {
             "method": "POST",
             "header": [
@@ -1355,7 +1355,7 @@
           ]
         },
         {
-          "name": "Invalid Apply (blank resume)",
+          "name": "Неверный отклик (пустое резюме)",
           "request": {
             "method": "POST",
             "header": [
@@ -1410,7 +1410,7 @@
           ]
         },
         {
-          "name": "Invalid Schedule Query (weekOffset out of range)",
+          "name": "Неверный запрос расписания (weekOffset вне диапазона)",
           "request": {
             "method": "GET",
             "header": [],
@@ -1461,7 +1461,7 @@
           ]
         },
         {
-          "name": "Invalid Notification Read UUID",
+          "name": "Неверный UUID уведомления для чтения",
           "request": {
             "method": "PATCH",
             "header": [],
@@ -1507,7 +1507,7 @@
           ]
         },
         {
-          "name": "Invalid Sequence: Respond Before Invite",
+          "name": "Неверная последовательность: ответ до приглашения",
           "request": {
             "method": "POST",
             "header": [
@@ -1563,7 +1563,7 @@
           ]
         },
         {
-          "name": "Invalid Sequence: Invite After Vacancy Closed",
+          "name": "Неверная последовательность: приглашение после закрытия вакансии",
           "request": {
             "method": "POST",
             "header": [
