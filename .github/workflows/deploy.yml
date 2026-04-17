@@ -622,15 +622,18 @@ jobs:
           name: app-log-${{ github.run_id }}
           path: app.log
 
-  # Screening worker: single JAR on a separate node from API/Kafka (vars WORKER_SSH_* and STACK_HOST).
+  # Screening worker: single JAR on a separate node from API/Kafka (WORKER_SSH_*: secrets, else vars; STACK_HOST for DB/Kafka).
   deploy-worker:
     needs: [build, deploy]
-    if: ${{ always() && !cancelled() && vars.WORKER_SSH_HOST != '' && vars.WORKER_SSH_USER != '' && needs.build.result == 'success' && needs.deploy.result == 'success' }}
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.deploy.result == 'success' && (secrets.WORKER_SSH_HOST != '' || vars.WORKER_SSH_HOST != '') && (secrets.WORKER_SSH_USER != '' || vars.WORKER_SSH_USER != '') }}
     runs-on: ubuntu-latest
     env:
       JAR_NAME: ${{ needs.build.outputs.jar_name }}
       SSH_KEY: ${{ secrets.SSH_KEY || vars.SSH_KEY }}
       SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
+      WORKER_SSH_HOST: ${{ secrets.WORKER_SSH_HOST || vars.WORKER_SSH_HOST }}
+      WORKER_SSH_USER: ${{ secrets.WORKER_SSH_USER || vars.WORKER_SSH_USER }}
+      WORKER_SSH_PORT: ${{ secrets.WORKER_SSH_PORT || vars.WORKER_SSH_PORT }}
       WORKER_SSH_KEY: ${{ secrets.WORKER_SSH_KEY || vars.WORKER_SSH_KEY }}
     steps:
       - uses: actions/checkout@v4
@@ -666,10 +669,10 @@ jobs:
       - name: Prepare SSH
         run: |
           set -eu
-          RUSER="${{ vars.WORKER_SSH_USER }}"
-          RHOST="${{ vars.WORKER_SSH_HOST }}"
+          RUSER="${{ env.WORKER_SSH_USER }}"
+          RHOST="${{ env.WORKER_SSH_HOST }}"
           if [ -z "$RUSER" ] || [ -z "$RHOST" ]; then
-            echo "::error::Worker SSH: set WORKER_SSH_HOST and WORKER_SSH_USER."
+            echo "::error::Worker SSH: set WORKER_SSH_HOST and WORKER_SSH_USER (repository secrets or variables)."
             exit 1
           fi
           echo "WORKER_SSH_TARGET=${RUSER}@${RHOST}" >> "$GITHUB_ENV"
@@ -681,7 +684,7 @@ jobs:
             echo "${{ env.SSH_KEY }}" > ~/.ssh/id_worker
           fi
           chmod 600 ~/.ssh/id_worker
-          WPORT="${{ vars.WORKER_SSH_PORT }}"
+          WPORT="${{ env.WORKER_SSH_PORT }}"
           [ -z "$WPORT" ] && WPORT=22
           echo "WORKER_SSH_PORT=$WPORT" >> "$GITHUB_ENV"
           ssh-keyscan -p "$WPORT" -H "$RHOST" >> ~/.ssh/known_hosts
