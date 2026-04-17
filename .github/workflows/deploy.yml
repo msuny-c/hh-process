@@ -70,10 +70,55 @@ jobs:
           docker logs hh-process-ci-postgres || true
           exit 1
 
+      # App expects Kafka (listeners + producer); default bootstrap is kafka:9092 — not resolvable on the runner.
+      - name: Start Zookeeper and Kafka (CI)
+        run: |
+          set -eux
+          docker network create hh-process-ci-net 2>/dev/null || true
+          docker run -d \
+            --name hh-process-ci-zookeeper \
+            --network hh-process-ci-net \
+            -e ZOOKEEPER_CLIENT_PORT=2181 \
+            -e ZOOKEEPER_TICK_TIME=2000 \
+            confluentinc/cp-zookeeper:7.6.1
+          for i in $(seq 1 40); do
+            if docker exec hh-process-ci-zookeeper bash -c "echo srvr | nc -w 2 localhost 2181 | grep -q Mode" 2>/dev/null; then
+              echo "Zookeeper is up"
+              break
+            fi
+            sleep 2
+          done
+          docker run -d \
+            --name hh-process-ci-kafka \
+            --network hh-process-ci-net \
+            -p 29092:29092 \
+            -e KAFKA_BROKER_ID=1 \
+            -e KAFKA_ZOOKEEPER_CONNECT=hh-process-ci-zookeeper:2181 \
+            -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT \
+            -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://hh-process-ci-kafka:9092,PLAINTEXT_HOST://localhost:29092 \
+            -e KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092 \
+            -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+            -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
+            -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+            -e KAFKA_AUTO_CREATE_TOPICS_ENABLE=true \
+            confluentinc/cp-kafka:7.6.1
+          for i in $(seq 1 60); do
+            if docker exec hh-process-ci-kafka kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1; then
+              echo "Kafka broker is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Kafka did not become ready in time" >&2
+          docker logs hh-process-ci-kafka || true
+          exit 1
+
       - name: Build application
         run: mvn -B clean package -DskipTests
 
       - name: Start application
+        env:
+          KAFKA_BOOTSTRAP_SERVERS: localhost:29092
         run: |
           mkdir -p "$NARAYANA_LOG_DIR" "$(dirname "$APP_SECURITY_USERS_XML")"
           nohup java -Dnarayana.log-dir="$NARAYANA_LOG_DIR" -Dapp.security.users-xml-path="$APP_SECURITY_USERS_XML" -jar target/*.jar > app-ci.log 2>&1 &
