@@ -28,8 +28,7 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 - `zookeeper`
 - `kafka`
 - `app-api`
-- `app-worker-1`
-- `app-worker-2`
+- `app-worker`
 - `app-eis-worker`
 
 ## Бизнес-сценарии ЛР3

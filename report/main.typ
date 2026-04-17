@@ -61,8 +61,7 @@
 - `zookeeper`;
 - `kafka`;
 - `app-api`;
-- `app-worker-1`;
-- `app-worker-2`;
+- `app-worker`;
 - `app-eis-worker`;
 - внешняя EIS календаря собеседований, представленная учебным JCA adapter'ом.
 

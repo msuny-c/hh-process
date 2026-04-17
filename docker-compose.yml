@@ -122,9 +122,9 @@ services:
       - narayana_logs_api:/app/transaction-logs
       - app_api_data:/app/data
 
-  app-worker-1:
+  app-worker:
     build: .
-    container_name: hh-process-worker-1
+    container_name: hh-process-worker
     depends_on:
       postgres-main:
         condition: service_healthy
@@ -134,8 +134,8 @@ services:
         condition: service_completed_successfully
     environment:
       APP_ROLE: worker
-      APP_INSTANCE_NAME: hh-worker-1
-      NARAYANA_NODE_IDENTIFIER: hh-worker-1
+      APP_INSTANCE_NAME: hh-worker
+      NARAYANA_NODE_IDENTIFIER: hh-worker
       NARAYANA_LOG_DIR: /app/transaction-logs
       POSTGRES_HOST: postgres-main
       POSTGRES_PORT: 5432
@@ -149,36 +149,7 @@ services:
       APP_NOTIFICATIONS_ENABLED: "false"
       APP_EIS_ENABLED: "false"
     volumes:
-      - narayana_logs_worker_1:/app/transaction-logs
-
-  app-worker-2:
-    build: .
-    container_name: hh-process-worker-2
-    depends_on:
-      postgres-main:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      kafka-topics-init:
-        condition: service_completed_successfully
-    environment:
-      APP_ROLE: worker
-      APP_INSTANCE_NAME: hh-worker-2
-      NARAYANA_NODE_IDENTIFIER: hh-worker-2
-      NARAYANA_LOG_DIR: /app/transaction-logs
-      POSTGRES_HOST: postgres-main
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_SCHEMA: public
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_GROUP_ID: hh-process-screening
-      APP_SCREENING_ENABLED: "true"
-      APP_NOTIFICATIONS_ENABLED: "false"
-      APP_EIS_ENABLED: "false"
-    volumes:
-      - narayana_logs_worker_2:/app/transaction-logs
+      - narayana_logs_worker:/app/transaction-logs
 
   app-eis-worker:
     build: .
@@ -212,7 +183,6 @@ services:
 volumes:
   postgres_main_data:
   narayana_logs_api:
-  narayana_logs_worker_1:
-  narayana_logs_worker_2:
+  narayana_logs_worker:
   narayana_logs_eis:
   app_api_data:
