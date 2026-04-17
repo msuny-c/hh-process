@@ -20,8 +20,10 @@ env:
   APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS: true
   TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS: 1
 
+# Repository variable CI_SKIP_TESTS: set to "true" or "1" to skip the test job (build and later jobs still run).
 jobs:
   test:
+    if: ${{ vars.CI_SKIP_TESTS != 'true' && vars.CI_SKIP_TESTS != '1' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -168,6 +170,7 @@ jobs:
 
   build:
     needs: test
+    if: ${{ !cancelled() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     runs-on: ubuntu-latest
     outputs:
       jar_name: ${{ steps.vars.outputs.jar_name }}
