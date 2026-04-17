@@ -1,9 +1,19 @@
 spring:
   application:
     name: hh-process
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      group-id: ${KAFKA_GROUP_ID:hh-process-default}
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -47,6 +57,8 @@ narayana:
   shorten-node-identifier-if-necessary: true
 
 app:
+  role: ${APP_ROLE:api}
+  instance-name: ${APP_INSTANCE_NAME:${NARAYANA_NODE_IDENTIFIER:hh-process}}
   openapi:
     title: @project.name@
     version: @project.version@
@@ -56,7 +68,32 @@ app:
 
   websocket:
     allowed-origins: ${WS_ALLOWED_ORIGINS:http://localhost:3000}
+  kafka:
+    topics:
+      application-submitted: ${APP_TOPIC_APPLICATION_SUBMITTED:application.submitted}
+      application-screened: ${APP_TOPIC_APPLICATION_SCREENED:application.screened}
+      notification-requested: ${APP_TOPIC_NOTIFICATION_REQUESTED:notification.requested}
+      interview-export-requested: ${APP_TOPIC_INTERVIEW_EXPORT_REQUESTED:interview.export.requested}
+  workers:
+    screening-enabled: ${APP_SCREENING_ENABLED:true}
+    notifications-enabled: ${APP_NOTIFICATIONS_ENABLED:true}
+    eis-enabled: ${APP_EIS_ENABLED:false}
+  schedule-db:
+    host: ${SCHEDULE_DB_HOST:postgres-schedule}
+    port: ${SCHEDULE_DB_PORT:5432}
+    database: ${SCHEDULE_DB_NAME:postgres}
+    schema: ${SCHEDULE_DB_SCHEMA:public}
+    username: ${SCHEDULE_DB_USER:postgres}
+    password: ${SCHEDULE_DB_PASSWORD:postgres}
+  export:
+    cron: ${APP_EXPORT_CRON:0 0 6 * * *}
+    lookahead-hours: ${APP_EXPORT_LOOKAHEAD_HOURS:24}
+  schedule:
+    debug:
+      fail-on-reserve: ${APP_SCHEDULE_DEBUG_FAIL_ON_RESERVE:false}
   timeout:
+    check-interval-ms: ${APP_TIMEOUT_CHECK_INTERVAL_MS:60000}
+    initial-delay-ms: ${APP_TIMEOUT_INITIAL_DELAY_MS:30000}
     debug:
       disable-notifications: ${APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:false}
 

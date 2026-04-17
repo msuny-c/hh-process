@@ -1,38 +1,151 @@
-# HH Process — сервис обработки откликов на вакансии
+# HH Process
 
-Spring Boot сервис для обработки жизненного цикла откликов на вакансии: регистрации кандидатов, создания/статусов вакансий рекрутёром, принятия решений по заявкам, а также уведомлений (REST + WebSocket).
+Spring Boot 3.4.3 сервис обработки откликов на вакансии под ЛР3 по БЛПС.
 
-## Конфигурация
+В проекте реализованы:
 
-Список используемых переменных окружения (берутся из `.env`):
+- HTTP Basic + XML users, без JWT.
+- PostgreSQL + Flyway.
+- Narayana JTA/XA.
+- Асинхронный screening через Kafka.
+- Асинхронные уведомления через Kafka.
+- `@Scheduled` для timeout и export use cases.
+- Вторая schedule DB с распределённой транзакцией на `invite/cancel interview`.
+- Учебная JCA-интеграция с внешней EIS календаря собеседований.
+
+## Архитектура
+
+Один и тот же `jar` запускается в разных ролях через `APP_ROLE`:
+
+- `api`: REST controllers, WebSocket endpoint, timeout scheduler, export scheduler, Kafka producer.
+- `worker`: Kafka listeners для `application.submitted`, асинхронный screening.
+- `eis-worker`: Kafka listener для `interview.export.requested`, JCA client и экспорт во внешнюю EIS.
+
+Инфраструктура в `docker-compose.yml`:
+
+- `postgres-main`
+- `postgres-schedule`
+- `zookeeper`
+- `kafka`
+- `app-api`
+- `app-worker-1`
+- `app-worker-2`
+- `app-eis-worker`
+
+## Бизнес-сценарии ЛР3
+
+### Асинхронный screening
+
+`POST /api/v1/candidates/vacancies/{vacancyId}`:
+
+1. сохраняет `ApplicationEntity` со статусом `SCREENING_IN_PROGRESS`;
+2. пишет history;
+3. после commit публикует `application.submitted`;
+4. worker получает событие через `@KafkaListener`;
+5. выполняет screening и переводит заявку в:
+   `ON_RECRUITER_REVIEW` или `SCREENING_FAILED`;
+6. публикует `notification.requested`.
+
+### Асинхронные уведомления
+
+Сервисы публикуют `notification.requested` после commit.
+Consumer создаёт запись в `notifications`; WebSocket push работает на узле, где включён notification consumer.
+
+### Distributed transaction
+
+Сценарий `invite interview` выполняется в одной JTA/XA-транзакции между:
+
+- main DB: `applications`, `interviews`, `history`, `notifications`, ...
+- schedule DB: `recruiter_schedule_slots`
+
+Если резервирование слота падает, откатываются:
+
+- статус заявки;
+- запись интервью;
+- запись в history;
+- изменения в schedule DB.
+
+### Scheduler use cases
+
+- `TimeoutService` закрывает просроченные приглашения только на `api`.
+- `InterviewExportScheduler` по cron ставит интервью в очередь на экспорт в EIS.
+
+### JCA EIS
+
+В пакете `ru.itmo.hhprocess.integration.eis.jca` реализован учебный resource adapter:
+
+- `CalendarManagedConnectionFactory`
+- `CalendarManagedConnection`
+- `CalendarConnectionFactory`
+- `CalendarConnection`
+- `CalendarInteraction`
+- `CalendarInteractionSpec`
+
+Высокоуровневый клиент: `CalendarEisClient`.
+
+## Основные переменные окружения
+
+### Main DB
 
 ```text
-POSTGRES_HOST=postgres
+POSTGRES_HOST=postgres-main
 POSTGRES_PORT=5432
 POSTGRES_DB=postgres
 POSTGRES_SCHEMA=public
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
-
-JWT_SECRET=... (base64-строка)
-JWT_ACCESS_EXPIRATION (мс, по умолчанию 900000)
-JWT_REFRESH_EXPIRATION (мс, по умолчанию 604800000)
-
-WS_ALLOWED_ORIGINS=http://localhost:3000 (через запятую)
 ```
 
-Сервер слушает порт `8080`.
+### Schedule DB
 
-## Авторизация (JWT)
+```text
+SCHEDULE_DB_HOST=postgres-schedule
+SCHEDULE_DB_PORT=5432
+SCHEDULE_DB_NAME=postgres
+SCHEDULE_DB_SCHEMA=public
+SCHEDULE_DB_USER=postgres
+SCHEDULE_DB_PASSWORD=postgres
+```
 
-Все защищенные endpoint’ы принимают заголовок:
+### App role / Narayana
 
-`Authorization: Bearer <access_token>`
+```text
+APP_ROLE=api|worker|eis-worker
+APP_INSTANCE_NAME=hh-api
+NARAYANA_NODE_IDENTIFIER=hh-api
+NARAYANA_LOG_DIR=/app/transaction-logs
+```
 
-Роли определяют доступ к группам API:
-- `/api/v1/candidates/**` -> `CANDIDATE`
-- `/api/v1/recruiters/**` -> `RECRUITER`
-- `/api/v1/admin/**` -> `ADMIN`
+`NARAYANA_NODE_IDENTIFIER` должен быть уникальным для каждого инстанса.
+
+### Kafka
+
+```text
+KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+KAFKA_GROUP_ID=hh-process-screening
+APP_SCREENING_ENABLED=true
+APP_NOTIFICATIONS_ENABLED=true
+APP_EIS_ENABLED=false
+```
+
+### Other
+
+```text
+APP_SECURITY_USERS_XML=/app/data/users.xml
+WS_ALLOWED_ORIGINS=http://localhost:3000
+APP_EXPORT_CRON=0 0 6 * * *
+APP_EXPORT_LOOKAHEAD_HOURS=24
+APP_SCHEDULE_DEBUG_FAIL_ON_RESERVE=false
+```
+
+## Безопасность
+
+Используется HTTP Basic. Учётные данные сидовых пользователей лежат в `src/main/resources/security/users.xml`, а runtime XML-файл хранится по `APP_SECURITY_USERS_XML`.
+
+Базовые пользователи:
+
+- `admin@example.com / password123`
+- `recruiter@example.com / password123`
 
 ## REST API
 
@@ -40,159 +153,88 @@ WS_ALLOWED_ORIGINS=http://localhost:3000 (через запятую)
 
 ### Auth
 
-- `POST /api/v1/auth/register/candidate` (регистрация кандидата)
-- `POST /api/v1/auth/login` (выдача access/refresh токенов)
-- `POST /api/v1/auth/refresh` (обновление токена)
-- `GET /api/v1/me` (профиль текущего пользователя)
+- `POST /api/v1/auth/register/candidate`
+- `GET /api/v1/me`
 
-Пример логина:
+### Candidate
 
-```bash
-curl -sS -X POST http://localhost:8080/api/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"admin@example.com","password":"password123"}'
-```
+- `POST /api/v1/candidates/vacancies/{vacancyId}`
+- `GET /api/v1/candidates/applications`
+- `GET /api/v1/candidates/applications/{applicationId}`
+- `POST /api/v1/candidates/applications/{applicationId}/invitation-response`
 
-### Кандидат
+Создание отклика теперь возвращает промежуточный статус:
 
-- `POST /api/v1/candidates/vacancies/{vacancyId}` (подача заявки)
-- `GET /api/v1/candidates/applications` (свои заявки)
-- `GET /api/v1/candidates/applications/{applicationId}` (заявка по id)
-- `POST /api/v1/candidates/applications/{applicationId}/invitation-response` (ответ на приглашение)
-
-Тела запросов:
-
-`CreateApplicationRequest`:
 ```json
-{ "resume_text": "...", "cover_letter": "..." }
+{
+  "application_id": "7a9c3c4d-6bdf-4a77-9f67-6f1db4fd74fe",
+  "status": "SCREENING_IN_PROGRESS",
+  "message": "Application accepted for asynchronous screening"
+}
 ```
 
-`InvitationResponseRequest`:
-```json
-{ "response_type": "INVITATION_ACCEPTED|INVITATION_REJECTED", "message": "..." }
-```
+После этого клиент должен делать polling `GET /api/v1/candidates/applications/{applicationId}` или recruiter-view endpoint, пока статус не станет `ON_RECRUITER_REVIEW` либо `SCREENING_FAILED`.
 
-### Рекрутер
+### Recruiter
 
-- `POST /api/v1/recruiters/vacancies` (создать вакансию)
-- `GET /api/v1/recruiters/vacancies` (свои вакансии)
-- `PATCH /api/v1/recruiters/vacancies/{vacancyId}/status` (обновить статус)
-- `GET /api/v1/recruiters/applications` (заявки по вакансиям; фильтры `status` и `vacancy_id`)
-- `GET /api/v1/recruiters/applications/{applicationId}` (заявка по id)
-- `POST /api/v1/recruiters/applications/{applicationId}/reject` (отклонить заявку)
-- `POST /api/v1/recruiters/applications/{applicationId}/invite` (пригласить кандидата)
+- `POST /api/v1/recruiters/vacancies`
+- `GET /api/v1/recruiters/vacancies`
+- `PATCH /api/v1/recruiters/vacancies/{vacancyId}/status`
+- `POST /api/v1/recruiters/vacancies/{vacancyId}/close`
+- `GET /api/v1/recruiters/applications`
+- `GET /api/v1/recruiters/applications/{applicationId}`
+- `POST /api/v1/recruiters/applications/{applicationId}/invite`
+- `POST /api/v1/recruiters/applications/{applicationId}/reject`
+- `GET /api/v1/recruiters/schedule`
+- `POST /api/v1/recruiters/interviews/{interviewId}/cancel`
 
-Тело запроса `CreateVacancyRequest`:
-```json
-{ "title":"...", "description":"...", "required_skills":["..."], "screening_threshold": 75 }
-```
+### Notifications
 
-Тело `UpdateVacancyStatusRequest`:
-```json
-{ "status": "OPEN|CLOSED|..."}
-```
+- `GET /api/v1/notifications`
+- `PATCH /api/v1/notifications/{notificationId}/read`
 
-Тело `RejectRequest`:
-```json
-{ "comment":"..." }
-```
+### Admin / debug
 
-Тело `InviteRequest`:
-```json
-{ "message":"..." }
-```
+- `POST /api/v1/admin/jobs/close-expired-invitations`
+- `POST /api/v1/admin/jobs/export-interviews`
+- `POST /api/v1/admin/debug/schedule-failure/{enabled}`
 
-### Уведомления
+## Flyway
 
-- `GET /api/v1/notifications` (список уведомлений текущего пользователя)
-- `PATCH /api/v1/notifications/{notificationId}/read` (пометить прочитанным)
+Main DB migrations: `src/main/resources/db/migration`
 
-### Admin
+- `V6__kafka_processed_events.sql`
+- `V7__interview_export_log.sql`
+- `V8__application_async_flags.sql`
 
-- `POST /api/v1/admin/jobs/close-expired-invitations` (закрыть просроченные приглашения)
+Schedule DB migrations: `src/main/resources/db/schedule-migration`
 
-## Данные и схема БД
+- `S1__schedule_schema.sql`
 
-Миграции лежат в `src/main/resources/db/migration` и выполняются Flyway при старте.
-
-Основные таблицы:
-- `users`, `roles`, `user_roles`
-- `vacancies`
-- `applications`
-- `screening_results`
-- `invitation_responses`
-- `notifications`
-- `application_status_history`
-
-
-## JTA / Narayana notes
-
-- Declarative transaction management is implemented with `@Transactional` in the service layer.
-- JTA transaction manager is `Narayana` (`dev.snowdrop:narayana-spring-boot-starter`).
-- Narayana object store logs are written to `transaction-logs/` by default.
-- For Docker, the directory is mounted as a named volume.
-- For native запуск on the server, `infra/appctl.sh` creates the log directory before starting the JAR and passes `-Dnarayana.log-dir=...`.
-- `NARAYANA_NODE_IDENTIFIER` should be unique per instance if you ever run more than one app instance against the same resources.
-- PostgreSQL **must** be started with `max_prepared_transactions > 0`, otherwise XA/JTA transactions fail during the prepare phase with `ERROR: prepared transactions are disabled`.
-
-
-## Локальный прогон в Docker
-
-Если вы раньше уже поднимали проект через Docker, база может остаться в named volume `postgres_data`.
-Из-за этого локальные тесты могут падать не из-за кода, а из-за старых данных: отсутствуют роли, сидовые пользователи или старые пароли.
-
-Для полностью чистого прогона:
+## Локальный запуск
 
 ```bash
 docker compose down -v
 docker compose up --build
 ```
 
-В `docker-compose.yml` PostgreSQL уже запускается с `max_prepared_transactions=100`, поэтому JTA/Narayana работает локально из коробки.
+Порты:
 
-Начиная с миграции `V4__repair_seed_data.sql`, приложение при старте дополнительно восстанавливает базовые роли и сидовых пользователей:
-- `admin@example.com`
-- `recruiter@example.com`
+- API: `http://localhost:8080`
+- Kafka host listener: `localhost:29092`
+- main DB: `localhost:5432`
+- schedule DB: `localhost:5433`
 
-Это помогает и для локального Docker, и для CI/CD, если база уже существовала ранее.
+Обе PostgreSQL БД запускаются с `max_prepared_transactions=100`, что обязательно для XA.
 
+## Тестовые и демонстрационные сценарии
 
-## Native / CI/CD checklist for PostgreSQL
+- Асинхронный screening: `POST apply` -> polling `GET application`.
+- Distributed transaction rollback: включить `POST /api/v1/admin/debug/schedule-failure/true`, затем вызвать `invite`.
+- Export to EIS: создать интервью, вызвать `POST /api/v1/admin/jobs/export-interviews`, дождаться обработки `app-eis-worker`.
 
-Для любого окружения без Docker у PostgreSQL должна быть включена поддержка prepared transactions. Минимум:
+## Важные ограничения реализации
 
-```conf
-max_prepared_transactions = 100
-```
-
-После изменения параметра нужен restart PostgreSQL. Без этого приложение стартует, но первые write-операции под JTA будут падать на commit/prepare.
-
-
-## Composite transactional flows
-
-Additional endpoints:
-- `POST /api/v1/recruiters/interviews/{interviewId}/cancel`
-- `POST /api/v1/recruiters/vacancies/{vacancyId}/close`
-- `GET /api/v1/recruiters/schedule?weekOffset=0`
-
-`POST /api/v1/recruiters/applications/{applicationId}/invite` now also supports optional `scheduledAt` and `durationMinutes`. When they are omitted, defaults are used so older tests remain compatible.
-
-
-## Python API tests
-
-В каталоге `test/` лежат интеграционные и e2e-сценарии для REST API.
-
-Основные команды:
-
-```bash
-python test/test.py
-python test/test_composite_transactions.py
-python test/test_security_validation.py
-python test/test_access_matrix.py
-python test/test_transaction_atomicity.py
-python test/test_business_rules.py
-python test/test_timeout_job_db_fixture.py
-python test/test_e2e_platform.py
-```
-
-`test/test_e2e_platform.py` — сквозной e2e-сценарий: несколько кандидатов, несколько вакансий, приглашение на интервью, ответ на приглашение, отмена интервью, отклонение заявки, закрытие вакансии, проверка уведомлений, расписания рекрутера и атомарности составных транзакций.
+- XA между Kafka и PostgreSQL не используется.
+- WebSocket push остаётся локальным для инстанса, где включён notification consumer.
+- Kafka idempotency реализована через таблицу `processed_kafka_events`.

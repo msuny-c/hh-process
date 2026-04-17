@@ -11,6 +11,7 @@ import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.InterviewEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.enums.NotificationType;
+import ru.itmo.hhprocess.messaging.producer.NotificationRequestPublisher;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 
 import java.time.Instant;
@@ -24,7 +25,7 @@ public class TimeoutBatchProcessor {
 
     private final ApplicationRepository applicationRepository;
     private final HistoryService historyService;
-    private final NotificationService notificationService;
+    private final NotificationRequestPublisher notificationRequestPublisher;
     private final InterviewService interviewService;
     private final ScheduleService scheduleService;
 
@@ -89,9 +90,9 @@ public class TimeoutBatchProcessor {
             log.warn("Timeout debug mode: skipping timeout notifications for application {}", application.getId());
         } else {
             log.info("Creating timeout notifications for application {}", application.getId());
-            notificationService.create(application.getVacancy().getRecruiterUser(), application, NotificationType.INVITATION_TIMEOUT,
+            notificationRequestPublisher.publishAfterCommit(application.getVacancy().getRecruiterUser(), application, NotificationType.INVITATION_TIMEOUT,
                     "Invitation expired for vacancy: " + application.getVacancy().getTitle());
-            notificationService.create(application.getCandidateUser(), application, NotificationType.INVITATION_TIMEOUT,
+            notificationRequestPublisher.publishAfterCommit(application.getCandidateUser(), application, NotificationType.INVITATION_TIMEOUT,
                     "Interview invitation expired for vacancy: " + application.getVacancy().getTitle());
             log.info("Created timeout notifications for application {}", application.getId());
         }

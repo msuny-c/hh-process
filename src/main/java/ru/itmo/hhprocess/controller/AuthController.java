@@ -2,6 +2,7 @@ package ru.itmo.hhprocess.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import ru.itmo.hhprocess.config.ApiRoleOnly;
 import ru.itmo.hhprocess.dto.auth.MeResponse;
 import ru.itmo.hhprocess.dto.auth.RegisterCandidateRequest;
 import ru.itmo.hhprocess.dto.auth.RegisterResponse;
@@ -15,6 +16,7 @@ import io.swagger.v3.oas.annotations.Operation;
 
 @Validated
 @RestController
+@ApiRoleOnly
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
 public class AuthController {

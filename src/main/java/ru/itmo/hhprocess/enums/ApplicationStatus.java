@@ -12,13 +12,7 @@ public enum ApplicationStatus {
     CLOSED_BY_VACANCY;
 
     public String toExternalStatus() {
-        return switch (this) {
-            case SCREENING_IN_PROGRESS, ON_RECRUITER_REVIEW -> "IN_PROGRESS";
-            case SCREENING_FAILED, REJECTED_BY_RECRUITER -> "REJECTED";
-            case INVITED -> "INVITED";
-            case INVITATION_RESPONDED -> "RESPONDED";
-            case CLOSED_BY_TIMEOUT, CLOSED_BY_VACANCY -> "CLOSED";
-        };
+        return name();
     }
 
     public boolean isTerminal() {

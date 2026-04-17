@@ -3,6 +3,7 @@ package ru.itmo.hhprocess.controller;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import ru.itmo.hhprocess.config.ApiRoleOnly;
 import ru.itmo.hhprocess.dto.candidate.CreateApplicationRequest;
 import ru.itmo.hhprocess.dto.candidate.CreateApplicationResponse;
 import ru.itmo.hhprocess.service.ApplicationService;
@@ -17,6 +18,7 @@ import java.util.UUID;
 
 @Validated
 @RestController
+@ApiRoleOnly
 @RequestMapping("/api/v1/candidates/vacancies")
 @RequiredArgsConstructor
 public class CandidateVacancyController {

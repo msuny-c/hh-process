@@ -17,6 +17,8 @@ from api_test_utils import (
     register_candidate,
     reject_application,
     schedule_for_week,
+    wait_for_candidate_application_status,
+    wait_for_recruiter_application_status,
 )
 
 
@@ -48,6 +50,9 @@ def assert_failed_invite_does_not_leave_partial_state() -> None:
         },
     )
 
+    wait_for_recruiter_application_status(api, recruiter, app_a['application_id'], ['ON_RECRUITER_REVIEW', 'SCREENING_FAILED'])
+    wait_for_recruiter_application_status(api, recruiter, app_b['application_id'], ['ON_RECRUITER_REVIEW', 'SCREENING_FAILED'])
+
     scheduled = future_slot(days=12, hour_shift=1)
     invite_a = invite_json(api, recruiter, app_a['application_id'], scheduled, message='Atomicity interview A')
     invite_b_resp = invite(api, recruiter, app_b['application_id'], scheduled, message='Atomicity interview B')
@@ -62,7 +67,7 @@ def assert_failed_invite_does_not_leave_partial_state() -> None:
         raise CheckError(f'failed invite left recruiter-visible interview info: {recruiter_view_b}')
 
     candidate_view_b = get_candidate_application_json(api, candidate_b, app_b['application_id'])
-    if candidate_view_b['status'] != 'IN_PROGRESS':
+    if candidate_view_b['status'] != 'ON_RECRUITER_REVIEW':
         raise CheckError(f'failed invite changed candidate-visible status: {candidate_view_b}')
     if candidate_view_b.get('invitation') is not None or candidate_view_b.get('interview') is not None:
         raise CheckError(f'failed invite left invitation/interview for candidate: {candidate_view_b}')
@@ -97,6 +102,8 @@ def assert_reject_with_interview_releases_slot() -> None:
         },
     )
 
+    wait_for_recruiter_application_status(api, recruiter, app['application_id'], ['ON_RECRUITER_REVIEW'])
+
     scheduled = future_slot(days=14, hour_shift=2)
     invite_data = invite_json(api, recruiter, app['application_id'], scheduled, message='Reject path interview')
     reject_application(api, recruiter, app['application_id'], comment='Reject after invite')
@@ -108,7 +115,7 @@ def assert_reject_with_interview_releases_slot() -> None:
         raise CheckError(f'active interview leaked after reject: {recruiter_view}')
 
     candidate_view = get_candidate_application_json(api, candidate, app['application_id'])
-    if candidate_view['status'] != 'REJECTED':
+    if candidate_view['status'] != 'REJECTED_BY_RECRUITER':
         raise CheckError(f'candidate must see rejected status: {candidate_view}')
     if candidate_view.get('interview') is not None:
         raise CheckError(f'candidate still sees interview after reject: {candidate_view}')

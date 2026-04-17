@@ -60,6 +60,15 @@ public class ApplicationEntity {
     @Column(name = "response_received_at")
     private Instant responseReceivedAt;
 
+    @Column(name = "screening_started_at")
+    private Instant screeningStartedAt;
+
+    @Column(name = "screening_finished_at")
+    private Instant screeningFinishedAt;
+
+    @Column(name = "screening_error", columnDefinition = "text")
+    private String screeningError;
+
     @Column(name = "closed_at")
     private Instant closedAt;
 

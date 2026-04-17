@@ -2,21 +2,26 @@ package ru.itmo.hhprocess.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.dto.recruiter.WeekScheduleResponse;
 import ru.itmo.hhprocess.entity.InterviewEntity;
-import ru.itmo.hhprocess.entity.RecruiterScheduleSlotEntity;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.enums.ScheduleSlotStatus;
 import ru.itmo.hhprocess.exception.ApiException;
-import ru.itmo.hhprocess.repository.RecruiterScheduleSlotRepository;
+import ru.itmo.hhprocess.schedule.entity.RecruiterScheduleSlotEntity;
+import ru.itmo.hhprocess.schedule.repository.RecruiterScheduleSlotRepository;
 
 import java.time.*;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -24,6 +29,8 @@ import java.util.List;
 public class ScheduleService {
 
     private final RecruiterScheduleSlotRepository scheduleSlotRepository;
+    private final InterviewService interviewService;
+    private final ScheduleDebugService scheduleDebugService;
 
     @Transactional
     public RecruiterScheduleSlotEntity reserveOnTheFly(UserEntity recruiterUser, InterviewEntity interview,
@@ -33,13 +40,17 @@ public class ScheduleService {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.SCHEDULE_SLOT_CONFLICT,
                     "Recruiter schedule slot overlaps with another reserved interview");
         }
-        return scheduleSlotRepository.save(RecruiterScheduleSlotEntity.builder()
-                .recruiterUser(recruiterUser)
-                .interview(interview)
+        RecruiterScheduleSlotEntity slot = scheduleSlotRepository.save(RecruiterScheduleSlotEntity.builder()
+                .recruiterUserId(recruiterUser.getId())
+                .interviewId(interview.getId())
                 .startAt(startAt)
                 .endAt(endAt)
                 .status(ScheduleSlotStatus.RESERVED)
                 .build());
+        if (scheduleDebugService.isFailOnReserve()) {
+            throw new IllegalStateException("Schedule reserve failure was requested by debug flag");
+        }
+        return slot;
     }
 
     @Transactional(readOnly = true)
@@ -95,20 +106,29 @@ public class ScheduleService {
         LocalDate weekEnd = weekStart.plusDays(6);
         Instant start = weekStart.atStartOfDay(zone).toInstant();
         Instant end = weekEnd.plusDays(1).atStartOfDay(zone).toInstant();
-        List<WeekScheduleResponse.ScheduleSlotItem> items = scheduleSlotRepository.findForWeek(recruiterUser.getId(), start, end)
+        List<RecruiterScheduleSlotEntity> slots = scheduleSlotRepository.findForWeek(recruiterUser.getId(), start, end);
+        Map<UUID, InterviewEntity> interviewsById = interviewService.findByIds(slots.stream()
+                        .map(RecruiterScheduleSlotEntity::getInterviewId)
+                        .filter(java.util.Objects::nonNull)
+                        .toList())
                 .stream()
-                .map(slot -> WeekScheduleResponse.ScheduleSlotItem.builder()
-                        .slotId(slot.getId())
-                        .status(slot.getStatus().name())
-                        .startAt(slot.getStartAt())
-                        .endAt(slot.getEndAt())
-                        .interviewId(slot.getInterview() != null ? slot.getInterview().getId() : null)
-                        .applicationId(slot.getInterview() != null ? slot.getInterview().getApplication().getId() : null)
-                        .candidateId(slot.getInterview() != null ? slot.getInterview().getCandidateUser().getId() : null)
-                        .candidateEmail(slot.getInterview() != null ? slot.getInterview().getCandidateUser().getEmail() : null)
-                        .interviewStatus(slot.getInterview() != null ? slot.getInterview().getStatus().name() : null)
-                        .build())
+                .collect(Collectors.toMap(InterviewEntity::getId, Function.identity()));
+        List<WeekScheduleResponse.ScheduleSlotItem> responseItems = slots.stream()
+                .map(slot -> {
+                    InterviewEntity interview = slot.getInterviewId() != null ? interviewsById.get(slot.getInterviewId()) : null;
+                    return WeekScheduleResponse.ScheduleSlotItem.builder()
+                            .slotId(slot.getId())
+                            .status(slot.getStatus().name())
+                            .startAt(slot.getStartAt())
+                            .endAt(slot.getEndAt())
+                            .interviewId(slot.getInterviewId())
+                            .applicationId(interview != null ? interview.getApplication().getId() : null)
+                            .candidateId(interview != null ? interview.getCandidateUser().getId() : null)
+                            .candidateEmail(interview != null ? interview.getCandidateUser().getEmail() : null)
+                            .interviewStatus(interview != null ? interview.getStatus().name() : null)
+                            .build();
+                })
                 .toList();
-        return WeekScheduleResponse.builder().weekOffset(weekOffset).weekStart(weekStart).weekEnd(weekEnd).items(items).build();
+        return WeekScheduleResponse.builder().weekOffset(weekOffset).weekStart(weekStart).weekEnd(weekEnd).items(responseItems).build();
     }
 }

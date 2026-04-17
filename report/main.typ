@@ -9,34 +9,12 @@
 
 #show link: set text(fill: blue)
 #show link: underline
-
 #show: codly-init.with()
-
 #codly(languages: codly-languages)
 #codly(zebra-fill: none)
 
-#let banner(body) = box(
-  width: 100%,
-  inset: 12pt,
-  fill: rgb("#dff0df"),
-  stroke: (paint: rgb("#b8d8b8"), thickness: 1pt),
-  radius: 6pt,
-)[
-  #body
-]
-
-#let warn(body) = box(
-  width: 100%,
-  inset: 12pt,
-  fill: rgb("#fff8dc"),
-  stroke: (paint: rgb("#e0c860"), thickness: 1pt),
-  radius: 6pt,
-)[
-  #body
-]
-
 #titlepage(
-  lab_no: 2,
+  lab_no: 3,
   subject: "бизнес-логика программных систем",
   variant: "3212",
   student: "Григорий Садовой\nБайрамгулов Мунир",
@@ -44,488 +22,232 @@
 )
 
 = Условие задания
-#v(4pt)
-#banner[
-  #strong[Вариант №3212:] hh.ru — работа, поиск персонала и публикация вакансий —
-  #link("https://hh.ru/")[https://hh.ru/].
-  Бизнес-процесс: обработка отзывов на вакансию.
-]
 
-Доработать приложение из лабораторной работы №1, реализовав в нём управление транзакциями и разграничение доступа к операциям бизнес-логики в соответствии с заданной политикой доступа.
+Лабораторная работа №3 является развитием проекта ЛР2 по процессу обработки откликов на вакансии hh.ru.
 
-#strong[Управление транзакциями необходимо реализовать следующим образом:]
+В доработанной версии необходимо было реализовать:
 
-+ Переработать согласованные с преподавателем прецеденты (или по согласованию с ним разработать новые), объединив взаимозависимые операции в рамках транзакций.
-+ Управление транзакциями необходимо реализовать с помощью Spring JTA.
-+ В реализованных (или модифицированных) прецедентах необходимо использовать декларативное управление транзакциями.
-+ В качестве менеджера транзакций необходимо использовать Narayana.
+- асинхронную обработку через Kafka и ZooKeeper;
+- обработку сообщений минимум на двух независимых узлах;
+- consumers на Spring `@KafkaListener`;
+- отправку сообщений через Kafka Producer API;
+- периодические задачи через `@Scheduled`;
+- интеграцию с внешней EIS через JCA;
+- распределённую транзакцию минимум между двумя XA-ресурсами.
 
-#strong[Разграничение доступа к операциям необходимо реализовать следующим образом:]
+В качестве бизнес-процесса сохранён процесс обработки отклика на вакансию с последующим screening, приглашением на интервью, работой с расписанием рекрутера и экспортом интервью во внешнюю корпоративную систему календаря.
 
-+ Разработать, специфицировать и согласовать с преподавателем набор привилегий, в соответствии с которыми будет разграничиваться доступ к операциям.
-+ Специфицировать и согласовать с преподавателем набор ролей, осуществляющих доступ к операциям бизнес-логики приложения.
-+ Реализовать разработанную модель разграничений доступа к операциям бизнес-логики на базе Spring Security. Информацию об учётных записях пользователей необходимо сохранять в файле XML, для аутентификации использовать HTTP basic.
+= Модель процесса
 
-#strong[Содержание отчёта:]
-
-+ Текст задания.
-+ Модель потока управления для автоматизируемого бизнес-процесса.
-+ Спецификация пользовательских привилегий и ролей, реализованных в приложении.
-+ UML-диаграммы классов и пакетов разработанного приложения.
-+ Спецификация REST API для всех публичных интерфейсов разработанного приложения.
-+ Исходный код системы или ссылка на репозиторий с исходным кодом.
-+ Выводы по работе.
-
-= Модель BPMN
-\
 #image("HH.ru.png")
 
-= Прецеденты
+В ЛР3 исходный процесс был расширен следующими шагами:
 
-#let uc-table(title, actor, pre, main, post) = [
-  #text(size: 9pt)[
-    #table(
-      columns: (1fr, 2.3fr),
-      inset: 6pt,
-      stroke: 0.6pt,
-      align: left + top,
-      [*Поле*], [*Описание*],
-      [*Название*], [#title],
-      [*Актор*], [#actor],
-      [*Предусловие*], [#pre],
-      [*Основное действие*], [#main],
-      [*Постусловие*], [#post],
-    )
-  ]
-]
+1. кандидат подаёт отклик;
+2. API сохраняет заявку со статусом `SCREENING_IN_PROGRESS`;
+3. после commit публикуется Kafka-событие `application.submitted`;
+4. один из worker-узлов выполняет screening;
+5. worker меняет статус заявки и публикует `notification.requested`;
+6. timeout scheduler закрывает просроченные приглашения;
+7. export scheduler выбирает интервью и публикует `interview.export.requested`;
+8. `eis-worker` экспортирует интервью во внешнюю EIS через JCA.
 
-== Регистрация кандидата
-#uc-table(
-  [Регистрация кандидата],
-  [Кандидат],
-  [Пользователь ещё не зарегистрирован.],
-  [`POST /api/v1/auth/register/candidate`.],
-  [В системе создан пользователь с ролью `CANDIDATE`, после чего он может авторизоваться.],
-)
+= Архитектура развёртывания
 
-== Просмотр профиля
-#uc-table(
-  [Просмотр профиля],
-  [Кандидат / Рекрутер / Администратор],
-  [Пользователь авторизован.],
-  [`GET /api/v1/me`.],
-  [Возвращены данные текущего пользователя: идентификатор, e-mail и роль.],
-)
+Система разворачивается в Docker Compose и состоит из следующих контейнеров:
 
-== Создание вакансии
-#uc-table(
-  [Создание вакансии],
-  [Рекрутер],
-  [Рекрутер авторизован.],
-  [`POST /api/v1/recruiters/vacancies`.],
-  [Вакансия создана и доступна для подачи откликов.],
-)
+- `postgres-main` — основная БД приложения;
+- `postgres-schedule` — отдельная БД расписания;
+- `zookeeper`;
+- `kafka`;
+- `app-api`;
+- `app-worker-1`;
+- `app-worker-2`;
+- `app-eis-worker`;
+- внешняя EIS календаря собеседований, представленная учебным JCA adapter'ом.
 
-== Просмотр вакансий рекрутером
-#uc-table(
-  [Просмотр вакансий рекрутером],
-  [Рекрутер],
-  [Рекрутер авторизован.],
-  [`GET /api/v1/recruiters/vacancies`.],
-  [Получен список вакансий, созданных текущим рекрутером.],
-)
+Один и тот же `jar` запускается в разных ролях через `APP_ROLE`.
+Для каждого инстанса приложения задан уникальный `NARAYANA_NODE_IDENTIFIER`, что необходимо для корректной работы Narayana при многовузловом запуске.
 
-== Изменение статуса вакансии
-#uc-table(
-  [Изменение статуса вакансии],
-  [Рекрутер],
-  [Рекрутер авторизован; вакансия принадлежит ему.],
-  [`PATCH /api/v1/recruiters/vacancies/{vacancyId}/status`.],
-  [Статус вакансии обновлён.],
-)
+= Пакетная структура
 
-== Закрытие вакансии (составная транзакция)
-#uc-table(
-  [Закрытие вакансии],
-  [Рекрутер],
-  [Рекрутер авторизован; вакансия активна и принадлежит ему.],
-  [`POST /api/v1/recruiters/vacancies/{vacancyId}/close`.],
-  [Вакансия закрыта, все активные заявки по ней отклонены в рамках одной JTA-транзакции.],
-)
+К существующим пакетам ЛР2 были добавлены:
 
-== Отклик на вакансию
-#uc-table(
-  [Отклик на вакансию],
-  [Кандидат],
-  [Кандидат авторизован; в системе есть активная вакансия.],
-  [`POST /api/v1/candidates/vacancies/{vacancyId}`.],
-  [Отклик создан; запускается автоматический скрининг; заявка появляется в списке откликов кандидата.],
-)
+- `ru.itmo.hhprocess.messaging.config`
+- `ru.itmo.hhprocess.messaging.dto`
+- `ru.itmo.hhprocess.messaging.producer`
+- `ru.itmo.hhprocess.messaging.consumer`
+- `ru.itmo.hhprocess.integration.eis`
+- `ru.itmo.hhprocess.integration.eis.jca`
+- `ru.itmo.hhprocess.scheduler`
+- `ru.itmo.hhprocess.schedule`
+- `ru.itmo.hhprocess.tx`
 
-== Просмотр кандидатом своих откликов
-#uc-table(
-  [Просмотр кандидатом своих откликов],
-  [Кандидат],
-  [Кандидат авторизован; ранее создан хотя бы один отклик.],
-  [`GET /api/v1/candidates/applications`; `GET /api/v1/candidates/applications/{id}`.],
-  [Получен список откликов кандидата и детальная информация по выбранному отклику.],
-)
+Это позволило развести API-логику, consumer-side обработку, EIS integration и отдельный schedule-модуль на второй БД.
 
-== Ответ на приглашение
-#uc-table(
-  [Ответ на приглашение],
-  [Кандидат],
-  [Кандидат авторизован; рекрутер отправил приглашение по его заявке.],
-  [`POST /api/v1/candidates/applications/{id}/invitation-response`.],
-  [Ответ кандидата сохранён; статус заявки обновлён; при принятии создаётся интервью.],
-)
+= Основные use cases
 
-== Просмотр рекрутером откликов
-#uc-table(
-  [Просмотр рекрутером откликов],
-  [Рекрутер],
-  [Рекрутер авторизован; по его вакансиям есть отклики.],
-  [`GET /api/v1/recruiters/applications`; `GET /api/v1/recruiters/applications/{id}`.],
-  [Получен список откликов по вакансиям рекрутера и детали выбранной заявки.],
-)
+== Асинхронный screening
 
-== Отказ кандидату
-#uc-table(
-  [Отказ кандидату],
-  [Рекрутер],
-  [Рекрутер авторизован; существует активный отклик по его вакансии.],
-  [`POST /api/v1/recruiters/applications/{id}/reject`.],
-  [Заявка отклонена; кандидату создано уведомление об отказе.],
-)
+- Актор: кандидат.
+- Вход: `POST /api/v1/candidates/vacancies/{vacancyId}`.
+- Результат: создаётся заявка со статусом `SCREENING_IN_PROGRESS`.
+- После commit: публикуется `application.submitted`.
+- Worker получает событие, выполняет screening и переводит заявку в `ON_RECRUITER_REVIEW` либо `SCREENING_FAILED`.
 
-== Приглашение кандидата на интервью
-#uc-table(
-  [Приглашение кандидата на интервью],
-  [Рекрутер],
-  [Рекрутер авторизован; существует активный отклик по его вакансии.],
-  [`POST /api/v1/recruiters/applications/{id}/invite`.],
-  [Создано приглашение; кандидату отправлено уведомление; запускается ожидание ответа.],
-)
+== Асинхронные уведомления
 
-== Отмена интервью
-#uc-table(
-  [Отмена интервью],
-  [Рекрутер],
-  [Рекрутер авторизован; существует назначенное интервью.],
-  [`POST /api/v1/recruiters/interviews/{interviewId}/cancel`.],
-  [Интервью отменено; кандидату создано уведомление.],
-)
+- Бизнес-сервисы не обязаны создавать уведомления синхронно.
+- Вместо этого после commit публикуется `notification.requested`.
+- Consumer создаёт запись в `notifications`.
 
-== Просмотр расписания рекрутера
-#uc-table(
-  [Просмотр расписания рекрутера],
-  [Рекрутер],
-  [Рекрутер авторизован.],
-  [`GET /api/v1/recruiters/schedule?weekOffset=0`.],
-  [Возвращено расписание интервью рекрутера на указанную неделю.],
-)
+== Автоматическое закрытие просроченных приглашений
 
-== Просмотр уведомлений
-#uc-table(
-  [Просмотр уведомлений],
-  [Кандидат / Рекрутер],
-  [Пользователь авторизован; в системе есть хотя бы одно уведомление.],
-  [`GET /api/v1/notifications`; `PATCH /api/v1/notifications/{id}/read`.],
-  [Получен список уведомлений; выбранное уведомление отмечено как прочитанное.],
-)
+- Используется `TimeoutService` и `TimeoutBatchProcessor`.
+- Задача запускается через `@Scheduled`.
+- Scheduler включён только на узле `api`, что исключает дублирование обработки.
 
-== Закрытие просроченных приглашений
-#uc-table(
-  [Закрытие просроченных приглашений],
-  [Администратор],
-  [Администратор авторизован; в системе есть приглашения с истёкшим сроком.],
-  [`POST /api/v1/admin/jobs/close-expired-invitations`.],
-  [Просроченные приглашения закрыты; в ответе возвращается количество обработанных записей `closed_count`.],
-)
+== Плановый экспорт интервью во внешнюю EIS
 
-= Спецификация привилегий и ролей
+- `InterviewExportScheduler` периодически ищет назначенные интервью на ближайший диапазон.
+- Для каждого интервью публикуется `interview.export.requested`.
+- `eis-worker` экспортирует интервью через JCA-клиент `CalendarEisClient`.
 
-== Привилегии
+== Распределённая транзакция приглашения на интервью
 
-#text(size: 9pt)[
-  #table(
-    columns: (auto, 1fr),
-    inset: 6pt,
-    stroke: 0.6pt,
-    align: left + top,
-    [*Привилегия*], [*Описание*],
-    [`PROFILE_VIEW`], [Просмотр профиля текущего пользователя (`GET /api/v1/me`)],
-    [`NOTIFICATION_VIEW`], [Просмотр уведомлений (`GET /api/v1/notifications`)],
-    [`NOTIFICATION_MARK_READ`], [Отметка уведомления как прочитанного (`PATCH /api/v1/notifications/{id}/read`)],
-    [`APPLICATION_CREATE`], [Подача заявки на вакансию (`POST /api/v1/candidates/vacancies/{vacancyId}`)],
-    [`APPLICATION_VIEW_OWN`], [Просмотр собственных заявок (`GET /api/v1/candidates/applications`)],
-    [`APPLICATION_RESPOND_INVITATION_OWN`], [Ответ на приглашение по своей заявке (`POST /api/v1/candidates/applications/{id}/invitation-response`)],
-    [`VACANCY_CREATE`], [Создание вакансии (`POST /api/v1/recruiters/vacancies`)],
-    [`VACANCY_VIEW_OWN`], [Просмотр собственных вакансий (`GET /api/v1/recruiters/vacancies`)],
-    [`VACANCY_UPDATE_OWN`], [Изменение статуса / закрытие собственной вакансии],
-    [`APPLICATION_VIEW_ASSIGNED`], [Просмотр заявок по своим вакансиям (`GET /api/v1/recruiters/applications`)],
-    [`APPLICATION_REJECT_ASSIGNED`], [Отклонение заявки / отмена интервью по своим вакансиям],
-    [`APPLICATION_INVITE_ASSIGNED`], [Приглашение кандидата на интервью по своим вакансиям],
-    [`SCHEDULE_VIEW_OWN`], [Просмотр расписания интервью (`GET /api/v1/recruiters/schedule`)],
-    [`JOB_RUN_TIMEOUT_CLOSE`], [Запуск джобы закрытия просроченных приглашений (`POST /api/v1/admin/jobs/close-expired-invitations`)],
-  )
-]
+Сценарий `invite(...)` был выбран как основной distributed transaction use case.
 
-== Роли и их привилегии
+В рамках одной JTA/XA-транзакции выполняются:
 
-#text(size: 9pt)[
-  #table(
-    columns: (auto, 1fr),
-    inset: 6pt,
-    stroke: 0.6pt,
-    align: left + top,
-    [*Роль*], [*Привилегии*],
-    [`CANDIDATE`], [
-      `PROFILE_VIEW`,
-      `NOTIFICATION_VIEW`,
-      `NOTIFICATION_MARK_READ`,
-      `APPLICATION_CREATE`,
-      `APPLICATION_VIEW_OWN`,
-      `APPLICATION_RESPOND_INVITATION_OWN`
-    ],
-    [`RECRUITER`], [
-      `PROFILE_VIEW`,
-      `NOTIFICATION_VIEW`,
-      `NOTIFICATION_MARK_READ`,
-      `VACANCY_CREATE`,
-      `VACANCY_VIEW_OWN`,
-      `VACANCY_UPDATE_OWN`,
-      `APPLICATION_VIEW_ASSIGNED`,
-      `APPLICATION_REJECT_ASSIGNED`,
-      `APPLICATION_INVITE_ASSIGNED`,
-      `SCHEDULE_VIEW_OWN`
-    ],
-    [`ADMIN`], [
-      `PROFILE_VIEW`,
-      `JOB_RUN_TIMEOUT_CLOSE`
-    ],
-  )
-]
+1. проверка бизнес-условий;
+2. перевод заявки в `INVITED`;
+3. создание `InterviewEntity` в main DB;
+4. резервирование слота в schedule DB;
+5. запись history;
+6. публикация `notification.requested` после commit.
 
-== Хранение учётных записей
+Если шаг резервирования слота завершается ошибкой, Narayana откатывает изменения в обеих БД.
 
-Данные учётных записей пользователей хранятся в XML-файле, путь к которому задаётся переменной окружения `APP_SECURITY_USERS_XML`. Аутентификация осуществляется по схеме HTTP Basic. Пример структуры файла:
+= Асинхронное взаимодействие через Kafka
 
-```xml
-<users>
-  <user email="recruiter@example.com" passwordHash="$2a$10$..." />
-  <user email="admin@example.com"     passwordHash="$2a$10$..." />
-</users>
-```
+В приложении введены события:
 
+- `ApplicationSubmittedEvent`
+- `ApplicationScreenedEvent`
+- `NotificationRequestedEvent`
+- `InterviewExportRequestedEvent`
 
-= UML-диаграммы
+Отправка сообщений реализована через чистый Kafka Producer API (`Producer<String, String>` / `KafkaProducer<String, String>`), а не через `KafkaTemplate`.
 
-#image("uml.png")
+Для сохранения правила "публиковать событие только после успешного commit" введён helper `AfterCommitEventPublisher`, использующий `TransactionSynchronizationManager.registerSynchronization(...)`.
+
+Получение сообщений реализовано через Spring `@KafkaListener`.
+
+= Идемпотентность Kafka
+
+Для защиты от повторной доставки сообщений создана таблица `processed_kafka_events`.
+
+Сохраняются:
+
+- `event_id`
+- `topic`
+- `processed_at`
+- `consumer_name`
+
+Перед обработкой consumer проверяет, не было ли событие уже обработано.
+После успешной обработки создаётся запись в `processed_kafka_events`.
+Поле `consumer_name` позволяет показать, что события обрабатывались разными worker-узлами.
+
+= Вторая БД и XA
+
+В проект добавлена отдельная schedule DB.
+
+В main DB остаются:
+
+- `users`
+- `vacancies`
+- `applications`
+- `interviews`
+- `notifications`
+- `application_status_history`
+- `screening_results`
+- `invitation_responses`
+- `processed_kafka_events`
+- `interview_export_log`
+
+В schedule DB вынесена таблица:
+
+- `recruiter_schedule_slots`
+
+Для второй БД создан отдельный XA datasource и отдельная persistence unit.
+Таким образом, распределённая транзакция выполняется между двумя XA-ресурсами PostgreSQL и координируется Narayana с использованием prepared transactions.
+
+= JCA интеграция с внешней EIS
+
+Для демонстрации интеграции реализован учебный JCA resource adapter "Корпоративный календарь собеседований".
+
+Реализованные классы:
+
+- `CalendarManagedConnectionFactory`
+- `CalendarManagedConnection`
+- `CalendarConnectionFactory`
+- `CalendarConnection`
+- `CalendarInteraction`
+- `CalendarInteractionSpec`
+
+Через `CalendarEisClient` доступны операции:
+
+- `createInterviewRecord(...)`
+- `cancelInterviewRecord(...)`
+- `getInterviewRecord(...)`
+
+Факт экспорта фиксируется в таблице `interview_export_log` со статусами `PENDING`, `EXPORTED`, `FAILED`, `CANCELLED`.
 
 = REST API
 
-#let api(method, path, auth, desc, body: none, resp: none) = [
-  #v(6pt)
-  #text(size: 9pt)[
-    #table(
-      columns: (auto, 1fr),
-      inset: 5pt,
-      stroke: 0.6pt,
-      align: left + top,
-      [*Метод*], [#raw(method)],
-      [*Путь*], [#raw(path)],
-      [*Привилегия*], [#raw(auth)],
-      [*Описание*], [#desc],
-      ..if body != none { ([*Тело запроса*], body) },
-      ..if resp != none { ([*Ответ*], resp) },
-    )
-  ]
-]
+Ключевое изменение контракта по сравнению с ЛР2 относится к подаче отклика.
 
-== Аутентификация и профиль
+Теперь `POST /api/v1/candidates/vacancies/{vacancyId}` возвращает не финальный результат screening, а промежуточный статус:
 
-#api(
-  "POST", "/api/v1/auth/register/candidate",
-  "— (публичный)",
-  [Регистрация нового кандидата.],
-  body: [`{ "email": "...", "password": "...", "firstName": "...", "lastName": "..." }`],
-  resp: [`201 Created` — `{ "id": "uuid", "email": "..." }`],
-)
+```json
+{
+  "application_id": "...",
+  "status": "SCREENING_IN_PROGRESS",
+  "message": "Application accepted for asynchronous screening"
+}
+```
 
-#api(
-  "GET", "/api/v1/me",
-  "PROFILE_VIEW",
-  [Получить профиль текущего авторизованного пользователя.],
-  resp: [`200 OK` — `{ "id": "uuid", "email": "...", "role": "CANDIDATE" }`],
-)
+Остальные endpoint'ы сохранены, включая:
 
-== Вакансии (рекрутер)
+- Basic Auth;
+- API кандидата;
+- API рекрутера;
+- admin endpoint'ы;
+- расписание рекрутера;
+- уведомления.
 
-#api(
-  "POST", "/api/v1/recruiters/vacancies",
-  "VACANCY_CREATE",
-  [Создать новую вакансию.],
-  body: [`{ "title": "...", "description": "...", "requiredSkills": ["Java", "Spring"] }`],
-  resp: [`201 Created` — объект вакансии `VacancyResponse`],
-)
+= Периодические задачи
 
-#api(
-  "GET", "/api/v1/recruiters/vacancies",
-  "VACANCY_VIEW_OWN",
-  [Получить список вакансий текущего рекрутера.],
-  resp: [`200 OK` — массив `VacancyResponse`],
-)
+В системе присутствуют два scheduler use case:
 
-#api(
-  "PATCH", "/api/v1/recruiters/vacancies/{vacancyId}/status",
-  "VACANCY_UPDATE_OWN",
-  [Изменить статус вакансии (кроме `CLOSED`; для закрытия используется отдельный эндпоинт).],
-  body: [`{ "status": "ACTIVE" }`],
-  resp: [`200 OK` — обновлённый `VacancyResponse`],
-)
+- `TimeoutService.closeExpiredInvitations()` — закрытие просроченных приглашений;
+- `InterviewExportScheduler.scheduleInterviewExport()` — постановка интервью в очередь на экспорт.
 
-#api(
-  "POST", "/api/v1/recruiters/vacancies/{vacancyId}/close",
-  "VACANCY_UPDATE_OWN",
-  [Закрыть вакансию как составную JTA-транзакцию: статус вакансии меняется на `CLOSED`, все активные заявки отклоняются атомарно.],
-  body: [`{ "reason": "..." }`],
-  resp: [`200 OK` — обновлённый `VacancyResponse`],
-)
+Обе задачи реализованы через Spring `@Scheduled`.
 
-== Заявки (кандидат)
+= Выводы
 
-#api(
-  "POST", "/api/v1/candidates/vacancies/{vacancyId}",
-  "APPLICATION_CREATE",
-  [Подать отклик на вакансию.],
-  body: [`{ "resumeText": "...", "coverLetter": "..." }`],
-  resp: [`201 Created` — `CreateApplicationResponse` (id, статус, скрининг-балл)],
-)
+В ходе ЛР3 проект был существенно расширен по сравнению с ЛР2.
 
-#api(
-  "GET", "/api/v1/candidates/applications",
-  "APPLICATION_VIEW_OWN",
-  [Получить список собственных откликов.],
-  resp: [`200 OK` — массив `CandidateApplicationResponse`],
-)
+Результаты работы:
 
-#api(
-  "GET", "/api/v1/candidates/applications/{applicationId}",
-  "APPLICATION_VIEW_OWN",
-  [Получить детальную информацию по отклику.],
-  resp: [`200 OK` — `CandidateApplicationResponse`],
-)
+- синхронный screening был переведён на асинхронную Kafka-обработку;
+- обеспечена многовузловая обработка сообщений двумя независимыми worker-узлами;
+- внедрена идемпотентность Kafka consumers;
+- сохранён и расширен механизм Narayana JTA/XA;
+- реализована распределённая транзакция между двумя PostgreSQL БД;
+- добавлены scheduler use cases;
+- выполнена интеграция с внешней EIS через JCA;
+- актуализированы инфраструктура и документация проекта.
 
-#api(
-  "POST", "/api/v1/candidates/applications/{applicationId}/invitation-response",
-  "APPLICATION_RESPOND_INVITATION_OWN",
-  [Ответить на приглашение рекрутера (принять или отклонить).],
-  body: [`{ "accepted": true }`],
-  resp: [`200 OK` — `InvitationResponseResponse`],
-)
-
-== Заявки (рекрутер)
-
-#api(
-  "GET", "/api/v1/recruiters/applications",
-  "APPLICATION_VIEW_ASSIGNED",
-  [Получить заявки по своим вакансиям. Фильтрация по `status` и `vacancy_id` (query-параметры).],
-  resp: [`200 OK` — массив `RecruiterApplicationResponse`],
-)
-
-#api(
-  "GET", "/api/v1/recruiters/applications/{applicationId}",
-  "APPLICATION_VIEW_ASSIGNED",
-  [Получить детальную информацию по заявке.],
-  resp: [`200 OK` — `RecruiterApplicationResponse`],
-)
-
-#api(
-  "POST", "/api/v1/recruiters/applications/{applicationId}/reject",
-  "APPLICATION_REJECT_ASSIGNED",
-  [Отклонить заявку кандидата с указанием причины.],
-  body: [`{ "reason": "..." }`],
-  resp: [`200 OK` — `RejectResponse`],
-)
-
-#api(
-  "POST", "/api/v1/recruiters/applications/{applicationId}/invite",
-  "APPLICATION_INVITE_ASSIGNED",
-  [Пригласить кандидата на интервью.],
-  body: [`{ "message": "...", "scheduledAt": "2025-05-01T10:00:00" }`],
-  resp: [`200 OK` — `InviteResponse`],
-)
-
-== Интервью (рекрутер)
-
-#api(
-  "POST", "/api/v1/recruiters/interviews/{interviewId}/cancel",
-  "APPLICATION_REJECT_ASSIGNED",
-  [Отменить запланированное интервью.],
-  body: [`{ "reason": "..." }`],
-  resp: [`200 OK` — `InterviewActionResponse`],
-)
-
-== Расписание (рекрутер)
-
-#api(
-  "GET", "/api/v1/recruiters/schedule",
-  "SCHEDULE_VIEW_OWN",
-  [Получить расписание интервью на указанную неделю. Параметр `weekOffset` — смещение в неделях от текущей (диапазон: −52 … +52, по умолчанию 0).],
-  resp: [`200 OK` — `WeekScheduleResponse`],
-)
-
-== Уведомления
-
-#api(
-  "GET", "/api/v1/notifications",
-  "NOTIFICATION_VIEW",
-  [Получить список уведомлений текущего пользователя.],
-  resp: [`200 OK` — массив `NotificationResponse`],
-)
-
-#api(
-  "PATCH", "/api/v1/notifications/{notificationId}/read",
-  "NOTIFICATION_MARK_READ",
-  [Отметить уведомление как прочитанное.],
-  resp: [`204 No Content`],
-)
-
-== Административные джобы
-
-#api(
-  "POST", "/api/v1/admin/jobs/close-expired-invitations",
-  "JOB_RUN_TIMEOUT_CLOSE",
-  [Закрыть все приглашения с истёкшим сроком действия.],
-  resp: [`200 OK` — `{ "closed_count": 3 }`],
-)
-
-= Исходный код
-#v(4pt)
-#let gh_button(url) = link(url)[
-  #box(
-    fill: rgb("#f6f8fa"),
-    stroke: 1pt + rgb("#d0d7de"),
-    inset: (x: 10pt, y: 6pt),
-    radius: 999pt,
-  )[
-    #box(baseline: 0%)[
-      #sicon(slug: "github", size: 0.9em, icon-color: "default")
-    ]
-    #h(0.4em)
-    #text(size: 16pt)[#url]
-  ]
-]
-
-#gh_button("https://github.com/msuny-c/hh-process")
-
-= Вывод по работе
-#v(4pt)
-В ходе второй лабораторной работы приложение hh.ru (обработка откликов на вакансию) было доработано в части управления транзакциями и разграничения доступа.
-
-*Управление транзакциями.* Взаимозависимые операции бизнес-процесса объединены в JTA-транзакции с декларативным управлением через аннотацию `@Transactional`. В качестве менеджера транзакций подключён Narayana (Spring JTA).
-
-*Разграничение доступа.* Разработана модель из 14 привилегий, распределённых по трём ролям (`CANDIDATE`, `RECRUITER`, `ADMIN`). Аутентификация выполняется по схеме HTTP Basic; учётные записи хранятся в XML-файле.
-
-В результате приложение получило надёжный механизм атомарных операций и строгую политику доступа, соответствующую требованиям задания.
+Таким образом, система теперь демонстрирует асинхронность, распределённость, отказоустойчивость обработки сообщений и интеграцию с внешней корпоративной системой при сохранении существующей модели безопасности на HTTP Basic + XML users.

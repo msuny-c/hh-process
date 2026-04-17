@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ RECRUITER_EMAIL = os.getenv('RECRUITER_EMAIL', 'recruiter@example.com')
 RECRUITER_PASSWORD = os.getenv('RECRUITER_PASSWORD', 'password123')
 CANDIDATE_PASSWORD = os.getenv('CANDIDATE_PASSWORD', 'password123')
 REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '20'))
+ASYNC_WAIT_SECONDS = int(os.getenv('ASYNC_WAIT_SECONDS', '30'))
+ASYNC_POLL_INTERVAL_SECONDS = float(os.getenv('ASYNC_POLL_INTERVAL_SECONDS', '1'))
 
 class CheckError(RuntimeError):
     pass
@@ -89,12 +92,17 @@ def recruiter_apps(api: API, recruiter: SessionCtx, vacancy_id: str) -> List[Dic
 
 def invite(api: API, recruiter: SessionCtx, app_id: str, when: str) -> Dict[str, Any]:
     payload = {'message': 'Interview', 'scheduled_at': when, 'duration_minutes': 60}
-    resp = api.request('POST', f'/api/v1/recruiters/applications/{app_id}/invite', auth=recruiter.auth, expected=[200, 409], data=json.dumps(payload))
-    if resp.status_code == 200:
-        return resp.json()
-    if 'SCHEDULE_SLOT_CONFLICT' in resp.text:
-        raise CheckError('SCHEDULE_SLOT_CONFLICT')
-    raise CheckError(f'Invite failed: {resp.status_code} {resp.text}')
+    deadline = time.time() + ASYNC_WAIT_SECONDS
+    while True:
+        resp = api.request('POST', f'/api/v1/recruiters/applications/{app_id}/invite', auth=recruiter.auth, expected=[200, 409], data=json.dumps(payload))
+        if resp.status_code == 200:
+            return resp.json()
+        if 'INVALID_APPLICATION_STATE' in resp.text and time.time() < deadline:
+            time.sleep(ASYNC_POLL_INTERVAL_SECONDS)
+            continue
+        if 'SCHEDULE_SLOT_CONFLICT' in resp.text:
+            raise CheckError('SCHEDULE_SLOT_CONFLICT')
+        raise CheckError(f'Invite failed: {resp.status_code} {resp.text}')
 
 def iso_utc(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
@@ -175,7 +183,7 @@ def main() -> int:
         state['invite'] = resp
         state['scheduled_at'] = resp.get('scheduled_at') or iso_utc(base_time)
         app = candidate_app(api, state['candidate'], state['app']['application_id'])
-        if app.get('status') not in ['INVITED', 'INTERVIEW_SCHEDULED']:
+        if app.get('status') != 'INVITED':
             raise CheckError(f'Unexpected application status after invite: {app}')
         ok('5. Приглашение на интервью')
     run_case('5. Приглашение на интервью', case5)

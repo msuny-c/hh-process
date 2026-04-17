@@ -1,42 +1,273 @@
 services:
-  postgres:
+  postgres-main:
     image: postgres:16-alpine
-    container_name: hh-process-db
+    container_name: hh-process-postgres-main
     command:
       - postgres
       - -c
       - max_prepared_transactions=100
-    env_file:
-      - .env
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_main_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
 
-  app:
-    build: .
-    container_name: hh-process-app
-    depends_on:
-      postgres:
-        condition: service_healthy
-    env_file:
-      - .env
+  postgres-schedule:
+    image: postgres:16-alpine
+    container_name: hh-process-postgres-schedule
+    command:
+      - postgres
+      - -c
+      - max_prepared_transactions=100
     environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_schedule_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: hh-process-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: ["CMD-SHELL", "echo srvr | nc -w 2 localhost 2181 | grep -q Mode"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: hh-process-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 2
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list > /dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  kafka-topics-init:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: hh-process-kafka-topics-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        for t in application.submitted application.screened notification.requested interview.export.requested; do
+          kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$t" --partitions 2 --replication-factor 1
+          kafka-topics --bootstrap-server kafka:9092 --alter --topic "$$t" --partitions 2 || true
+        done
+    restart: "no"
+
+  kafka-ui:
+    image: kafbat/kafka-ui:v1.4.2
+    container_name: hh-process-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+    environment:
+      DYNAMIC_CONFIG_ENABLED: "true"
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+
+  app-api:
+    build: .
+    container_name: hh-process-api
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      postgres-schedule:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-topics-init:
+        condition: service_completed_successfully
+    environment:
+      APP_ROLE: api
+      APP_INSTANCE_NAME: hh-api
+      NARAYANA_NODE_IDENTIFIER: hh-api
       NARAYANA_LOG_DIR: /app/transaction-logs
       APP_SECURITY_USERS_XML: /app/data/users.xml
+      POSTGRES_HOST: postgres-main
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_SCHEMA: public
+      SCHEDULE_DB_HOST: postgres-schedule
+      SCHEDULE_DB_PORT: 5432
+      SCHEDULE_DB_NAME: postgres
+      SCHEDULE_DB_USER: postgres
+      SCHEDULE_DB_PASSWORD: postgres
+      SCHEDULE_DB_SCHEMA: public
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: hh-process-notifications
+      APP_SCREENING_ENABLED: "false"
+      APP_NOTIFICATIONS_ENABLED: "true"
+      APP_EIS_ENABLED: "false"
     ports:
       - "8080:8080"
     volumes:
-      - narayana_logs:/app/transaction-logs
-      - app_data:/app/data
+      - narayana_logs_api:/app/transaction-logs
+      - app_api_data:/app/data
+
+  app-worker-1:
+    build: .
+    container_name: hh-process-worker-1
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      postgres-schedule:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-topics-init:
+        condition: service_completed_successfully
+    environment:
+      APP_ROLE: worker
+      APP_INSTANCE_NAME: hh-worker-1
+      NARAYANA_NODE_IDENTIFIER: hh-worker-1
+      NARAYANA_LOG_DIR: /app/transaction-logs
+      POSTGRES_HOST: postgres-main
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_SCHEMA: public
+      SCHEDULE_DB_HOST: postgres-schedule
+      SCHEDULE_DB_PORT: 5432
+      SCHEDULE_DB_NAME: postgres
+      SCHEDULE_DB_USER: postgres
+      SCHEDULE_DB_PASSWORD: postgres
+      SCHEDULE_DB_SCHEMA: public
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: hh-process-screening
+      APP_SCREENING_ENABLED: "true"
+      APP_NOTIFICATIONS_ENABLED: "false"
+      APP_EIS_ENABLED: "false"
+    volumes:
+      - narayana_logs_worker_1:/app/transaction-logs
+
+  app-worker-2:
+    build: .
+    container_name: hh-process-worker-2
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      postgres-schedule:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-topics-init:
+        condition: service_completed_successfully
+    environment:
+      APP_ROLE: worker
+      APP_INSTANCE_NAME: hh-worker-2
+      NARAYANA_NODE_IDENTIFIER: hh-worker-2
+      NARAYANA_LOG_DIR: /app/transaction-logs
+      POSTGRES_HOST: postgres-main
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_SCHEMA: public
+      SCHEDULE_DB_HOST: postgres-schedule
+      SCHEDULE_DB_PORT: 5432
+      SCHEDULE_DB_NAME: postgres
+      SCHEDULE_DB_USER: postgres
+      SCHEDULE_DB_PASSWORD: postgres
+      SCHEDULE_DB_SCHEMA: public
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: hh-process-screening
+      APP_SCREENING_ENABLED: "true"
+      APP_NOTIFICATIONS_ENABLED: "false"
+      APP_EIS_ENABLED: "false"
+    volumes:
+      - narayana_logs_worker_2:/app/transaction-logs
+
+  app-eis-worker:
+    build: .
+    container_name: hh-process-eis-worker
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      postgres-schedule:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-topics-init:
+        condition: service_completed_successfully
+    environment:
+      APP_ROLE: eis-worker
+      APP_INSTANCE_NAME: hh-eis-worker
+      NARAYANA_NODE_IDENTIFIER: hh-eis-worker
+      NARAYANA_LOG_DIR: /app/transaction-logs
+      POSTGRES_HOST: postgres-main
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_SCHEMA: public
+      SCHEDULE_DB_HOST: postgres-schedule
+      SCHEDULE_DB_PORT: 5432
+      SCHEDULE_DB_NAME: postgres
+      SCHEDULE_DB_USER: postgres
+      SCHEDULE_DB_PASSWORD: postgres
+      SCHEDULE_DB_SCHEMA: public
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: hh-process-eis
+      APP_SCREENING_ENABLED: "false"
+      APP_NOTIFICATIONS_ENABLED: "false"
+      APP_EIS_ENABLED: "true"
+    volumes:
+      - narayana_logs_eis:/app/transaction-logs
 
 volumes:
-  postgres_data:
-  narayana_logs:
-  app_data:
+  postgres_main_data:
+  postgres_schedule_data:
+  narayana_logs_api:
+  narayana_logs_worker_1:
+  narayana_logs_worker_2:
+  narayana_logs_eis:
+  app_api_data:

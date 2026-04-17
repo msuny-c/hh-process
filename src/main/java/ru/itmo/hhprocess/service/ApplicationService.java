@@ -4,13 +4,15 @@ import lombok.RequiredArgsConstructor;
 import ru.itmo.hhprocess.dto.candidate.CandidateApplicationResponse;
 import ru.itmo.hhprocess.dto.candidate.CreateApplicationRequest;
 import ru.itmo.hhprocess.dto.candidate.CreateApplicationResponse;
-import ru.itmo.hhprocess.entity.*;
+import ru.itmo.hhprocess.entity.ApplicationEntity;
+import ru.itmo.hhprocess.entity.UserEntity;
+import ru.itmo.hhprocess.entity.VacancyEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.enums.ErrorCode;
-import ru.itmo.hhprocess.enums.NotificationType;
 import ru.itmo.hhprocess.enums.VacancyStatus;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.mapper.ApplicationMapper;
+import ru.itmo.hhprocess.messaging.producer.ApplicationSubmittedPublisher;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 
 import org.springframework.http.HttpStatus;
@@ -27,12 +29,11 @@ public class ApplicationService {
 
         private final ApplicationRepository applicationRepository;
         private final VacancyService vacancyService;
-        private final ScreeningService screeningService;
         private final HistoryService historyService;
-        private final NotificationService notificationService;
         private final AuthService authService;
         private final ApplicationMapper applicationMapper;
         private final InterviewService interviewService;
+        private final ApplicationSubmittedPublisher applicationSubmittedPublisher;
 
         @Transactional
         public CreateApplicationResponse create(UUID vacancyId, CreateApplicationRequest request) {
@@ -50,11 +51,12 @@ public class ApplicationService {
                 }
 
                 ApplicationEntity application = saveNewApplication(vacancy, candidateUser, request);
-                ScreeningResultEntity screeningResult = screeningService.performScreening(application);
-
-                return screeningResult.isPassed()
-                                ? handleScreeningPassed(application, vacancy)
-                                : handleScreeningFailed(application, candidateUser);
+                applicationSubmittedPublisher.publishAfterCommit(application);
+                return CreateApplicationResponse.builder()
+                                .applicationId(application.getId())
+                                .status(ApplicationStatus.SCREENING_IN_PROGRESS.name())
+                                .message("Application accepted for asynchronous screening")
+                                .build();
         }
 
         @Transactional(readOnly = true)
@@ -101,47 +103,5 @@ public class ApplicationService {
                                 null);
 
                 return application;
-        }
-
-        private CreateApplicationResponse handleScreeningFailed(ApplicationEntity application,
-                        UserEntity candidateUser) {
-                application.setStatus(ApplicationStatus.SCREENING_FAILED);
-                application.setClosedAt(Instant.now());
-                applicationRepository.save(application);
-
-                historyService.record(application,
-                                ApplicationStatus.SCREENING_IN_PROGRESS,
-                                ApplicationStatus.SCREENING_FAILED,
-                                null);
-
-                notificationService.create(candidateUser, application,
-                                NotificationType.SCREENING_RESULT, "Your application has been rejected");
-
-                return CreateApplicationResponse.builder()
-                                .applicationId(application.getId())
-                                .status(ApplicationStatus.SCREENING_FAILED.toExternalStatus())
-                                .message("Application rejected")
-                                .build();
-        }
-
-        private CreateApplicationResponse handleScreeningPassed(ApplicationEntity application, VacancyEntity vacancy) {
-                application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
-                applicationRepository.save(application);
-
-                historyService.record(application,
-                                ApplicationStatus.SCREENING_IN_PROGRESS,
-                                ApplicationStatus.ON_RECRUITER_REVIEW,
-                                null);
-
-                UserEntity recruiterUser = vacancy.getRecruiterUser();
-                notificationService.create(recruiterUser, application,
-                                NotificationType.NEW_APPLICATION,
-                                "New application received for vacancy: " + vacancy.getTitle());
-
-                return CreateApplicationResponse.builder()
-                                .applicationId(application.getId())
-                                .status(ApplicationStatus.ON_RECRUITER_REVIEW.toExternalStatus())
-                                .message("Application submitted")
-                                .build();
         }
 }

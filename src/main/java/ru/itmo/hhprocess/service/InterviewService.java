@@ -32,6 +32,19 @@ public class InterviewService {
         return interviewRepository.findByApplicationIdInAndStatus(applicationIds, InterviewStatus.SCHEDULED);
     }
 
+    @Transactional(readOnly = true)
+    public List<InterviewEntity> findByIds(Collection<UUID> interviewIds) {
+        if (interviewIds.isEmpty()) {
+            return List.of();
+        }
+        return interviewRepository.findByIdIn(interviewIds);
+    }
+
+    @Transactional(readOnly = true)
+    public List<InterviewEntity> findScheduledBetween(Instant from, Instant to) {
+        return interviewRepository.findByStatusAndScheduledAtBetween(InterviewStatus.SCHEDULED, from, to);
+    }
+
     @Transactional
     public InterviewEntity createScheduledInterview(ApplicationEntity application, UserEntity recruiterUser,
                                                     Instant scheduledAt, int durationMinutes, String message) {

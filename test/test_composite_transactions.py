@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import uuid
+import time
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
@@ -15,6 +16,8 @@ RECRUITER_PASSWORD = os.getenv('RECRUITER_PASSWORD', 'password123')
 CANDIDATE_PASSWORD = os.getenv('CANDIDATE_PASSWORD', 'password123')
 REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '60'))
 REQUEST_RETRIES = int(os.getenv('REQUEST_RETRIES', '2'))
+ASYNC_WAIT_SECONDS = int(os.getenv('ASYNC_WAIT_SECONDS', '30'))
+ASYNC_POLL_INTERVAL_SECONDS = float(os.getenv('ASYNC_POLL_INTERVAL_SECONDS', '1'))
 
 class CheckError(RuntimeError):
     pass
@@ -66,6 +69,14 @@ def invite_with_retry(api: API, app_id: str, recruiter: SessionCtx, start_at: da
         r = api.req('POST', f'/api/v1/recruiters/applications/{app_id}/invite', auth=recruiter.auth, expected=(200, 409), payload=payload)
         if r.status_code == 200:
             return r.json()
+        if 'INVALID_APPLICATION_STATE' in r.text:
+            deadline = time.time() + ASYNC_WAIT_SECONDS
+            while time.time() < deadline:
+                view = api.j('GET', f'/api/v1/recruiters/applications/{app_id}', auth=recruiter.auth, expected=(200,))
+                if view.get('status') == 'ON_RECRUITER_REVIEW':
+                    break
+                time.sleep(ASYNC_POLL_INTERVAL_SECONDS)
+            continue
         if 'SCHEDULE_SLOT_CONFLICT' not in r.text:
             raise CheckError(f'Invite failed: {r.status_code} {r.text}')
         last_error = CheckError('SCHEDULE_SLOT_CONFLICT')
@@ -104,13 +115,13 @@ def main():
 
     api.j('POST', f"/api/v1/recruiters/interviews/{invite['interview_id']}/cancel", auth=recruiter.auth, expected=(200,), payload={'reason': 'Need to reschedule'})
     details2 = api.j('GET', f'/api/v1/recruiters/applications/{app_id}', auth=recruiter.auth, expected=(200,))
-    if details2['status'] not in ['ON_RECRUITER_REVIEW', 'ON_REVIEW']:
+    if details2['status'] != 'ON_RECRUITER_REVIEW':
         raise CheckError(f'application should return to review after cancel: {details2}')
 
     invite2 = invite_with_retry(api, app_id, recruiter, base_time + timedelta(days=1, hours=1), 45)
     api.j('POST', f"/api/v1/recruiters/vacancies/{vacancy['id']}/close", auth=recruiter.auth, expected=(200,), payload={'reason': 'Position filled'})
     details3 = api.j('GET', f'/api/v1/candidates/applications/{app_id}', auth=candidate.auth, expected=(200,))
-    if details3['status'] not in ['CLOSED', 'CLOSED_BY_VACANCY']:
+    if details3['status'] != 'CLOSED_BY_VACANCY':
         raise CheckError(f'application should be closed after vacancy close: {details3}')
     print('Composite transaction scenarios passed')
     return 0

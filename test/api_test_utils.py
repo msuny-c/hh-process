@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -16,6 +17,8 @@ RECRUITER_PASSWORD = os.getenv('RECRUITER_PASSWORD', 'password123')
 CANDIDATE_PASSWORD = os.getenv('CANDIDATE_PASSWORD', 'password123')
 REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '30'))
 REQUEST_RETRIES = int(os.getenv('REQUEST_RETRIES', '1'))
+ASYNC_WAIT_SECONDS = int(os.getenv('ASYNC_WAIT_SECONDS', '30'))
+ASYNC_POLL_INTERVAL_SECONDS = float(os.getenv('ASYNC_POLL_INTERVAL_SECONDS', '1'))
 
 
 class CheckError(RuntimeError):
@@ -212,17 +215,57 @@ def get_recruiter_applications(api: API, recruiter: SessionCtx, vacancy_id: Opti
 
 
 def invite(api: API, recruiter: SessionCtx, application_id: str, when: datetime, duration_minutes: int = 60, message: str = 'Interview') -> requests.Response:
-    return api.request(
-        'POST',
-        f'/api/v1/recruiters/applications/{application_id}/invite',
-        auth=recruiter.auth,
-        expected=[200, 409],
-        payload={
-            'message': message,
-            'scheduled_at': iso_utc(when),
-            'duration_minutes': duration_minutes,
-        },
-    )
+    deadline = time.time() + ASYNC_WAIT_SECONDS
+    last_resp: Optional[requests.Response] = None
+    payload = {
+        'message': message,
+        'scheduled_at': iso_utc(when),
+        'duration_minutes': duration_minutes,
+    }
+    while True:
+        resp = api.request(
+            'POST',
+            f'/api/v1/recruiters/applications/{application_id}/invite',
+            auth=recruiter.auth,
+            expected=[200, 409],
+            payload=payload,
+        )
+        if resp.status_code != 409:
+            return resp
+        if 'INVALID_APPLICATION_STATE' not in resp.text or time.time() >= deadline:
+            return resp
+        last_resp = resp
+        time.sleep(ASYNC_POLL_INTERVAL_SECONDS)
+
+
+def wait_for_candidate_application_status(api: API, candidate: SessionCtx, application_id: str, expected_statuses: Sequence[str], timeout_seconds: int = ASYNC_WAIT_SECONDS) -> Dict[str, Any]:
+    deadline = time.time() + timeout_seconds
+    last_payload: Optional[Dict[str, Any]] = None
+    while time.time() < deadline:
+        last_payload = get_candidate_application_json(api, candidate, application_id)
+        if last_payload.get('status') in expected_statuses:
+            return last_payload
+        time.sleep(ASYNC_POLL_INTERVAL_SECONDS)
+    raise CheckError(f'candidate application {application_id} did not reach {list(expected_statuses)}; last payload={last_payload}')
+
+
+def wait_for_recruiter_application_status(api: API, recruiter: SessionCtx, application_id: str, expected_statuses: Sequence[str], timeout_seconds: int = ASYNC_WAIT_SECONDS) -> Dict[str, Any]:
+    deadline = time.time() + timeout_seconds
+    last_payload: Optional[Dict[str, Any]] = None
+    while time.time() < deadline:
+        last_payload = get_recruiter_application_json(api, recruiter, application_id)
+        if last_payload.get('status') in expected_statuses:
+            return last_payload
+        time.sleep(ASYNC_POLL_INTERVAL_SECONDS)
+    raise CheckError(f'recruiter application {application_id} did not reach {list(expected_statuses)}; last payload={last_payload}')
+
+
+def run_export_job(api: API, admin: SessionCtx) -> Dict[str, Any]:
+    return api.json('POST', '/api/v1/admin/jobs/export-interviews', auth=admin.auth, expected=[200])
+
+
+def set_schedule_failure(api: API, admin: SessionCtx, enabled: bool) -> Dict[str, Any]:
+    return api.json('POST', f'/api/v1/admin/debug/schedule-failure/{str(enabled).lower()}', auth=admin.auth, expected=[200])
 
 
 def invite_json(api: API, recruiter: SessionCtx, application_id: str, when: datetime, duration_minutes: int = 60, message: str = 'Interview') -> Dict[str, Any]:

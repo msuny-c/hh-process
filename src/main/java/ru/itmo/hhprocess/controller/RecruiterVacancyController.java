@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import ru.itmo.hhprocess.config.ApiRoleOnly;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,6 +22,7 @@ import java.util.UUID;
 
 @Validated
 @RestController
+@ApiRoleOnly
 @RequestMapping("/api/v1/recruiters/vacancies")
 @RequiredArgsConstructor
 public class RecruiterVacancyController {

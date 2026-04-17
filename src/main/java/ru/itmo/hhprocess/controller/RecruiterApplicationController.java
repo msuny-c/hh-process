@@ -3,6 +3,7 @@ package ru.itmo.hhprocess.controller;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import ru.itmo.hhprocess.config.ApiRoleOnly;
 import ru.itmo.hhprocess.dto.recruiter.*;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.service.InterviewProcessService;
@@ -18,6 +19,7 @@ import java.util.UUID;
 
 @Validated
 @RestController
+@ApiRoleOnly
 @RequestMapping("/api/v1/recruiters/applications")
 @RequiredArgsConstructor
 public class RecruiterApplicationController {

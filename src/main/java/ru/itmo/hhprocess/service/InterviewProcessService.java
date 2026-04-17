@@ -7,13 +7,14 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.dto.recruiter.*;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.InterviewEntity;
-import ru.itmo.hhprocess.entity.RecruiterScheduleSlotEntity;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.enums.NotificationType;
 import ru.itmo.hhprocess.exception.ApiException;
+import ru.itmo.hhprocess.messaging.producer.NotificationRequestPublisher;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
+import ru.itmo.hhprocess.schedule.entity.RecruiterScheduleSlotEntity;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -32,7 +33,7 @@ public class InterviewProcessService {
     private final InterviewService interviewService;
     private final ScheduleService scheduleService;
     private final HistoryService historyService;
-    private final NotificationService notificationService;
+    private final NotificationRequestPublisher notificationRequestPublisher;
 
     @Transactional
     public InviteResponse invite(UUID applicationId, InviteRequest request) {
@@ -64,7 +65,7 @@ public class InterviewProcessService {
         RecruiterScheduleSlotEntity slot = scheduleService.reserveOnTheFly(recruiterUser, interview, scheduledAt, duration);
 
         historyService.record(application, ApplicationStatus.ON_RECRUITER_REVIEW, ApplicationStatus.INVITED, recruiterUser);
-        notificationService.create(application.getCandidateUser(), application, NotificationType.INVITATION,
+        notificationRequestPublisher.publishAfterCommit(application.getCandidateUser(), application, NotificationType.INVITATION,
                 "You have been invited to an interview: " + request.getMessage());
 
         return InviteResponse.builder()
@@ -98,7 +99,7 @@ public class InterviewProcessService {
         applicationRepository.save(application);
 
         historyService.record(application, oldStatus, ApplicationStatus.REJECTED_BY_RECRUITER, recruiterUser);
-        notificationService.create(application.getCandidateUser(), application, NotificationType.APPLICATION_REJECTED,
+        notificationRequestPublisher.publishAfterCommit(application.getCandidateUser(), application, NotificationType.APPLICATION_REJECTED,
                 "Your application has been rejected");
 
         return RejectResponse.builder().applicationId(application.getId()).status(ApplicationStatus.REJECTED_BY_RECRUITER.toExternalStatus()).build();
@@ -133,7 +134,7 @@ public class InterviewProcessService {
         application.setRecruiterComment(request.getReason());
 
         historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW, recruiterUser);
-        notificationService.create(application.getCandidateUser(), application, NotificationType.INTERVIEW_CANCELLED,
+        notificationRequestPublisher.publishAfterCommit(application.getCandidateUser(), application, NotificationType.INTERVIEW_CANCELLED,
                 "Interview was cancelled: " + request.getReason());
 
         return InterviewActionResponse.builder()

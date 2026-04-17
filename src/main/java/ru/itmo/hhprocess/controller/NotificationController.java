@@ -2,6 +2,7 @@ package ru.itmo.hhprocess.controller;
 
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import ru.itmo.hhprocess.config.ApiRoleOnly;
 import ru.itmo.hhprocess.dto.common.NotificationResponse;
 import ru.itmo.hhprocess.service.AuthService;
 import ru.itmo.hhprocess.service.NotificationService;
@@ -17,6 +18,7 @@ import java.util.UUID;
 
 @Validated
 @RestController
+@ApiRoleOnly
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
 public class NotificationController {
