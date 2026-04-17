@@ -9,7 +9,6 @@ import ru.itmo.hhprocess.entity.VacancyEntity;
 import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.mapper.VacancyMapper;
-import ru.itmo.hhprocess.repository.UserRepository;
 import ru.itmo.hhprocess.repository.VacancyRepository;
 
 import org.springframework.http.HttpStatus;
@@ -24,7 +23,6 @@ import java.util.UUID;
 public class VacancyService {
 
     private final VacancyRepository vacancyRepository;
-    private final UserRepository userRepository;
     private final AuthService authService;
     private final VacancyMapper vacancyMapper;
 

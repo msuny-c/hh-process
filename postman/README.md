@@ -1,29 +1,33 @@
-# Postman
+# Postman (ЛР2)
 
-В архиве:
-- `HH Process API - Basic Auth + Composite Transactions.postman_collection.json`
-- `HH Process Local.postman_environment.json`
+Файлы:
 
-Как использовать:
-1. Импортируй оба файла в Postman.
-2. Выбери environment `HH Process Local`.
-3. Проверь логины/пароли под свою XML-конфигурацию.
-4. Запускай папки сверху вниз:
-   - `00 Auth & Context`
-   - `01 Recruiter Vacancies`
-   - `02 Candidate Applications`
-   - `03 Recruiter Applications & Interviews`
-   - `04 Schedule`
-   - `05 Notifications`
-   - `06 Admin Jobs`
-   - `07 Negative & Validation`
+- `HH Process API (ЛР2).postman_collection.json` — коллекция REST API под текущий сервис (HTTP Basic, не JWT).
+- `HH Process Local.postman_environment.json` — переменные окружения (`base_url`, учётные данные из `users.xml`).
 
-Что автоматизируется:
-- регистрация уникального кандидата
-- переключение между admin / recruiter / candidate
-- сохранение `vacancyId`, `applicationId`, `interviewId`, `notificationId`
+## Импорт
 
-Замечания:
-- запросы используют HTTP Basic на уровне коллекции
-- регистрация кандидата выполняется без аутентификации
-- негативные сценарии рассчитаны на запуск после happy path
+1. Импортируйте коллекцию и environment в Postman.
+2. Выберите окружение **HH Process Local**.
+3. Убедитесь, что `admin_email` / `recruiter_email` и пароли совпадают с `APP_SECURITY_USERS_XML` (и что кандидаты создаются через **Регистрация кандидата** в коллекции). После успешной регистрации в окружение пишутся `candidate_email`, `candidate_password`, `candidate_first_name`, `candidate_last_name`, `candidate_user_id`, `candidate_role`.
+
+## Порядок запуска
+
+Сверху вниз по папкам:
+
+1. **01** — health, регистрация кандидата, профили по ролям (Basic).
+2. **02** — вакансии рекрутера.
+3. **03** — happy path: отклик → приглашение → ответ кандидата (сохраняется `interview_id`).
+4. **04–07** — негативные и уведомления по сценариям.
+5. **08** — админ: джоба закрытия просроченных приглашений (`JOB_RUN_TIMEOUT_CLOSE`).
+6. **09 ЛР2** — явное закрытие вакансии `POST .../close` (JTA), расписание, отмена интервью, негатив 403 (рекрутер → admin job).
+
+Папку **09** удобно запускать после **03**, чтобы были заполнены `interview_id` и авторизация рекрутера. Отмена интервью имеет смысл **до** ответа кандидата на приглашение; иначе возможен конфликт состояния (в тесте допускаются коды 200 и 409).
+
+## Аутентификация
+
+У запросов настроен **HTTP Basic** с переменными `{{recruiter_email}}` / `{{candidate_email}}` / `{{admin_email}}`. Токены JWT не используются.
+
+## Формат JSON
+
+Тела запросов и ожидаемые поля ответов в коллекции заданы в **snake_case** (`first_name`, `required_skills`, `application_id` и т.д.), в соответствии с `spring.jackson.property-naming-strategy: SNAKE_CASE` в приложении. Исключение: query-параметр расписания — `weekOffset` (имя параметра метода в Spring).

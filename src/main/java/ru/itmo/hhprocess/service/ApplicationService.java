@@ -12,7 +12,6 @@ import ru.itmo.hhprocess.enums.VacancyStatus;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.mapper.ApplicationMapper;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
-import ru.itmo.hhprocess.repository.UserRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -27,7 +26,6 @@ import java.util.UUID;
 public class ApplicationService {
 
         private final ApplicationRepository applicationRepository;
-        private final UserRepository userRepository;
         private final VacancyService vacancyService;
         private final ScreeningService screeningService;
         private final HistoryService historyService;

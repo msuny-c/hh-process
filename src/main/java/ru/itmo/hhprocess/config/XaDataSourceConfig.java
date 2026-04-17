@@ -1,14 +1,11 @@
 package ru.itmo.hhprocess.config;
 
-import javax.sql.DataSource;
 import javax.sql.XADataSource;
 
 import org.postgresql.xa.PGXADataSource;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.jdbc.XADataSourceWrapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 
 @Configuration
 public class XaDataSourceConfig {
@@ -23,19 +20,12 @@ public class XaDataSourceConfig {
             @Value("${POSTGRES_SCHEMA:public}") String currentSchema
     ) {
         PGXADataSource dataSource = new PGXADataSource();
-        dataSource.setServerName(host);
-        dataSource.setPortNumber(port);
+        dataSource.setServerNames(new String[] { host });
+        dataSource.setPortNumbers(new int[] { port });
         dataSource.setDatabaseName(database);
         dataSource.setUser(user);
         dataSource.setPassword(password);
         dataSource.setCurrentSchema(currentSchema);
         return dataSource;
-    }
-
-    @Bean(name = "dataSource")
-    @Primary
-    public DataSource dataSource(XADataSource applicationXaDataSource,
-                                 XADataSourceWrapper xaDataSourceWrapper) throws Exception {
-        return xaDataSourceWrapper.wrapDataSource(applicationXaDataSource);
     }
 }
