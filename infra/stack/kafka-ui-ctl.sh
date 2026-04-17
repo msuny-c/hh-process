@@ -5,6 +5,7 @@
 #   KAFKA_UI_PORT — HTTP port (Spring SERVER_PORT)
 #   KAFKA_UI_VERSION — release tag without v (default 1.4.2)
 #   KAFKA_UI_BOOTSTRAP — Kafka bootstrap (default 127.0.0.1:9092)
+#   KAFKA_UI_JAVA_OPTS — JVM args (default caps heap so the JVM won't try to grab ~25%+ RAM as one heap)
 #   SKIP_KAFKA_UI — true/1 to skip
 set -euo pipefail
 
@@ -18,6 +19,9 @@ DOWNLOAD_URL="https://github.com/kafbat/kafka-ui/releases/download/v${KAFKA_UI_V
 PID_FILE="${INSTALL_ROOT}/kafka-ui.pid"
 LOG_FILE="${INSTALL_ROOT}/kafka-ui.log"
 BOOTSTRAP="${KAFKA_UI_BOOTSTRAP:-127.0.0.1:9092}"
+# Without explicit -Xmx, some JVMs on shared hosts pick an enormous heap and fail with:
+# "Could not reserve enough space for XXXXk object heap"
+KAFKA_UI_JAVA_OPTS="${KAFKA_UI_JAVA_OPTS:--Xms64m -Xmx512m -XX:MaxMetaspaceSize=256m}"
 
 ensure_jar() {
   mkdir -p "$UI_DIR"
@@ -61,8 +65,9 @@ start() {
   export KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS="${BOOTSTRAP}"
 
   : >"$LOG_FILE"
-  # JVM flags per kafbat docs (Java 17+ module access)
-  nohup java \
+  echo "[kafka-ui] JVM: ${KAFKA_UI_JAVA_OPTS}"
+  # shellcheck disable=SC2086
+  nohup java ${KAFKA_UI_JAVA_OPTS} \
     --add-opens java.rmi/javax.rmi.ssl=ALL-UNNAMED \
     -jar "$JAR_PATH" >>"$LOG_FILE" 2>&1 &
   echo $! >"$PID_FILE"
