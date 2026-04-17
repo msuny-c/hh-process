@@ -213,6 +213,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JAR_NAME: ${{ needs.build.outputs.jar_name }}
+      # Prefer repository secrets; fall back to Actions variables (same names: SSH_KEY, SSH_HOST, …).
+      SSH_KEY: ${{ secrets.SSH_KEY || vars.SSH_KEY }}
+      SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT || vars.SSH_PORT || '22' }}
+      SSH_USER: ${{ secrets.SSH_USER || vars.SSH_USER }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -241,9 +246,9 @@ jobs:
       - name: Prepare SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_key
+          echo "${{ env.SSH_KEY }}" > ~/.ssh/id_key
           chmod 600 ~/.ssh/id_key
-          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "${{ env.SSH_PORT }}" -H "${{ env.SSH_HOST }}" >> ~/.ssh/known_hosts
 
       # Native Kafka (KRaft) on the same host as the API — no Docker. Set vars.SKIP_NATIVE_STACK=true to skip.
       - name: Install and start Kafka (KRaft) on stack host
@@ -251,10 +256,10 @@ jobs:
         run: |
           set -eux
           STACK_HOST="${{ vars.STACK_HOST }}"
-          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ secrets.SSH_HOST }}"; fi
-          RUSER="${{ secrets.SSH_USER }}"
-          RHOST="${{ secrets.SSH_HOST }}"
-          RPORT="${{ secrets.SSH_PORT }}"
+          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
+          RUSER="${{ env.SSH_USER }}"
+          RHOST="${{ env.SSH_HOST }}"
+          RPORT="${{ env.SSH_PORT }}"
           ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" 'mkdir -p "$HOME/hh-process/stack"'
           scp -P "$RPORT" -i ~/.ssh/id_key \
             infra/stack/install-kafka-kraft.sh \
@@ -307,7 +312,7 @@ jobs:
         if: ${{ vars.SKIP_NATIVE_STACK != 'true' }}
         run: |
           STACK_HOST="${{ vars.STACK_HOST }}"
-          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ secrets.SSH_HOST }}"; fi
+          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
           grep -v '^KAFKA_BOOTSTRAP_SERVERS=' app.env > app.env.tmp || cp app.env app.env.tmp
           mv app.env.tmp app.env
           echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092" >> app.env
@@ -331,24 +336,24 @@ jobs:
       - name: Upload bundle to server
         run: |
           APP_DIR="~/apps/blps"
-          ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "mkdir -p ${APP_DIR}"
 
-          scp -P "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
+          scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "artifact/${{ env.JAR_NAME }}" \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${APP_DIR}/app.jar"
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${APP_DIR}/app.jar"
 
-          scp -P "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
+          scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             app.env \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${APP_DIR}/app.env"
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${APP_DIR}/app.env"
 
-          scp -P "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
+          scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             infra/appctl.sh \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${APP_DIR}/appctl.sh"
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${APP_DIR}/appctl.sh"
 
-          ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "chmod +x ${APP_DIR}/appctl.sh"
 
       - name: Ensure DB reverse tunnel on helios
@@ -360,9 +365,9 @@ jobs:
           [ -z "$REMOTE_DB_HOST" ] && REMOTE_DB_HOST=127.0.0.1
           REMOTE_DB_PORT="${{ vars.DB_TUNNEL_REMOTE_PORT }}"
           [ -z "$REMOTE_DB_PORT" ] && REMOTE_DB_PORT=5432
-          HELIOS_HOST="${{ secrets.SSH_HOST }}"
-          HELIOS_PORT="${{ secrets.SSH_PORT }}"
-          HELIOS_USER="${{ secrets.SSH_USER }}"
+          HELIOS_HOST="${{ env.SSH_HOST }}"
+          HELIOS_PORT="${{ env.SSH_PORT }}"
+          HELIOS_USER="${{ env.SSH_USER }}"
 
           if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $DB_PORT"; then
             echo "Reverse DB tunnel is already reachable on helios:127.0.0.1:$DB_PORT"
@@ -394,16 +399,16 @@ jobs:
 
       - name: Restart service on server
         run: |
-          ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "cd \$HOME/apps/blps && ./appctl.sh restart"
 
       - name: Healthcheck
         run: |
           PORT="${{ vars.SERVER_PORT }}"
           [ -z "$PORT" ] && PORT=8080
-          ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "i=0; while [ \$i -lt 60 ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; echo 'Port ${PORT} not open'; exit 1"
 
       - name: Run deployed API tests via SSH tunnel
@@ -414,12 +419,12 @@ jobs:
 
           ssh -N \
             -L ${LOCAL_PORT}:127.0.0.1:${PORT} \
-            -p "${{ secrets.SSH_PORT }}" \
+            -p "${{ env.SSH_PORT }}" \
             -i ~/.ssh/id_key \
             -o ExitOnForwardFailure=yes \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=3 \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" &
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" &
           TUNNEL_PID=$!
           trap 'kill ${TUNNEL_PID} 2>/dev/null || true' EXIT
 
@@ -475,11 +480,11 @@ jobs:
         if: always()
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_key
+          echo "${{ env.SSH_KEY }}" > ~/.ssh/id_key
           chmod 600 ~/.ssh/id_key
-          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=10 \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+          ssh-keyscan -p "${{ env.SSH_PORT }}" -H "${{ env.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=10 \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "cat ~/apps/blps/app.log 2>/dev/null || echo '(app.log not found or empty)'" > app.log 2>/dev/null || true
           test -f app.log || echo "app.log not available" > app.log
 
@@ -497,6 +502,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JAR_NAME: ${{ needs.build.outputs.jar_name }}
+      SSH_KEY: ${{ secrets.SSH_KEY || vars.SSH_KEY }}
+      SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
+      WORKER1_SSH_KEY: ${{ secrets.WORKER1_SSH_KEY || vars.WORKER1_SSH_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -523,7 +531,7 @@ jobs:
           ALL_VARS: ${{ toJSON(vars) }}
         run: |
           STACK_HOST="${{ vars.STACK_HOST }}"
-          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ secrets.SSH_HOST }}"; fi
+          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
           export STACK_HOST
           export STACK_KAFKA_PORT="${{ vars.STACK_KAFKA_PORT }}"
           export STACK_POSTGRES_PORT="${{ vars.STACK_POSTGRES_PORT }}"
@@ -532,10 +540,10 @@ jobs:
       - name: Prepare SSH
         run: |
           mkdir -p ~/.ssh
-          if [ -n "${{ secrets.WORKER1_SSH_KEY }}" ]; then
-            echo "${{ secrets.WORKER1_SSH_KEY }}" > ~/.ssh/id_worker
+          if [ -n "${{ env.WORKER1_SSH_KEY }}" ]; then
+            echo "${{ env.WORKER1_SSH_KEY }}" > ~/.ssh/id_worker
           else
-            echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_worker
+            echo "${{ env.SSH_KEY }}" > ~/.ssh/id_worker
           fi
           chmod 600 ~/.ssh/id_worker
           WPORT="${{ vars.WORKER1_SSH_PORT }}"
@@ -577,6 +585,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JAR_NAME: ${{ needs.build.outputs.jar_name }}
+      SSH_KEY: ${{ secrets.SSH_KEY || vars.SSH_KEY }}
+      SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
+      WORKER2_SSH_KEY: ${{ secrets.WORKER2_SSH_KEY || vars.WORKER2_SSH_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -603,7 +614,7 @@ jobs:
           ALL_VARS: ${{ toJSON(vars) }}
         run: |
           STACK_HOST="${{ vars.STACK_HOST }}"
-          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ secrets.SSH_HOST }}"; fi
+          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
           export STACK_HOST
           export STACK_KAFKA_PORT="${{ vars.STACK_KAFKA_PORT }}"
           export STACK_POSTGRES_PORT="${{ vars.STACK_POSTGRES_PORT }}"
@@ -612,10 +623,10 @@ jobs:
       - name: Prepare SSH
         run: |
           mkdir -p ~/.ssh
-          if [ -n "${{ secrets.WORKER2_SSH_KEY }}" ]; then
-            echo "${{ secrets.WORKER2_SSH_KEY }}" > ~/.ssh/id_worker
+          if [ -n "${{ env.WORKER2_SSH_KEY }}" ]; then
+            echo "${{ env.WORKER2_SSH_KEY }}" > ~/.ssh/id_worker
           else
-            echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_worker
+            echo "${{ env.SSH_KEY }}" > ~/.ssh/id_worker
           fi
           chmod 600 ~/.ssh/id_worker
           WPORT="${{ vars.WORKER2_SSH_PORT }}"
