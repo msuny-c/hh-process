@@ -66,21 +66,28 @@ jobs:
 
       - name: Wait for PostgreSQL healthcheck
         run: |
-          for i in {1..60}; do
+          set -eu
+          echo "## PostgreSQL — waiting for healthy (max ~120s)"
+          for i in $(seq 1 60); do
             STATUS=$(docker inspect --format='{{json .State.Health.Status}}' hh-process-ci-postgres 2>/dev/null || echo '"starting"')
             if [ "$STATUS" = '"healthy"' ]; then
+              echo "PostgreSQL OK (attempt ${i}/60)."
               exit 0
+            fi
+            if [ "$i" -eq 1 ] || [ $((i % 15)) -eq 0 ]; then
+              echo "  ... status ${STATUS} (${i}/60)"
             fi
             sleep 2
           done
-          echo "PostgreSQL did not become healthy in time"
-          docker logs hh-process-ci-postgres || true
+          echo "::error::PostgreSQL did not become healthy in time"
+          docker logs hh-process-ci-postgres 2>&1 | tail -n 80 || true
           exit 1
 
       # App expects Kafka (listeners + producer); default bootstrap is kafka:9092 — not resolvable on the runner.
       - name: Start Zookeeper and Kafka (CI)
         run: |
           set -eu
+          echo "## CI: Zookeeper + Kafka (Docker) for integration tests"
           docker network create hh-process-ci-net 2>/dev/null || true
           docker run -d \
             --name hh-process-ci-zookeeper \
@@ -148,13 +155,20 @@ jobs:
 
       - name: Wait for healthcheck
         run: |
-          for i in {1..60}; do
-            if curl -fsS http://localhost:8080/actuator/health; then
+          set -eu
+          echo "## Application — /actuator/health (max ~120s)"
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://localhost:8080/actuator/health; then
+              echo "Application OK (attempt ${i}/60)."
               exit 0
+            fi
+            if [ "$i" -eq 1 ] || [ $((i % 15)) -eq 0 ]; then
+              echo "  ... still starting (${i}/60)"
             fi
             sleep 2
           done
-          echo "Application did not become healthy in time"
+          echo "::error::Application did not become healthy — see app-ci.log artifact"
+          tail -n 50 app-ci.log 2>/dev/null || true
           exit 1
 
       - name: Run API tests from test/
@@ -205,7 +219,9 @@ jobs:
           cache: maven
 
       - name: Build JAR
-        run: mvn -B clean package -DskipTests
+        run: |
+          echo "## Maven package (skip unit tests)"
+          mvn -B clean package -DskipTests
 
       - name: Detect JAR name
         id: vars
@@ -241,6 +257,7 @@ jobs:
             infra/ci/render_worker_env.py
             infra/stack/install-kafka-kraft.sh
             infra/stack/kafka-ctl.sh
+            infra/stack/kafka-ui-ctl.sh
             test
           sparse-checkout-cone-mode: false
 
@@ -260,61 +277,103 @@ jobs:
 
       - name: Prepare SSH
         run: |
+          set -eu
+          echo "## SSH — stack host ${{ env.SSH_USER }}@${{ env.SSH_HOST }} (port ${{ env.SSH_PORT }})"
           mkdir -p ~/.ssh
           echo "${{ env.SSH_KEY }}" > ~/.ssh/id_key
           chmod 600 ~/.ssh/id_key
-          ssh-keyscan -p "${{ env.SSH_PORT }}" -H "${{ env.SSH_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "${{ env.SSH_PORT }}" -H "${{ env.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "SSH ready."
 
       # Native Kafka (KRaft) on the same host as the API — no Docker. Set vars.SKIP_NATIVE_STACK=true to skip.
       - name: Install and start Kafka (KRaft) on stack host
         if: ${{ vars.SKIP_NATIVE_STACK != 'true' }}
         run: |
           set -eu
+          echo "## Kafka (KRaft) — install, start broker, health"
           STACK_HOST="${{ vars.STACK_HOST }}"
           if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
           RUSER="${{ env.SSH_USER }}"
           RHOST="${{ env.SSH_HOST }}"
           RPORT="${{ env.SSH_PORT }}"
+          echo "STACK_HOST=${STACK_HOST} (advertised listener for clients)"
           ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" 'mkdir -p "$HOME/hh-process/stack"'
           scp -P "$RPORT" -i ~/.ssh/id_key \
             infra/stack/install-kafka-kraft.sh \
             infra/stack/kafka-ctl.sh \
+            infra/stack/kafka-ui-ctl.sh \
             "${RUSER}@${RHOST}:~/hh-process/stack/"
           ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
-            'chmod +x "$HOME/hh-process/stack/install-kafka-kraft.sh" "$HOME/hh-process/stack/kafka-ctl.sh"'
+            'chmod +x "$HOME/hh-process/stack/install-kafka-kraft.sh" "$HOME/hh-process/stack/kafka-ctl.sh" "$HOME/hh-process/stack/kafka-ui-ctl.sh"'
+          echo "Running install-kafka-kraft.sh on stack host..."
           ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
             "export KAFKA_ADVERTISED_HOST=${STACK_HOST} && \"\$HOME/hh-process/stack/install-kafka-kraft.sh\""
+          echo "Starting broker (kafka-ctl.sh start)..."
           ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
             '$HOME/hh-process/stack/kafka-ctl.sh start'
-          echo "Healthcheck: waiting for Kafka on stack host 127.0.0.1:9092 (up to ~80s)..."
+          echo "Healthcheck: broker TCP 127.0.0.1:9092 (max ~80s)..."
           ok=0
           for i in $(seq 1 40); do
             if ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "${RUSER}@${RHOST}" \
               'nc -z 127.0.0.1 9092' 2>/dev/null; then
-              echo "Kafka OK: TCP 9092 is open (attempt ${i}/40)."
+              echo "Broker OK: port 9092 open (${i}/40)."
               ok=1
               break
             fi
             if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
-              echo "  ... still waiting (${i}/40, ~$((i * 2))s elapsed)"
+              echo "  ... waiting (${i}/40, ~$((i * 2))s)"
             fi
             sleep 2
           done
           if [ "$ok" -ne 1 ]; then
-            echo "Kafka healthcheck failed: port 9092 did not open in time." >&2
+            echo "::error::Kafka: port 9092 did not open — check ~/hh-process/kafka.log on the host"
             exit 1
           fi
-          echo "Kafka healthcheck: verifying broker API..."
-          # Apache Kafka tarball ships kafka-broker-api-versions.sh (Confluent Docker image exposes name without .sh).
-          ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=10 "${RUSER}@${RHOST}" \
-            'bash "$HOME/hh-process/kafka/bin/kafka-broker-api-versions.sh" --bootstrap-server 127.0.0.1:9092 >/dev/null' \
-            && echo "Kafka OK: kafka-broker-api-versions succeeded."
+          echo "Healthcheck: kafka-broker-api-versions (Apache tarball uses .sh)..."
+          if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=10 "${RUSER}@${RHOST}" \
+            'bash "$HOME/hh-process/kafka/bin/kafka-broker-api-versions.sh" --bootstrap-server 127.0.0.1:9092 >/dev/null'; then
+            echo "::error::Kafka broker API check failed"
+            exit 1
+          fi
+          echo "Broker API OK."
+
+      - name: Kafka UI on stack host
+        if: ${{ vars.SKIP_NATIVE_STACK != 'true' && vars.SKIP_KAFKA_UI != 'true' }}
+        env:
+          KAFKA_UI_PORT: ${{ vars.KAFKA_UI_PORT || '8081' }}
+          KAFKA_UI_VERSION: ${{ vars.KAFKA_UI_VERSION || '1.4.2' }}
+        run: |
+          set -eu
+          echo "## Kafka UI — JAR (kafbat, no Docker). Variables: KAFKA_UI_PORT, KAFKA_UI_VERSION; skip: SKIP_KAFKA_UI"
+          RUSER="${{ env.SSH_USER }}"
+          RHOST="${{ env.SSH_HOST }}"
+          RPORT="${{ env.SSH_PORT }}"
+          ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
+            "export KAFKA_UI_PORT=${KAFKA_UI_PORT} KAFKA_UI_VERSION=${KAFKA_UI_VERSION} && \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\" start"
+          echo "Healthcheck: UI TCP 127.0.0.1:${KAFKA_UI_PORT} (max ~45s, first run downloads ~130MB JAR)..."
+          ok=0
+          for i in $(seq 1 22); do
+            if ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "${RUSER}@${RHOST}" \
+              "nc -z 127.0.0.1 ${KAFKA_UI_PORT}" 2>/dev/null; then
+              echo "Kafka UI OK (${i}/22)."
+              ok=1
+              break
+            fi
+            if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
+              echo "  ... waiting (${i}/22)"
+            fi
+            sleep 2
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::warning::Kafka UI: port ${KAFKA_UI_PORT} not open — see ~/hh-process/kafka-ui.log on the host"
+          fi
 
       - name: Create app.env from secrets/vars
         env:
           ALL_SECRETS: ${{ toJSON(secrets) }}
           ALL_VARS: ${{ toJSON(vars) }}
         run: |
+          echo "## Generate app.env (secrets + vars, excluding SSH/tunnel keys)"
           python << 'PYTHON'
           import json
           import os
@@ -335,22 +394,27 @@ jobs:
                       f.write(f'{key}={value}\n')
           PYTHON
 
-          echo "Created app.env with $(wc -l < app.env) variables"
+          echo "app.env: $(wc -l < app.env | tr -d ' ') variables"
 
       - name: Pin Kafka bootstrap for API (native broker on stack host)
         if: ${{ vars.SKIP_NATIVE_STACK != 'true' }}
         run: |
+          set -eu
+          echo "## Set KAFKA_BOOTSTRAP_SERVERS to stack broker"
           STACK_HOST="${{ vars.STACK_HOST }}"
           if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
           grep -v '^KAFKA_BOOTSTRAP_SERVERS=' app.env > app.env.tmp || cp app.env app.env.tmp
           mv app.env.tmp app.env
           echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092" >> app.env
+          echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092"
 
       - name: Prepare VPS SSH for DB tunnel
         if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
         run: |
+          set -eu
+          echo "## VPS SSH client (reverse DB tunnel — needs VPS_* and HELIOS_TUNNEL_PRIVATE_KEY secrets)"
           if [ -z "${{ secrets.VPS_SSH_HOST }}" ] || [ -z "${{ secrets.VPS_SSH_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
-            echo "VPS tunnel secrets are not fully configured; tunnel can only be reused if it already exists on helios"
+            echo "VPS secrets incomplete — skipping key setup (tunnel only works if already up on helios)."
             exit 0
           fi
           mkdir -p ~/.ssh
@@ -361,9 +425,12 @@ jobs:
           ssh-keyscan -p "$VPS_PORT" -H "${{ secrets.VPS_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
           printf '%s\n' "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" > helios_tunnel_key
           chmod 600 helios_tunnel_key
+          echo "VPS SSH key ready for ${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}"
 
       - name: Upload bundle to server
         run: |
+          set -eu
+          echo "## Upload JAR, app.env, appctl.sh → ~/apps/blps"
           APP_DIR="~/apps/blps"
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
@@ -384,10 +451,13 @@ jobs:
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "chmod +x ${APP_DIR}/appctl.sh"
+          echo "Upload done."
 
       - name: Ensure DB reverse tunnel on helios
         if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
         run: |
+          set -eu
+          echo "## DB reverse tunnel — helios 127.0.0.1:POSTGRES_PORT → VPS REMOTE_DB (needs VPS_* + HELIOS_TUNNEL_PRIVATE_KEY)"
           DB_PORT="${{ vars.POSTGRES_PORT }}"
           [ -z "$DB_PORT" ] && DB_PORT=15432
           REMOTE_DB_HOST="${{ vars.DB_TUNNEL_REMOTE_HOST }}"
@@ -397,14 +467,16 @@ jobs:
           HELIOS_HOST="${{ env.SSH_HOST }}"
           HELIOS_PORT="${{ env.SSH_PORT }}"
           HELIOS_USER="${{ env.SSH_USER }}"
+          echo "Map: helios:127.0.0.1:${DB_PORT} ← reverse SSH ← ${REMOTE_DB_HOST}:${REMOTE_DB_PORT} (on VPS)"
 
           if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $DB_PORT"; then
-            echo "Reverse DB tunnel is already reachable on helios:127.0.0.1:$DB_PORT"
+            echo "Tunnel already up on helios:127.0.0.1:${DB_PORT}"
             exit 0
           fi
+          echo "No listener on helios:${DB_PORT} — trying to open tunnel from VPS..."
 
           if [ -z "${{ secrets.VPS_SSH_HOST }}" ] || [ -z "${{ secrets.VPS_SSH_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
-            echo "Reverse DB tunnel is down on helios, and VPS tunnel secrets are missing. Configure VPS_SSH_HOST, VPS_SSH_USER, VPS_SSH_KEY and HELIOS_TUNNEL_PRIVATE_KEY." >&2
+            echo "::error::Tunnel down and secrets missing: set VPS_SSH_HOST, VPS_SSH_USER, VPS_SSH_KEY, HELIOS_TUNNEL_PRIVATE_KEY (or start tunnel manually on helios)."
             exit 1
           fi
 
@@ -413,35 +485,62 @@ jobs:
 
           scp -P "$VPS_PORT" -i ~/.ssh/id_vps helios_tunnel_key "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}:~/.ssh/helios_tunnel_key"
 
-          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}"             "set -eu;              mkdir -p ~/.ssh;              chmod 700 ~/.ssh;              chmod 600 ~/.ssh/helios_tunnel_key;              ssh-keyscan -p '$HELIOS_PORT' -H '$HELIOS_HOST' >> ~/.ssh/known_hosts 2>/dev/null || true;              pkill -f 'R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}' 2>/dev/null || true;              ssh -f -N -i ~/.ssh/helios_tunnel_key -p '$HELIOS_PORT'                -o ExitOnForwardFailure=yes                -o ServerAliveInterval=30                -o ServerAliveCountMax=3                -R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}                '$HELIOS_USER@$HELIOS_HOST'"
+          echo "Starting reverse SSH from VPS to helios..."
+          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}" \
+            "set -eu; \
+            mkdir -p ~/.ssh; chmod 700 ~/.ssh; chmod 600 ~/.ssh/helios_tunnel_key; \
+            ssh-keyscan -p ${HELIOS_PORT} -H ${HELIOS_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true; \
+            pkill -f \"R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}\" 2>/dev/null || true; \
+            ssh -f -N -i ~/.ssh/helios_tunnel_key -p ${HELIOS_PORT} \
+              -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+              -R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT} \
+              ${HELIOS_USER}@${HELIOS_HOST}"
 
-          for i in {1..20}; do
+          echo "Waiting for helios:127.0.0.1:${DB_PORT} (max ~40s)..."
+          ok=0
+          for i in $(seq 1 20); do
             if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $DB_PORT"; then
-              echo "Reverse DB tunnel is ready on helios:127.0.0.1:$DB_PORT"
-              exit 0
+              echo "Tunnel OK (${i}/20)."
+              ok=1
+              break
+            fi
+            if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
+              echo "  ... waiting (${i}/20)"
             fi
             sleep 2
           done
-
-          echo "Reverse DB tunnel did not become reachable on helios:127.0.0.1:$DB_PORT" >&2
-          exit 1
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Tunnel did not open helios:127.0.0.1:${DB_PORT} — check VPS→helios SSH and Postgres on ${REMOTE_DB_HOST}:${REMOTE_DB_PORT}"
+            exit 1
+          fi
 
       - name: Restart service on server
         run: |
+          set -eu
+          echo "## Restart Spring Boot (appctl.sh restart)"
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "cd \$HOME/apps/blps && ./appctl.sh restart"
 
       - name: Healthcheck
         run: |
+          set -eu
+          echo "## API TCP on stack (localhost, SERVER_PORT)"
           PORT="${{ vars.SERVER_PORT }}"
           [ -z "$PORT" ] && PORT=8080
-          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+          echo "Waiting for 127.0.0.1:${PORT} (max ~60s)..."
+          if ! ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=5 \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "i=0; while [ \$i -lt 60 ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; echo 'Port ${PORT} not open'; exit 1"
+            "i=0; while [ \$i -lt 60 ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; exit 1"; then
+            echo "::error::Nothing listening on stack host 127.0.0.1:${PORT} — check app.log on server"
+            exit 1
+          fi
+          echo "TCP OK on port ${PORT}"
 
       - name: Run deployed API tests via SSH tunnel
         run: |
+          set -eu
+          echo "## Deployed API tests (SSH -L to actuator, then test/test.py)"
           PORT="${{ vars.SERVER_PORT }}"
           [ -z "$PORT" ] && PORT=8080
           LOCAL_PORT=18080
@@ -458,14 +557,18 @@ jobs:
           trap 'kill ${TUNNEL_PID} 2>/dev/null || true' EXIT
 
           READY=0
-          for i in {1..20}; do
-            if curl -fsS "http://127.0.0.1:${LOCAL_PORT}/actuator/health" > /dev/null; then
+          for i in $(seq 1 20); do
+            if curl -fsS -o /dev/null "http://127.0.0.1:${LOCAL_PORT}/actuator/health"; then
+              echo "Forwarded /actuator/health OK (${i}/20)."
               READY=1
               break
             fi
+            if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
+              echo "  ... waiting tunnel+app (${i}/20)"
+            fi
             sleep 1
           done
-          [ "$READY" = "1" ] || { echo "Forwarded healthcheck failed"; exit 1; }
+          [ "$READY" = "1" ] || { echo "::error::Health via SSH forward failed — tunnel or app down"; exit 1; }
 
           export BASE_URL="http://127.0.0.1:${LOCAL_PORT}"
           export REQUEST_TIMEOUT=60
@@ -499,15 +602,15 @@ jobs:
             esac
           fi
 
-          echo "APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-}"
-          echo "TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-}"
-
+          echo "Timeout debug flags: APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-} TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-}"
           python test/test.py
+          echo "API tests finished."
 
 
       - name: Fetch app.log from server
         if: always()
         run: |
+          echo "## Fetch ~/apps/blps/app.log (for artifact)"
           mkdir -p ~/.ssh
           echo "${{ env.SSH_KEY }}" > ~/.ssh/id_key
           chmod 600 ~/.ssh/id_key
@@ -568,6 +671,8 @@ jobs:
 
       - name: Prepare SSH
         run: |
+          set -eu
+          echo "## Worker 1 — SSH"
           mkdir -p ~/.ssh
           if [ -n "${{ env.WORKER1_SSH_KEY }}" ]; then
             echo "${{ env.WORKER1_SSH_KEY }}" > ~/.ssh/id_worker
@@ -581,6 +686,8 @@ jobs:
 
       - name: Upload bundle to worker 1
         run: |
+          set -eu
+          echo "## Worker 1 — upload JAR + env + appctl"
           APP_DIR="~/apps/blps"
           WPORT="${{ vars.WORKER1_SSH_PORT }}"
           [ -z "$WPORT" ] && WPORT=22
@@ -651,6 +758,8 @@ jobs:
 
       - name: Prepare SSH
         run: |
+          set -eu
+          echo "## Worker 2 — SSH"
           mkdir -p ~/.ssh
           if [ -n "${{ env.WORKER2_SSH_KEY }}" ]; then
             echo "${{ env.WORKER2_SSH_KEY }}" > ~/.ssh/id_worker
@@ -664,6 +773,8 @@ jobs:
 
       - name: Upload bundle to worker 2
         run: |
+          set -eu
+          echo "## Worker 2 — upload JAR + env + appctl"
           APP_DIR="~/apps/blps"
           WPORT="${{ vars.WORKER2_SSH_PORT }}"
           [ -z "$WPORT" ] && WPORT=22
