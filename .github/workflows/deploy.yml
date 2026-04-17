@@ -249,6 +249,8 @@ jobs:
       SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
       SSH_PORT: ${{ secrets.SSH_PORT || vars.SSH_PORT || '22' }}
       SSH_USER: ${{ secrets.SSH_USER || vars.SSH_USER }}
+      # Seconds: TCP wait on stack + actuator poll via SSH tunnel (vars.API_HEALTHCHECK_TIMEOUT_SEC, default 60).
+      API_HEALTHCHECK_TIMEOUT_SEC: ${{ vars.API_HEALTHCHECK_TIMEOUT_SEC || '60' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -308,9 +310,10 @@ jobs:
           echo "Running install-kafka-kraft.sh on stack host..."
           ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
             "export KAFKA_ADVERTISED_HOST=${STACK_HOST} && \"\$HOME/hh-process/stack/install-kafka-kraft.sh\""
-          echo "Starting broker (kafka-ctl.sh start)..."
+          # install-kafka-kraft.sh rewrites server.properties; "start" skips if already running — broker would keep old advertised.listeners.
+          echo "Restarting broker (kafka-ctl.sh restart) so advertised.listeners matches STACK_HOST..."
           ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
-            '$HOME/hh-process/stack/kafka-ctl.sh start'
+            '$HOME/hh-process/stack/kafka-ctl.sh restart'
           echo "Healthcheck: broker TCP 127.0.0.1:9092 (max ~80s)..."
           ok=0
           for i in $(seq 1 40); do
@@ -525,13 +528,14 @@ jobs:
       - name: Healthcheck
         run: |
           set -eu
-          echo "## API TCP on stack (localhost, SERVER_PORT)"
+          TIMEOUT_SEC="${API_HEALTHCHECK_TIMEOUT_SEC}"
+          echo "## API TCP on stack (localhost, SERVER_PORT) — timeout ${TIMEOUT_SEC}s (vars.API_HEALTHCHECK_TIMEOUT_SEC)"
           PORT="${{ vars.SERVER_PORT }}"
           [ -z "$PORT" ] && PORT=8080
-          echo "Waiting for 127.0.0.1:${PORT} (max ~60s)..."
+          echo "Waiting for 127.0.0.1:${PORT} (max ~${TIMEOUT_SEC}s)..."
           if ! ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=5 \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "i=0; while [ \$i -lt 60 ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; exit 1"; then
+            "i=0; while [ \$i -lt ${TIMEOUT_SEC} ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; exit 1"; then
             echo "::error::Nothing listening on stack host 127.0.0.1:${PORT} — check app.log on server"
             exit 1
           fi
@@ -540,7 +544,8 @@ jobs:
       - name: Run deployed API tests via SSH tunnel
         run: |
           set -eu
-          echo "## Deployed API tests (SSH -L to actuator, then test/test.py)"
+          TIMEOUT_SEC="${API_HEALTHCHECK_TIMEOUT_SEC}"
+          echo "## Deployed API tests (SSH -L to actuator, then test/test.py) — health wait ${TIMEOUT_SEC}s"
           PORT="${{ vars.SERVER_PORT }}"
           [ -z "$PORT" ] && PORT=8080
           LOCAL_PORT=18080
@@ -557,14 +562,14 @@ jobs:
           trap 'kill ${TUNNEL_PID} 2>/dev/null || true' EXIT
 
           READY=0
-          for i in $(seq 1 20); do
+          for i in $(seq 1 "${TIMEOUT_SEC}"); do
             if curl -fsS -o /dev/null "http://127.0.0.1:${LOCAL_PORT}/actuator/health"; then
-              echo "Forwarded /actuator/health OK (${i}/20)."
+              echo "Forwarded /actuator/health OK (${i}/${TIMEOUT_SEC})."
               READY=1
               break
             fi
             if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
-              echo "  ... waiting tunnel+app (${i}/20)"
+              echo "  ... waiting tunnel+app (${i}/${TIMEOUT_SEC})"
             fi
             sleep 1
           done
