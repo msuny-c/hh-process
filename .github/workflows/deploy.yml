@@ -691,13 +691,14 @@ jobs:
           test -f "$RJAR" || { echo "::error::Missing $RJAR (artifact download / JAR_NAME)"; exit 1; }
           WPORT="${{ env.WORKER_SSH_PORT }}"
           REM="${{ env.WORKER_SSH_TARGET }}"
-          REMOTE_DIR='~/apps/blps'
+          # Paths WITHOUT leading ~/ — OpenSSH scp/SFTP often does not expand ~ on the remote (e.g. FreeBSD); non-absolute paths are relative to remote user's home.
           # Single-line ssh/scp avoids broken line continuations; explicit target fixes empty WORKER_SSH_USER → "ssh" usage dump.
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "env bash -c 'mkdir -p \"\$HOME/apps/blps\"'"
-          scp -P "$WPORT" -i ~/.ssh/id_worker "$RJAR" "${REM}:${REMOTE_DIR}/app.jar"
-          scp -P "$WPORT" -i ~/.ssh/id_worker worker.env "${REM}:${REMOTE_DIR}/app.env"
-          scp -P "$WPORT" -i ~/.ssh/id_worker infra/appctl.sh "${REM}:${REMOTE_DIR}/appctl.sh"
-          ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "env bash -c 'chmod +x \"\$HOME/apps/blps/appctl.sh\"'"
+          ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "env bash -c 'rm -f \"\$HOME/apps/blps/app.jar.new\"'"
+          scp -P "$WPORT" -i ~/.ssh/id_worker "$RJAR" "${REM}:apps/blps/app.jar.new"
+          scp -P "$WPORT" -i ~/.ssh/id_worker worker.env "${REM}:apps/blps/app.env"
+          scp -P "$WPORT" -i ~/.ssh/id_worker infra/appctl.sh "${REM}:apps/blps/appctl.sh"
+          ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "env bash -c 'mv -f \"\$HOME/apps/blps/app.jar.new\" \"\$HOME/apps/blps/app.jar\" && chmod +x \"\$HOME/apps/blps/appctl.sh\"'"
 
       - name: Restart worker
         run: |
@@ -745,7 +746,7 @@ jobs:
           WPORT="${{ env.WORKER_SSH_PORT }}"
           REM="${{ env.WORKER_SSH_TARGET }}"
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "env bash -c 'mkdir -p \"\$HOME/hh-process/stack\"'"
-          scp -P "$WPORT" -i ~/.ssh/id_worker infra/stack/kafka-ui-ctl.sh "${REM}:~/hh-process/stack/kafka-ui-ctl.sh"
+          scp -P "$WPORT" -i ~/.ssh/id_worker infra/stack/kafka-ui-ctl.sh "${REM}:hh-process/stack/kafka-ui-ctl.sh"
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" \
             "env bash -c 'chmod +x \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\"'"
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" \
