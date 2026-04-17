@@ -9,6 +9,7 @@ Requires env:
 Optional:
   STACK_KAFKA_PORT (default 9092) — Kafka listener on STACK_HOST (native KRaft / same as install-kafka-kraft.sh)
   STACK_POSTGRES_PORT — if set, overrides POSTGRES_PORT for the worker
+  WORKER_SERVER_PORT — HTTP port for Spring on worker (default 8082); overrides shared SERVER_PORT from repo vars (API)
   OUT_PATH — output file (default worker.env)
   WORKER_INSTANCE_NAME / WORKER_NARAYANA_NODE_IDENTIFIER — override via env or GitHub vars; default instance id: hh-worker
 """
@@ -82,6 +83,15 @@ def main() -> None:
     merged["APP_SCREENING_ENABLED"] = "true"
     merged["APP_NOTIFICATIONS_ENABLED"] = "false"
     merged["APP_EIS_ENABLED"] = "false"
+
+    # Не наследовать SERVER_PORT от общих vars (там порт API, тот же 8080) — у воркера свой порт.
+    merged.pop("SERVER_PORT", None)
+    worker_http_port = (
+        os.environ.get("WORKER_SERVER_PORT", "").strip()
+        or merged.pop("WORKER_SERVER_PORT", None)
+        or "8082"
+    )
+    merged["SERVER_PORT"] = str(worker_http_port).strip() or "8082"
 
     out_path = os.environ.get("OUT_PATH", "worker.env")
     with open(out_path, "w") as f:

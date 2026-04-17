@@ -636,6 +636,7 @@ jobs:
         env:
           ALL_SECRETS: ${{ toJSON(secrets) }}
           ALL_VARS: ${{ toJSON(vars) }}
+          WORKER_SERVER_PORT: ${{ vars.WORKER_SERVER_PORT || '8082' }}
         run: |
           STACK_HOST="${{ vars.STACK_HOST }}"
           if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
@@ -691,15 +692,23 @@ jobs:
           test -f "$RJAR" || { echo "::error::Missing $RJAR (artifact download / JAR_NAME)"; exit 1; }
           WPORT="${{ env.WORKER_SSH_PORT }}"
           REM="${{ env.WORKER_SSH_TARGET }}"
-          # Абсолютный путь: относительные цели (apps/blps/...) у SFTP могут быть не от $HOME — был scp "write remote ... Failure".
           REMOTE_HOME="$(ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes -o ConnectTimeout=30 "$REM" 'printf %s "$HOME"')"
           test -n "$REMOTE_HOME" || { echo "::error::remote HOME empty"; exit 1; }
           echo "REMOTE_HOME=${REMOTE_HOME}"
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "mkdir -p \"${REMOTE_HOME}/apps/blps\""
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "rm -f \"${REMOTE_HOME}/apps/blps/app.jar.new\""
-          scp -P "$WPORT" -i ~/.ssh/id_worker "$RJAR" "${REM}:${REMOTE_HOME}/apps/blps/app.jar.new"
-          scp -P "$WPORT" -i ~/.ssh/id_worker worker.env "${REM}:${REMOTE_HOME}/apps/blps/app.env"
-          scp -P "$WPORT" -i ~/.ssh/id_worker infra/appctl.sh "${REM}:${REMOTE_HOME}/apps/blps/appctl.sh"
+          # Без scp/SFTP: у части хостов (квота, sshd) dest open по SFTP падает, тот же путь через shell нормальный.
+          ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "df -h \"${REMOTE_HOME}\" 2>/dev/null | tail -5 || true"
+          if ! ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "cat > \"${REMOTE_HOME}/apps/blps/app.jar.new\"" < "$RJAR"; then
+            echo "::error::JAR stream failed — на воркере: quota -s, df -h, ls -la ~/apps/blps (отдельная квота у studs, не как у основного пользователя)"
+            exit 1
+          fi
+          if ! ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "cat > \"${REMOTE_HOME}/apps/blps/app.env\"" < worker.env; then
+            echo "::error::app.env upload failed"; exit 1
+          fi
+          if ! ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "cat > \"${REMOTE_HOME}/apps/blps/appctl.sh\"" < infra/appctl.sh; then
+            echo "::error::appctl.sh upload failed"; exit 1
+          fi
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "mv -f \"${REMOTE_HOME}/apps/blps/app.jar.new\" \"${REMOTE_HOME}/apps/blps/app.jar\" && chmod +x \"${REMOTE_HOME}/apps/blps/appctl.sh\""
 
       - name: Restart worker
@@ -715,9 +724,8 @@ jobs:
           WPORT="${{ env.WORKER_SSH_PORT }}"
           REM="${{ env.WORKER_SSH_TARGET }}"
           TIMEOUT_SEC="${{ env.API_HEALTHCHECK_TIMEOUT_SEC }}"
-          APP_PORT="${{ vars.SERVER_PORT }}"
-          [ -z "$APP_PORT" ] && APP_PORT=8080
-          echo "## Worker — /actuator/health on 127.0.0.1:${APP_PORT} (max ~${TIMEOUT_SEC}s, single SSH; vars.SERVER_PORT)"
+          APP_PORT="${{ vars.WORKER_SERVER_PORT || '8082' }}"
+          echo "## Worker — /actuator/health on 127.0.0.1:${APP_PORT} (max ~${TIMEOUT_SEC}s; vars.WORKER_SERVER_PORT, default 8082)"
           if ! ssh -p "$WPORT" -i ~/.ssh/id_worker -o ConnectTimeout=5 -o BatchMode=yes "$REM" \
             "env APP_PORT=${APP_PORT} TIMEOUT_SEC=${TIMEOUT_SEC} bash -c 'i=0; while [ \$i -lt \$TIMEOUT_SEC ]; do (curl -fsS -o /dev/null http://127.0.0.1:\$APP_PORT/actuator/health 2>/dev/null || wget -qO /dev/null http://127.0.0.1:\$APP_PORT/actuator/health 2>/dev/null) && exit 0; sleep 1; i=\$((i+1)); done; exit 1'"; then
             echo "::error::Worker /actuator/health failed — check ~/apps/blps/app.log on worker host"
@@ -750,7 +758,7 @@ jobs:
           REMOTE_HOME="$(ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes -o ConnectTimeout=30 "$REM" 'printf %s "$HOME"')"
           test -n "$REMOTE_HOME"
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "mkdir -p \"${REMOTE_HOME}/hh-process/stack\""
-          scp -P "$WPORT" -i ~/.ssh/id_worker infra/stack/kafka-ui-ctl.sh "${REM}:${REMOTE_HOME}/hh-process/stack/kafka-ui-ctl.sh"
+          ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "cat > \"${REMOTE_HOME}/hh-process/stack/kafka-ui-ctl.sh\"" < infra/stack/kafka-ui-ctl.sh
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" \
             "env bash -c 'chmod +x \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\"'"
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" \
