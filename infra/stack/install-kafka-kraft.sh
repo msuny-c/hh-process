@@ -23,6 +23,26 @@ if ! command -v java >/dev/null 2>&1; then
   exit 1
 fi
 
+# Kafka bin/*.sh use #!/bin/bash; Linux has it, but FreeBSD only has bash under /usr/local/bin (no /bin/bash).
+# Nested exec (kafka-storage.sh -> kafka-run-class.sh) uses the child script shebang again.
+# Use the same bash path we already resolved (not #!/usr/bin/env bash: non-interactive SSH PATH may omit /usr/local/bin).
+fix_kafka_bin_shebangs() {
+  [ -d "${KAFKA_HOME}/bin" ] || return 0
+  local bash_exe f line1 tmp
+  bash_exe="$(command -v bash)"
+  [ -n "$bash_exe" ] || return 0
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    line1="$(head -n1 "$f" | tr -d '\r')"
+    [ "$line1" = "#!/bin/bash" ] || continue
+    tmp="${f}.$$"
+    {
+      echo "#!${bash_exe}"
+      tail -n +2 "$f"
+    } >"$tmp" && mv "$tmp" "$f" && chmod a+x "$f"
+  done < <(find "${KAFKA_HOME}/bin" -type f -name '*.sh' 2>/dev/null)
+}
+
 ARCHIVE="kafka_${SCALA_VERSION}-${KAFKA_VERSION}.tgz"
 DOWNLOAD_URL="https://archive.apache.org/dist/kafka/${KAFKA_VERSION}/${ARCHIVE}"
 
@@ -40,6 +60,8 @@ if [ ! -f "$KAFKA_HOME/bin/kafka-server-start.sh" ]; then
   rm -f "$ARCHIVE"
   mv "$INSTALL_ROOT/kafka_${SCALA_VERSION}-${KAFKA_VERSION}" "$KAFKA_HOME"
 fi
+
+fix_kafka_bin_shebangs
 
 mkdir -p "$(dirname "$CONFIG_PATH")" "$DATA_DIR/logs"
 
