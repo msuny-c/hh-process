@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Kafka UI (kafbat) — standalone JAR from GitHub Releases, no Docker.
-# Broker is expected on the same host (native KRaft): default bootstrap 127.0.0.1:9092.
+# Default bootstrap 127.0.0.1:9092 (broker on same host). Set KAFKA_UI_BOOTSTRAP to reach a remote broker (e.g. worker UI → stack:9092).
 # Env:
 #   KAFKA_UI_PORT — HTTP port (Spring SERVER_PORT)
 #   KAFKA_UI_VERSION — release tag without v (default 1.4.2)
