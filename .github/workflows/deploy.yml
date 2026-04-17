@@ -623,9 +623,9 @@ jobs:
           path: app.log
 
   # Screening worker: single JAR on a separate node from API/Kafka (WORKER_SSH_*: secrets, else vars; STACK_HOST for DB/Kafka).
+  # Job `if` cannot use `secrets` — enable via vars.WORKER_SSH_HOST+USER, or set WORKER_SSH_ENABLED=true when host/user live only in secrets.
   deploy-worker:
     needs: [build, deploy]
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.deploy.result == 'success' && (secrets.WORKER_SSH_HOST != '' || vars.WORKER_SSH_HOST != '') && (secrets.WORKER_SSH_USER != '' || vars.WORKER_SSH_USER != '') }}
     runs-on: ubuntu-latest
     env:
       JAR_NAME: ${{ needs.build.outputs.jar_name }}
