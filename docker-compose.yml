@@ -21,28 +21,6 @@ services:
       retries: 10
       start_period: 10s
 
-  postgres-schedule:
-    image: postgres:16-alpine
-    container_name: hh-process-postgres-schedule
-    command:
-      - postgres
-      - -c
-      - max_prepared_transactions=100
-    environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres_schedule_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.1
     container_name: hh-process-zookeeper
@@ -117,8 +95,6 @@ services:
     depends_on:
       postgres-main:
         condition: service_healthy
-      postgres-schedule:
-        condition: service_healthy
       kafka:
         condition: service_healthy
       kafka-topics-init:
@@ -135,12 +111,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_SCHEMA: public
-      SCHEDULE_DB_HOST: postgres-schedule
-      SCHEDULE_DB_PORT: 5432
-      SCHEDULE_DB_NAME: postgres
-      SCHEDULE_DB_USER: postgres
-      SCHEDULE_DB_PASSWORD: postgres
-      SCHEDULE_DB_SCHEMA: public
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_GROUP_ID: hh-process-notifications
       APP_SCREENING_ENABLED: "false"
@@ -158,8 +128,6 @@ services:
     depends_on:
       postgres-main:
         condition: service_healthy
-      postgres-schedule:
-        condition: service_healthy
       kafka:
         condition: service_healthy
       kafka-topics-init:
@@ -175,12 +143,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_SCHEMA: public
-      SCHEDULE_DB_HOST: postgres-schedule
-      SCHEDULE_DB_PORT: 5432
-      SCHEDULE_DB_NAME: postgres
-      SCHEDULE_DB_USER: postgres
-      SCHEDULE_DB_PASSWORD: postgres
-      SCHEDULE_DB_SCHEMA: public
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_GROUP_ID: hh-process-screening
       APP_SCREENING_ENABLED: "true"
@@ -194,8 +156,6 @@ services:
     container_name: hh-process-worker-2
     depends_on:
       postgres-main:
-        condition: service_healthy
-      postgres-schedule:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -212,12 +172,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_SCHEMA: public
-      SCHEDULE_DB_HOST: postgres-schedule
-      SCHEDULE_DB_PORT: 5432
-      SCHEDULE_DB_NAME: postgres
-      SCHEDULE_DB_USER: postgres
-      SCHEDULE_DB_PASSWORD: postgres
-      SCHEDULE_DB_SCHEMA: public
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_GROUP_ID: hh-process-screening
       APP_SCREENING_ENABLED: "true"
@@ -231,8 +185,6 @@ services:
     container_name: hh-process-eis-worker
     depends_on:
       postgres-main:
-        condition: service_healthy
-      postgres-schedule:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -249,12 +201,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_SCHEMA: public
-      SCHEDULE_DB_HOST: postgres-schedule
-      SCHEDULE_DB_PORT: 5432
-      SCHEDULE_DB_NAME: postgres
-      SCHEDULE_DB_USER: postgres
-      SCHEDULE_DB_PASSWORD: postgres
-      SCHEDULE_DB_SCHEMA: public
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_GROUP_ID: hh-process-eis
       APP_SCREENING_ENABLED: "false"
@@ -265,7 +211,6 @@ services:
 
 volumes:
   postgres_main_data:
-  postgres_schedule_data:
   narayana_logs_api:
   narayana_logs_worker_1:
   narayana_logs_worker_2:

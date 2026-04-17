@@ -78,13 +78,6 @@ app:
     screening-enabled: ${APP_SCREENING_ENABLED:true}
     notifications-enabled: ${APP_NOTIFICATIONS_ENABLED:true}
     eis-enabled: ${APP_EIS_ENABLED:false}
-  schedule-db:
-    host: ${SCHEDULE_DB_HOST:postgres-schedule}
-    port: ${SCHEDULE_DB_PORT:5432}
-    database: ${SCHEDULE_DB_NAME:postgres}
-    schema: ${SCHEDULE_DB_SCHEMA:public}
-    username: ${SCHEDULE_DB_USER:postgres}
-    password: ${SCHEDULE_DB_PASSWORD:postgres}
   export:
     cron: ${APP_EXPORT_CRON:0 0 6 * * *}
     lookahead-hours: ${APP_EXPORT_LOOKAHEAD_HOURS:24}

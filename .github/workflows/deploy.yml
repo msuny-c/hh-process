@@ -162,6 +162,9 @@ jobs:
         with:
           sparse-checkout: |
             infra/appctl.sh
+            infra/ci/render_worker_env.py
+            infra/stack/install-kafka-kraft.sh
+            infra/stack/kafka-ctl.sh
             test
           sparse-checkout-cone-mode: false
 
@@ -178,6 +181,44 @@ jobs:
         with:
           name: jar
           path: artifact
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_key
+          chmod 600 ~/.ssh/id_key
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      # Native Kafka (KRaft) on the same host as the API — no Docker. Set vars.SKIP_NATIVE_STACK=true to skip.
+      - name: Install and start Kafka (KRaft) on stack host
+        if: ${{ vars.SKIP_NATIVE_STACK != 'true' }}
+        run: |
+          set -eux
+          STACK_HOST="${{ vars.STACK_HOST }}"
+          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ secrets.SSH_HOST }}"; fi
+          RUSER="${{ secrets.SSH_USER }}"
+          RHOST="${{ secrets.SSH_HOST }}"
+          RPORT="${{ secrets.SSH_PORT }}"
+          ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" 'mkdir -p "$HOME/hh-process/stack"'
+          scp -P "$RPORT" -i ~/.ssh/id_key \
+            infra/stack/install-kafka-kraft.sh \
+            infra/stack/kafka-ctl.sh \
+            "${RUSER}@${RHOST}:~/hh-process/stack/"
+          ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
+            'chmod +x "$HOME/hh-process/stack/install-kafka-kraft.sh" "$HOME/hh-process/stack/kafka-ctl.sh"'
+          ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
+            "export KAFKA_ADVERTISED_HOST=${STACK_HOST} && \"\$HOME/hh-process/stack/install-kafka-kraft.sh\""
+          ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
+            '$HOME/hh-process/stack/kafka-ctl.sh start'
+          for _ in $(seq 1 40); do
+            if ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" 'nc -z 127.0.0.1 9092'; then
+              echo "Kafka broker is listening on 9092"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Kafka did not open port 9092 in time" >&2
+          exit 1
 
       - name: Create app.env from secrets/vars
         env:
@@ -206,12 +247,14 @@ jobs:
 
           echo "Created app.env with $(wc -l < app.env) variables"
 
-      - name: Prepare SSH
+      - name: Pin Kafka bootstrap for API (native broker on stack host)
+        if: ${{ vars.SKIP_NATIVE_STACK != 'true' }}
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_key
-          chmod 600 ~/.ssh/id_key
-          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+          STACK_HOST="${{ vars.STACK_HOST }}"
+          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ secrets.SSH_HOST }}"; fi
+          grep -v '^KAFKA_BOOTSTRAP_SERVERS=' app.env > app.env.tmp || cp app.env app.env.tmp
+          mv app.env.tmp app.env
+          echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092" >> app.env
 
       - name: Prepare VPS SSH for DB tunnel
         if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
@@ -391,107 +434,163 @@ jobs:
           name: app-log-${{ github.run_id }}
           path: app.log
 
-  notify-telegram-on-failure:
-    needs: [test, build, deploy]
-    if: failure() && (needs.deploy.result == 'failure' || needs.test.result == 'failure')
+  # Screening workers: one JAR per host, separate from API/Kafka (see vars WORKER*_SSH_* and STACK_HOST).
+  deploy-worker-1:
+    needs: [build, deploy]
+    if: ${{ vars.WORKER1_SSH_HOST != '' }}
     runs-on: ubuntu-latest
+    env:
+      JAR_NAME: ${{ needs.build.outputs.jar_name }}
     steps:
-      - name: Download app.log artifact
-        uses: actions/download-artifact@v4
-        continue-on-error: true
+      - uses: actions/checkout@v4
         with:
-          name: app-log-${{ github.run_id }}
+          sparse-checkout: |
+            infra/appctl.sh
+            infra/ci/render_worker_env.py
+          sparse-checkout-cone-mode: false
 
-      - name: Download CI app log artifact
-        uses: actions/download-artifact@v4
-        continue-on-error: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          name: ci-app-log-${{ github.run_id }}
+          python-version: "3.11"
 
-      - name: Send Telegram notification
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: jar
+          path: artifact
+
+      - name: Render worker1.env
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+          WORKER_NUM: "1"
+          ALL_SECRETS: ${{ toJSON(secrets) }}
+          ALL_VARS: ${{ toJSON(vars) }}
         run: |
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_IDS" ]; then
-            echo "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_IDS not set, skipping notification"
-            exit 0
-          fi
-          if [ -f app.log ] && [ -s app.log ] && [ $(wc -c < app.log) -gt 2000000 ]; then
-            tail -c 2000000 app.log > app_truncated.log && mv app_truncated.log app.log
-          fi
-          if [ -f app-ci.log ] && [ -s app-ci.log ] && [ $(wc -c < app-ci.log) -gt 2000000 ]; then
-            tail -c 2000000 app-ci.log > app_ci_truncated.log && mv app_ci_truncated.log app-ci.log
-          fi
-          REPO="${{ github.repository }}"
-          RUN_URL="${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}"
-          BRANCH="${{ github.ref_name }}"
-          COMMIT="${{ github.sha }}"
-          MSG="❌ *Пайплайн упал:* \`$REPO\`
-          Ветка: \`$BRANCH\`
-          Коммит: \`${COMMIT:0:7}\`
-          [Смотреть запуск]($RUN_URL)"
-          MSG_JSON=$(echo "$MSG" | jq -Rs .)
-          echo "$TELEGRAM_CHAT_IDS" | tr ',' '\n' | while IFS= read -r raw; do
-            raw=$(echo "$raw" | tr -d '[:space:]')
-            [ -z "$raw" ] && continue
-            if echo "$raw" | grep -qE '^-?[0-9]+$'; then
-              CHAT_ID="$raw"
-            else
-              [ "${raw#@}" = "$raw" ] && CHAT_ID="@$raw" || CHAT_ID="$raw"
-            fi
-            RESP=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              -H "Content-Type: application/json" \
-              -d "{\"chat_id\":\"${CHAT_ID}\",\"text\":${MSG_JSON},\"parse_mode\":\"Markdown\",\"disable_web_page_preview\":true}")
-            if echo "$RESP" | jq -e '.ok == false' >/dev/null 2>&1; then
-              echo "Telegram error for ${CHAT_ID}: $(echo "$RESP" | jq -r '.description // .')"
-            fi
-            for log in app.log app-ci.log; do
-              if [ -f "$log" ] && [ -s "$log" ]; then
-                RESP2=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-                  -F "chat_id=${CHAT_ID}" -F "document=@${log}" -F "caption=${log}")
-                if echo "$RESP2" | jq -e '.ok == false' >/dev/null 2>&1; then
-                  echo "Telegram sendDocument error for ${CHAT_ID}: $(echo "$RESP2" | jq -r '.description // .')"
-                fi
-              fi
-            done
-          done
+          STACK_HOST="${{ vars.STACK_HOST }}"
+          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ secrets.SSH_HOST }}"; fi
+          export STACK_HOST
+          export STACK_KAFKA_PORT="${{ vars.STACK_KAFKA_PORT }}"
+          export STACK_POSTGRES_PORT="${{ vars.STACK_POSTGRES_PORT }}"
+          python infra/ci/render_worker_env.py
 
-  notify-telegram-on-success:
-    needs: [test, build, deploy]
-    if: success() && (needs.deploy.result == 'success')
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          if [ -n "${{ secrets.WORKER1_SSH_KEY }}" ]; then
+            echo "${{ secrets.WORKER1_SSH_KEY }}" > ~/.ssh/id_worker
+          else
+            echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_worker
+          fi
+          chmod 600 ~/.ssh/id_worker
+          WPORT="${{ vars.WORKER1_SSH_PORT }}"
+          [ -z "$WPORT" ] && WPORT=22
+          ssh-keyscan -p "$WPORT" -H "${{ vars.WORKER1_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload bundle to worker 1
+        run: |
+          APP_DIR="~/apps/blps"
+          WPORT="${{ vars.WORKER1_SSH_PORT }}"
+          [ -z "$WPORT" ] && WPORT=22
+          ssh -p "$WPORT" -i ~/.ssh/id_worker \
+            "${{ vars.WORKER1_SSH_USER }}@${{ vars.WORKER1_SSH_HOST }}" \
+            "mkdir -p ${APP_DIR}"
+          scp -P "$WPORT" -i ~/.ssh/id_worker \
+            "artifact/${{ env.JAR_NAME }}" \
+            "${{ vars.WORKER1_SSH_USER }}@${{ vars.WORKER1_SSH_HOST }}:${APP_DIR}/app.jar"
+          scp -P "$WPORT" -i ~/.ssh/id_worker \
+            worker1.env \
+            "${{ vars.WORKER1_SSH_USER }}@${{ vars.WORKER1_SSH_HOST }}:${APP_DIR}/app.env"
+          scp -P "$WPORT" -i ~/.ssh/id_worker \
+            infra/appctl.sh \
+            "${{ vars.WORKER1_SSH_USER }}@${{ vars.WORKER1_SSH_HOST }}:${APP_DIR}/appctl.sh"
+          ssh -p "$WPORT" -i ~/.ssh/id_worker \
+            "${{ vars.WORKER1_SSH_USER }}@${{ vars.WORKER1_SSH_HOST }}" \
+            "chmod +x ${APP_DIR}/appctl.sh"
+
+      - name: Restart worker 1
+        run: |
+          WPORT="${{ vars.WORKER1_SSH_PORT }}"
+          [ -z "$WPORT" ] && WPORT=22
+          ssh -p "$WPORT" -i ~/.ssh/id_worker \
+            "${{ vars.WORKER1_SSH_USER }}@${{ vars.WORKER1_SSH_HOST }}" \
+            "cd \$HOME/apps/blps && ./appctl.sh restart"
+
+  deploy-worker-2:
+    needs: [build, deploy]
+    if: ${{ vars.WORKER2_SSH_HOST != '' }}
     runs-on: ubuntu-latest
+    env:
+      JAR_NAME: ${{ needs.build.outputs.jar_name }}
     steps:
-      - name: Send Telegram notification
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            infra/appctl.sh
+            infra/ci/render_worker_env.py
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: jar
+          path: artifact
+
+      - name: Render worker2.env
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+          WORKER_NUM: "2"
+          ALL_SECRETS: ${{ toJSON(secrets) }}
+          ALL_VARS: ${{ toJSON(vars) }}
         run: |
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_IDS" ]; then
-            echo "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_IDS not set, skipping notification"
-            exit 0
+          STACK_HOST="${{ vars.STACK_HOST }}"
+          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ secrets.SSH_HOST }}"; fi
+          export STACK_HOST
+          export STACK_KAFKA_PORT="${{ vars.STACK_KAFKA_PORT }}"
+          export STACK_POSTGRES_PORT="${{ vars.STACK_POSTGRES_PORT }}"
+          python infra/ci/render_worker_env.py
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          if [ -n "${{ secrets.WORKER2_SSH_KEY }}" ]; then
+            echo "${{ secrets.WORKER2_SSH_KEY }}" > ~/.ssh/id_worker
+          else
+            echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_worker
           fi
-          REPO="${{ github.repository }}"
-          RUN_URL="${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}"
-          BRANCH="${{ github.ref_name }}"
-          COMMIT="${{ github.sha }}"
-          MSG="✅ *Деплой успешен:* \`$REPO\`
-          Ветка: \`$BRANCH\`
-          Коммит: \`${COMMIT:0:7}\`
-          [Смотреть запуск]($RUN_URL)"
-          MSG_JSON=$(echo "$MSG" | jq -Rs .)
-          echo "$TELEGRAM_CHAT_IDS" | tr ',' '\n' | while IFS= read -r raw; do
-            raw=$(echo "$raw" | tr -d '[:space:]')
-            [ -z "$raw" ] && continue
-            if echo "$raw" | grep -qE '^-?[0-9]+$'; then
-              CHAT_ID="$raw"
-            else
-              [ "${raw#@}" = "$raw" ] && CHAT_ID="@$raw" || CHAT_ID="$raw"
-            fi
-            RESP=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              -H "Content-Type: application/json" \
-              -d "{\"chat_id\":\"${CHAT_ID}\",\"text\":${MSG_JSON},\"parse_mode\":\"Markdown\",\"disable_web_page_preview\":true}")
-            if echo "$RESP" | jq -e '.ok == false' >/dev/null 2>&1; then
-              echo "Telegram error for ${CHAT_ID}: $(echo "$RESP" | jq -r '.description // .')"
-            fi
-          done
+          chmod 600 ~/.ssh/id_worker
+          WPORT="${{ vars.WORKER2_SSH_PORT }}"
+          [ -z "$WPORT" ] && WPORT=22
+          ssh-keyscan -p "$WPORT" -H "${{ vars.WORKER2_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload bundle to worker 2
+        run: |
+          APP_DIR="~/apps/blps"
+          WPORT="${{ vars.WORKER2_SSH_PORT }}"
+          [ -z "$WPORT" ] && WPORT=22
+          ssh -p "$WPORT" -i ~/.ssh/id_worker \
+            "${{ vars.WORKER2_SSH_USER }}@${{ vars.WORKER2_SSH_HOST }}" \
+            "mkdir -p ${APP_DIR}"
+          scp -P "$WPORT" -i ~/.ssh/id_worker \
+            "artifact/${{ env.JAR_NAME }}" \
+            "${{ vars.WORKER2_SSH_USER }}@${{ vars.WORKER2_SSH_HOST }}:${APP_DIR}/app.jar"
+          scp -P "$WPORT" -i ~/.ssh/id_worker \
+            worker2.env \
+            "${{ vars.WORKER2_SSH_USER }}@${{ vars.WORKER2_SSH_HOST }}:${APP_DIR}/app.env"
+          scp -P "$WPORT" -i ~/.ssh/id_worker \
+            infra/appctl.sh \
+            "${{ vars.WORKER2_SSH_USER }}@${{ vars.WORKER2_SSH_HOST }}:${APP_DIR}/appctl.sh"
+          ssh -p "$WPORT" -i ~/.ssh/id_worker \
+            "${{ vars.WORKER2_SSH_USER }}@${{ vars.WORKER2_SSH_HOST }}" \
+            "chmod +x ${APP_DIR}/appctl.sh"
+
+      - name: Restart worker 2
+        run: |
+          WPORT="${{ vars.WORKER2_SSH_PORT }}"
+          [ -z "$WPORT" ] && WPORT=22
+          ssh -p "$WPORT" -i ~/.ssh/id_worker \
+            "${{ vars.WORKER2_SSH_USER }}@${{ vars.WORKER2_SSH_HOST }}" \
+            "cd \$HOME/apps/blps && ./appctl.sh restart"

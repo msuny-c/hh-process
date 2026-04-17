@@ -5,8 +5,7 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 @EnableConfigurationProperties({
-        AppKafkaProperties.class,
-        ScheduleDbProperties.class
+        AppKafkaProperties.class
 })
 public class AppConfig {
 }

@@ -2,7 +2,6 @@ package ru.itmo.hhprocess.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,8 +11,8 @@ import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.enums.ScheduleSlotStatus;
 import ru.itmo.hhprocess.exception.ApiException;
-import ru.itmo.hhprocess.schedule.entity.RecruiterScheduleSlotEntity;
-import ru.itmo.hhprocess.schedule.repository.RecruiterScheduleSlotRepository;
+import ru.itmo.hhprocess.entity.RecruiterScheduleSlotEntity;
+import ru.itmo.hhprocess.repository.RecruiterScheduleSlotRepository;
 
 import java.time.*;
 import java.time.temporal.TemporalAdjusters;

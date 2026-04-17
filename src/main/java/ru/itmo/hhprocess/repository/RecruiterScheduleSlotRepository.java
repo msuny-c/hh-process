@@ -1,4 +1,4 @@
-package ru.itmo.hhprocess.schedule.repository;
+package ru.itmo.hhprocess.repository;
 
 import java.time.Instant;
 import java.util.List;
@@ -7,8 +7,8 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import ru.itmo.hhprocess.entity.RecruiterScheduleSlotEntity;
 import ru.itmo.hhprocess.enums.ScheduleSlotStatus;
-import ru.itmo.hhprocess.schedule.entity.RecruiterScheduleSlotEntity;
 
 public interface RecruiterScheduleSlotRepository extends JpaRepository<RecruiterScheduleSlotEntity, UUID> {
 

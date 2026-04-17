@@ -14,7 +14,7 @@ import ru.itmo.hhprocess.enums.NotificationType;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.messaging.producer.NotificationRequestPublisher;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
-import ru.itmo.hhprocess.schedule.entity.RecruiterScheduleSlotEntity;
+import ru.itmo.hhprocess.entity.RecruiterScheduleSlotEntity;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;

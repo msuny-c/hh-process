@@ -1,4 +1,4 @@
-package ru.itmo.hhprocess.schedule.entity;
+package ru.itmo.hhprocess.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
