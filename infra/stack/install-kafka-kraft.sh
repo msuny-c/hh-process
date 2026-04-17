@@ -45,11 +45,22 @@ fix_kafka_bin_shebangs() {
 
 ARCHIVE="kafka_${SCALA_VERSION}-${KAFKA_VERSION}.tgz"
 DOWNLOAD_URL="https://archive.apache.org/dist/kafka/${KAFKA_VERSION}/${ARCHIVE}"
+EXTRACTED_DIR="$INSTALL_ROOT/kafka_${SCALA_VERSION}-${KAFKA_VERSION}"
 
 mkdir -p "$INSTALL_ROOT"
 cd "$INSTALL_ROOT"
 
-if [ ! -f "$KAFKA_HOME/bin/kafka-server-start.sh" ]; then
+if [ -f "$KAFKA_HOME/bin/kafka-server-start.sh" ]; then
+  echo "Kafka ${KAFKA_VERSION} already installed at $KAFKA_HOME — skipping download."
+elif [ -f "$EXTRACTED_DIR/bin/kafka-server-start.sh" ]; then
+  echo "Found unpacked Kafka at $EXTRACTED_DIR — moving to $KAFKA_HOME"
+  mv "$EXTRACTED_DIR" "$KAFKA_HOME"
+elif [ -f "$INSTALL_ROOT/$ARCHIVE" ]; then
+  echo "Using cached archive $INSTALL_ROOT/$ARCHIVE (no re-download)."
+  tar -xzf "$INSTALL_ROOT/$ARCHIVE" -C "$INSTALL_ROOT"
+  rm -f "$INSTALL_ROOT/$ARCHIVE"
+  mv "$EXTRACTED_DIR" "$KAFKA_HOME"
+else
   echo "Downloading $ARCHIVE ..."
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL -o "$ARCHIVE" "$DOWNLOAD_URL"
@@ -58,7 +69,7 @@ if [ ! -f "$KAFKA_HOME/bin/kafka-server-start.sh" ]; then
   fi
   tar -xzf "$ARCHIVE" -C "$INSTALL_ROOT"
   rm -f "$ARCHIVE"
-  mv "$INSTALL_ROOT/kafka_${SCALA_VERSION}-${KAFKA_VERSION}" "$KAFKA_HOME"
+  mv "$EXTRACTED_DIR" "$KAFKA_HOME"
 fi
 
 fix_kafka_bin_shebangs

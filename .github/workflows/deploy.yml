@@ -80,7 +80,7 @@ jobs:
       # App expects Kafka (listeners + producer); default bootstrap is kafka:9092 — not resolvable on the runner.
       - name: Start Zookeeper and Kafka (CI)
         run: |
-          set -eux
+          set -eu
           docker network create hh-process-ci-net 2>/dev/null || true
           docker run -d \
             --name hh-process-ci-zookeeper \
@@ -88,13 +88,24 @@ jobs:
             -e ZOOKEEPER_CLIENT_PORT=2181 \
             -e ZOOKEEPER_TICK_TIME=2000 \
             confluentinc/cp-zookeeper:7.6.1
+          echo "Healthcheck: waiting for Zookeeper (2181, up to ~80s)..."
+          zk_ok=0
           for i in $(seq 1 40); do
             if docker exec hh-process-ci-zookeeper bash -c "echo srvr | nc -w 2 localhost 2181 | grep -q Mode" 2>/dev/null; then
-              echo "Zookeeper is up"
+              echo "Zookeeper OK (${i}/40, ~$((i * 2))s)."
+              zk_ok=1
               break
+            fi
+            if [ "$i" -eq 1 ] || [ $((i % 10)) -eq 0 ]; then
+              echo "  ... Zookeeper still starting (${i}/40)"
             fi
             sleep 2
           done
+          if [ "$zk_ok" -ne 1 ]; then
+            echo "Zookeeper healthcheck failed." >&2
+            docker logs hh-process-ci-zookeeper || true
+            exit 1
+          fi
           docker run -d \
             --name hh-process-ci-kafka \
             --network hh-process-ci-net \
@@ -109,14 +120,18 @@ jobs:
             -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
             -e KAFKA_AUTO_CREATE_TOPICS_ENABLE=true \
             confluentinc/cp-kafka:7.6.1
+          echo "Healthcheck: waiting for Kafka broker API (localhost:9092 in container, up to ~120s)..."
           for i in $(seq 1 60); do
             if docker exec hh-process-ci-kafka kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1; then
-              echo "Kafka broker is ready"
+              echo "Kafka OK: broker API ready (${i}/60, ~$((i * 2))s)."
               exit 0
+            fi
+            if [ "$i" -eq 1 ] || [ $((i % 10)) -eq 0 ]; then
+              echo "  ... Kafka still starting (${i}/60)"
             fi
             sleep 2
           done
-          echo "Kafka did not become ready in time" >&2
+          echo "Kafka healthcheck failed: broker did not respond in time." >&2
           docker logs hh-process-ci-kafka || true
           exit 1
 
@@ -254,7 +269,7 @@ jobs:
       - name: Install and start Kafka (KRaft) on stack host
         if: ${{ vars.SKIP_NATIVE_STACK != 'true' }}
         run: |
-          set -eux
+          set -eu
           STACK_HOST="${{ vars.STACK_HOST }}"
           if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
           RUSER="${{ env.SSH_USER }}"
@@ -271,15 +286,28 @@ jobs:
             "export KAFKA_ADVERTISED_HOST=${STACK_HOST} && \"\$HOME/hh-process/stack/install-kafka-kraft.sh\""
           ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
             '$HOME/hh-process/stack/kafka-ctl.sh start'
-          for _ in $(seq 1 40); do
-            if ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" 'nc -z 127.0.0.1 9092'; then
-              echo "Kafka broker is listening on 9092"
-              exit 0
+          echo "Healthcheck: waiting for Kafka on stack host 127.0.0.1:9092 (up to ~80s)..."
+          ok=0
+          for i in $(seq 1 40); do
+            if ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "${RUSER}@${RHOST}" \
+              'nc -z 127.0.0.1 9092' 2>/dev/null; then
+              echo "Kafka OK: TCP 9092 is open (attempt ${i}/40)."
+              ok=1
+              break
+            fi
+            if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
+              echo "  ... still waiting (${i}/40, ~$((i * 2))s elapsed)"
             fi
             sleep 2
           done
-          echo "Kafka did not open port 9092 in time" >&2
-          exit 1
+          if [ "$ok" -ne 1 ]; then
+            echo "Kafka healthcheck failed: port 9092 did not open in time." >&2
+            exit 1
+          fi
+          echo "Kafka healthcheck: verifying broker API..."
+          ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=10 "${RUSER}@${RHOST}" \
+            '$HOME/hh-process/kafka/bin/kafka-broker-api-versions --bootstrap-server 127.0.0.1:9092 >/dev/null' \
+            && echo "Kafka OK: kafka-broker-api-versions succeeded."
 
       - name: Create app.env from secrets/vars
         env:
