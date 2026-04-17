@@ -5,6 +5,11 @@ on:
     branches: ["main"]
   workflow_dispatch: {}
 
+# Explicit permissions: artifact download in deploy needs actions: read (some orgs default to restricted).
+permissions:
+  contents: read
+  actions: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   POSTGRES_HOST: localhost
@@ -202,6 +207,9 @@ jobs:
 
   deploy:
     needs: build
+    # always() is required: implicit success() is false if *any* job was skipped (e.g. test when CI_SKIP_TESTS),
+    # even when build succeeded — without always(), deploy never starts.
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       JAR_NAME: ${{ needs.build.outputs.jar_name }}
@@ -485,7 +493,7 @@ jobs:
   # Screening workers: one JAR per host, separate from API/Kafka (see vars WORKER*_SSH_* and STACK_HOST).
   deploy-worker-1:
     needs: [build, deploy]
-    if: ${{ vars.WORKER1_SSH_HOST != '' }}
+    if: ${{ always() && !cancelled() && vars.WORKER1_SSH_HOST != '' && needs.build.result == 'success' && needs.deploy.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       JAR_NAME: ${{ needs.build.outputs.jar_name }}
@@ -565,7 +573,7 @@ jobs:
 
   deploy-worker-2:
     needs: [build, deploy]
-    if: ${{ vars.WORKER2_SSH_HOST != '' }}
+    if: ${{ always() && !cancelled() && vars.WORKER2_SSH_HOST != '' && needs.build.result == 'success' && needs.deploy.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       JAR_NAME: ${{ needs.build.outputs.jar_name }}
