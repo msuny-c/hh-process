@@ -5,31 +5,36 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 В проекте реализованы:
 
 - HTTP Basic + XML users, без JWT.
-- PostgreSQL + Flyway.
-- Narayana JTA/XA.
-- Асинхронный screening через Kafka.
-- Асинхронные уведомления через Kafka.
-- `@Scheduled` для timeout и export use cases.
-- Вторая schedule DB с распределённой транзакцией на `invite/cancel interview`.
-- Учебная JCA-интеграция с внешней EIS календаря собеседований.
+- PostgreSQL + Flyway (одна БД: заявки, интервью, слоты расписания, уведомления, служебные таблицы).
+- Narayana JTA и XA-драйвер PostgreSQL для основной БД.
+- Асинхронный screening через Kafka (`application.submitted` → worker → результат и событие `application.screened`).
+- Идемпотентность Kafka consumers через таблицу `processed_kafka_events`.
+- Асинхронные уведомления через Kafka (`notification.requested`).
+- `@Scheduled` для timeout-закрытия приглашений и планового экспорта интервью в EIS.
+- Учебная JCA-интеграция с внешней EIS календаря собеседований (роль `eis-worker`).
 
 ## Архитектура
 
 Один и тот же `jar` запускается в разных ролях через `APP_ROLE`:
 
-- `api`: REST controllers, WebSocket endpoint, timeout scheduler, export scheduler, Kafka producer.
-- `worker`: Kafka listeners для `application.submitted`, асинхронный screening.
-- `eis-worker`: Kafka listener для `interview.export.requested`, JCA client и экспорт во внешнюю EIS.
+- `api`: REST, WebSocket, Swagger UI, schedulers (timeout, export), Kafka producers; consumer уведомлений, если `APP_NOTIFICATIONS_ENABLED=true`.
+- `worker`: Kafka listener на `application.submitted`, screening; `APP_SCREENING_ENABLED=true`.
+- `eis-worker`: Kafka listener на `interview.export.requested`, JCA-клиент и экспорт в EIS; `APP_EIS_ENABLED=true`.
 
-Инфраструктура в `docker-compose.yml`:
+В `docker-compose.yml` поднимается:
 
-- `postgres-main`
-- `postgres-schedule`
-- `zookeeper`
-- `kafka`
-- `app-api`
-- `app-worker`
-- `app-eis-worker`
+- `postgres-main` — единственная PostgreSQL.
+- `zookeeper`, `kafka` — брокер (внутри сети `kafka:9092`, с хоста `localhost:29092`).
+- `kafka-topics-init` — однократное создание топиков.
+- `kafka-ui` — веб-интерфейс к Kafka (см. порты ниже).
+- `app-api`, `app-worker`, `app-eis-worker` — три контейнера приложения с разными `APP_ROLE` и флагами воркеров.
+
+Топики Kafka (имена по умолчанию, переопределяются через `APP_TOPIC_*`):
+
+- `application.submitted` — отклик принят, нужен screening.
+- `application.screened` — screening завершён (публикуется после обновления статуса заявки).
+- `notification.requested` — создать уведомление и при необходимости WebSocket push.
+- `interview.export.requested` — выгрузка интервью во внешнюю EIS.
 
 ## Бизнес-сценарии ЛР3
 
@@ -41,33 +46,21 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 2. пишет history;
 3. после commit публикует `application.submitted`;
 4. worker получает событие через `@KafkaListener`;
-5. выполняет screening и переводит заявку в:
-   `ON_RECRUITER_REVIEW` или `SCREENING_FAILED`;
-6. публикует `notification.requested`.
+5. выполняет screening и через `AsyncScreeningResultService` переводит заявку в `ON_RECRUITER_REVIEW` или `SCREENING_FAILED`;
+6. публикует `application.screened` и при необходимости `notification.requested`.
 
 ### Асинхронные уведомления
 
-Сервисы публикуют `notification.requested` после commit.
-Consumer создаёт запись в `notifications`; WebSocket push работает на узле, где включён notification consumer.
+Сервисы публикуют `notification.requested` после commit. Consumer создаёт запись в `notifications`; WebSocket push выполняется на том инстансе, где включён consumer уведомлений (`app.workers.notifications-enabled`).
 
-### Distributed transaction
+### Транзакционная целостность приглашения на интервью
 
-Сценарий `invite interview` выполняется в одной JTA/XA-транзакции между:
-
-- main DB: `applications`, `interviews`, `history`, `notifications`, ...
-- schedule DB: `recruiter_schedule_slots`
-
-Если резервирование слота падает, откатываются:
-
-- статус заявки;
-- запись интервью;
-- запись в history;
-- изменения в schedule DB.
+Сценарий `invite interview` обновляет в **одной** БД заявку, интервью и таблицу `recruiter_schedule_slots`. При ошибке (в т.ч. при включённом debug `fail-on-reserve`) откатывается вся транзакция — без второй отдельной БД расписания.
 
 ### Scheduler use cases
 
-- `TimeoutService` закрывает просроченные приглашения только на `api`.
-- `InterviewExportScheduler` по cron ставит интервью в очередь на экспорт в EIS.
+- `TimeoutService` закрывает просроченные приглашения на роли `api`.
+- `InterviewExportScheduler` по cron ставит интервью в очередь на экспорт в EIS (топик `interview.export.requested`).
 
 ### JCA EIS
 
@@ -84,7 +77,7 @@ Consumer создаёт запись в `notifications`; WebSocket push рабо
 
 ## Основные переменные окружения
 
-### Main DB
+### PostgreSQL (основная БД)
 
 ```text
 POSTGRES_HOST=postgres-main
@@ -93,17 +86,6 @@ POSTGRES_DB=postgres
 POSTGRES_SCHEMA=public
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
-```
-
-### Schedule DB
-
-```text
-SCHEDULE_DB_HOST=postgres-schedule
-SCHEDULE_DB_PORT=5432
-SCHEDULE_DB_NAME=postgres
-SCHEDULE_DB_SCHEMA=public
-SCHEDULE_DB_USER=postgres
-SCHEDULE_DB_PASSWORD=postgres
 ```
 
 ### App role / Narayana
@@ -127,28 +109,42 @@ APP_NOTIFICATIONS_ENABLED=true
 APP_EIS_ENABLED=false
 ```
 
-### Other
+В `docker-compose` для разных контейнеров заданы разные `KAFKA_GROUP_ID` (например, `hh-process-notifications` у API и `hh-process-screening` у worker), чтобы группы не пересекались между ролями.
+
+Имена топиков (опционально):
 
 ```text
+APP_TOPIC_APPLICATION_SUBMITTED=application.submitted
+APP_TOPIC_APPLICATION_SCREENED=application.screened
+APP_TOPIC_NOTIFICATION_REQUESTED=notification.requested
+APP_TOPIC_INTERVIEW_EXPORT_REQUESTED=interview.export.requested
+```
+
+### Прочее
+
+```text
+SERVER_PORT=8080
 APP_SECURITY_USERS_XML=/app/data/users.xml
 WS_ALLOWED_ORIGINS=http://localhost:3000
 APP_EXPORT_CRON=0 0 6 * * *
 APP_EXPORT_LOOKAHEAD_HOURS=24
 APP_SCHEDULE_DEBUG_FAIL_ON_RESERVE=false
+APP_TIMEOUT_CHECK_INTERVAL_MS=60000
+APP_TIMEOUT_INITIAL_DELAY_MS=30000
 ```
 
 ## Безопасность
 
-Используется HTTP Basic. Учётные данные сидовых пользователей лежат в `src/main/resources/security/users.xml`, а runtime XML-файл хранится по `APP_SECURITY_USERS_XML`.
+Используется HTTP Basic. Учётные данные сидовых пользователей лежат в `src/main/resources/security/users.xml`, а runtime XML-файл задаётся через `APP_SECURITY_USERS_XML`.
 
 Базовые пользователи:
 
-- `admin@example.com / password123`
+- `admin@example.com / password123` — админские job/debug endpoint’ы (`/api/v1/admin/...`).
 - `recruiter@example.com / password123`
 
 ## REST API
 
-Базовый префикс: `/api/v1`
+Базовый префикс: `/api/v1`. Документация OpenAPI: Swagger UI по пути `/swagger-ui.html` (см. `springdoc` в `application.yml`).
 
 ### Auth
 
@@ -162,7 +158,7 @@ APP_SCHEDULE_DEBUG_FAIL_ON_RESERVE=false
 - `GET /api/v1/candidates/applications/{applicationId}`
 - `POST /api/v1/candidates/applications/{applicationId}/invitation-response`
 
-Создание отклика теперь возвращает промежуточный статус:
+Создание отклика возвращает промежуточный статус:
 
 ```json
 {
@@ -172,7 +168,7 @@ APP_SCHEDULE_DEBUG_FAIL_ON_RESERVE=false
 }
 ```
 
-После этого клиент должен делать polling `GET /api/v1/candidates/applications/{applicationId}` или recruiter-view endpoint, пока статус не станет `ON_RECRUITER_REVIEW` либо `SCREENING_FAILED`.
+Далее клиент опрашивает `GET /api/v1/candidates/applications/{applicationId}` или recruiter-view, пока статус не станет `ON_RECRUITER_REVIEW` либо `SCREENING_FAILED`.
 
 ### Recruiter
 
@@ -194,21 +190,15 @@ APP_SCHEDULE_DEBUG_FAIL_ON_RESERVE=false
 
 ### Admin / debug
 
+Требуется роль admin и соответствующие привилегии:
+
 - `POST /api/v1/admin/jobs/close-expired-invitations`
 - `POST /api/v1/admin/jobs/export-interviews`
 - `POST /api/v1/admin/debug/schedule-failure/{enabled}`
 
 ## Flyway
 
-Main DB migrations: `src/main/resources/db/migration`
-
-- `V6__kafka_processed_events.sql`
-- `V7__interview_export_log.sql`
-- `V8__application_async_flags.sql`
-
-Schedule DB migrations: `src/main/resources/db/schedule-migration`
-
-- `S1__schedule_schema.sql`
+Миграции основной БД: `src/main/resources/db/migration` (`V1` … `V8` — см. файлы в каталоге).
 
 ## Локальный запуск
 
@@ -219,21 +209,21 @@ docker compose up --build
 
 Порты:
 
-- API: `http://localhost:8080`
-- Kafka host listener: `localhost:29092`
-- main DB: `localhost:5432`
-- schedule DB: `localhost:5433`
+- API и Actuator: `http://localhost:8080` (health: `/actuator/health`)
+- Kafka UI: `http://localhost:8081`
+- Kafka с хоста: `localhost:29092`
+- PostgreSQL: `localhost:5432`
 
-Обе PostgreSQL БД запускаются с `max_prepared_transactions=100`, что обязательно для XA.
+Контейнер `postgres-main` запускается с `max_prepared_transactions=100`, что нужно для XA с PostgreSQL.
 
 ## Тестовые и демонстрационные сценарии
 
-- Асинхронный screening: `POST apply` -> polling `GET application`.
-- Distributed transaction rollback: включить `POST /api/v1/admin/debug/schedule-failure/true`, затем вызвать `invite`.
-- Export to EIS: создать интервью, вызвать `POST /api/v1/admin/jobs/export-interviews`, дождаться обработки `app-eis-worker`.
+- Асинхронный screening: `POST apply` → polling `GET application`.
+- Откат транзакции при invite: `POST /api/v1/admin/debug/schedule-failure/true`, затем `invite` — заявка/интервью/слот не должны остаться в несогласованном состоянии.
+- Export to EIS: интервью в подходящем статусе, `POST /api/v1/admin/jobs/export-interviews`, обработка в `app-eis-worker`.
 
 ## Важные ограничения реализации
 
-- XA между Kafka и PostgreSQL не используется.
-- WebSocket push остаётся локальным для инстанса, где включён notification consumer.
-- Kafka idempotency реализована через таблицу `processed_kafka_events`.
+- Распределённой транзакции между Kafka и PostgreSQL нет; события публикуются после commit (см. `AfterCommitEventPublisher`).
+- WebSocket push локален для инстанса с включённым notification consumer.
+- Идемпотентность обработки сообщений Kafka — таблица `processed_kafka_events`.
