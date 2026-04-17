@@ -20,6 +20,12 @@ start() {
     echo "bash is required to run Kafka scripts." >&2
     exit 1
   fi
+  # kafka-run-class.sh picks Java 8 GC flags (-Xloggc, PrintGCDateStamps) when it mis-detects the JDK
+  # or when KAFKA_GC_LOG_OPTS is empty. JDK 9+ rejects those; use unified GC logging instead.
+  if [ -z "${KAFKA_GC_LOG_OPTS:-}" ]; then
+    GC_LOG="${INSTALL_ROOT}/kafka-gc.log"
+    export KAFKA_GC_LOG_OPTS="-Xlog:gc*:file=${GC_LOG}:time,tags:filecount=10,filesize=100M"
+  fi
   : >"$LOG_FILE"
   nohup bash "$KAFKA_HOME/bin/kafka-server-start.sh" "$CONFIG_PATH" >>"$LOG_FILE" 2>&1 &
   echo $! >"$PID_FILE"
