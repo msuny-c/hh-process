@@ -299,42 +299,34 @@ jobs:
           RHOST="${{ env.SSH_HOST }}"
           RPORT="${{ env.SSH_PORT }}"
           echo "STACK_HOST=${STACK_HOST} (advertised listener for clients)"
-          ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" 'mkdir -p "$HOME/hh-process/stack"'
+          # Non-POSIX login shells (e.g. tcsh on FreeBSD) break "export ... && ..."; always use bash -c.
+          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c 'mkdir -p \"\$HOME/hh-process/stack\"'"
           scp -P "$RPORT" -i ~/.ssh/id_key \
             infra/stack/install-kafka-kraft.sh \
             infra/stack/kafka-ctl.sh \
             infra/stack/kafka-ui-ctl.sh \
             "${RUSER}@${RHOST}:~/hh-process/stack/"
-          ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
-            'chmod +x "$HOME/hh-process/stack/install-kafka-kraft.sh" "$HOME/hh-process/stack/kafka-ctl.sh" "$HOME/hh-process/stack/kafka-ui-ctl.sh"'
+          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c 'chmod +x \"\$HOME/hh-process/stack/install-kafka-kraft.sh\" \"\$HOME/hh-process/stack/kafka-ctl.sh\" \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\"'"
           echo "Running install-kafka-kraft.sh on stack host..."
-          ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
-            "export KAFKA_ADVERTISED_HOST=${STACK_HOST} && \"\$HOME/hh-process/stack/install-kafka-kraft.sh\""
+          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c 'export KAFKA_ADVERTISED_HOST=${STACK_HOST} && \"\$HOME/hh-process/stack/install-kafka-kraft.sh\"'"
           # install-kafka-kraft.sh rewrites server.properties; "start" skips if already running — broker would keep old advertised.listeners.
           echo "Restarting broker (kafka-ctl.sh restart) so advertised.listeners matches STACK_HOST..."
-          ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
-            '$HOME/hh-process/stack/kafka-ctl.sh restart'
-          echo "Healthcheck: broker TCP 127.0.0.1:9092 (max ~80s)..."
-          ok=0
-          for i in $(seq 1 40); do
-            if ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "${RUSER}@${RHOST}" \
-              'nc -z 127.0.0.1 9092' 2>/dev/null; then
-              echo "Broker OK: port 9092 open (${i}/40)."
-              ok=1
-              break
-            fi
-            if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
-              echo "  ... waiting (${i}/40, ~$((i * 2))s)"
-            fi
-            sleep 2
-          done
-          if [ "$ok" -ne 1 ]; then
+          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c '\$HOME/hh-process/stack/kafka-ctl.sh restart'"
+          # One SSH session with a remote wait loop (avoids dozens of connections — helps with MaxStartups / per-user limits).
+          echo "Healthcheck: broker TCP 127.0.0.1:9092 (max ~80s, single SSH)..."
+          if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c 'i=0; while [ \$i -lt 40 ]; do nc -z 127.0.0.1 9092 && exit 0; sleep 2; i=\$((i+1)); done; exit 1'"; then
             echo "::error::Kafka: port 9092 did not open — check ~/hh-process/kafka.log on the host"
             exit 1
           fi
+          echo "Broker OK: port 9092 open."
           echo "Healthcheck: kafka-broker-api-versions (Apache tarball uses .sh)..."
-          if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=10 "${RUSER}@${RHOST}" \
-            'bash "$HOME/hh-process/kafka/bin/kafka-broker-api-versions.sh" --bootstrap-server 127.0.0.1:9092 >/dev/null'; then
+          if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=10 -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c 'bash \"\$HOME/hh-process/kafka/bin/kafka-broker-api-versions.sh\" --bootstrap-server 127.0.0.1:9092 >/dev/null'"; then
             echo "::error::Kafka broker API check failed"
             exit 1
           fi
@@ -351,24 +343,14 @@ jobs:
           RUSER="${{ env.SSH_USER }}"
           RHOST="${{ env.SSH_HOST }}"
           RPORT="${{ env.SSH_PORT }}"
-          ssh -p "$RPORT" -i ~/.ssh/id_key "${RUSER}@${RHOST}" \
-            "export KAFKA_UI_PORT=${KAFKA_UI_PORT} KAFKA_UI_VERSION=${KAFKA_UI_VERSION} && \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\" start"
-          echo "Healthcheck: UI TCP 127.0.0.1:${KAFKA_UI_PORT} (max ~45s, first run downloads ~130MB JAR)..."
-          ok=0
-          for i in $(seq 1 22); do
-            if ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "${RUSER}@${RHOST}" \
-              "nc -z 127.0.0.1 ${KAFKA_UI_PORT}" 2>/dev/null; then
-              echo "Kafka UI OK (${i}/22)."
-              ok=1
-              break
-            fi
-            if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
-              echo "  ... waiting (${i}/22)"
-            fi
-            sleep 2
-          done
-          if [ "$ok" -ne 1 ]; then
+          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c 'export KAFKA_UI_PORT=${KAFKA_UI_PORT} KAFKA_UI_VERSION=${KAFKA_UI_VERSION} && \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\" start'"
+          echo "Healthcheck: UI TCP 127.0.0.1:${KAFKA_UI_PORT} (max ~45s, single SSH; first run downloads ~130MB JAR)..."
+          if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c 'i=0; while [ \$i -lt 22 ]; do nc -z 127.0.0.1 ${KAFKA_UI_PORT} && exit 0; sleep 2; i=\$((i+1)); done; exit 1'"; then
             echo "::warning::Kafka UI: port ${KAFKA_UI_PORT} not open — see ~/hh-process/kafka-ui.log on the host"
+          else
+            echo "Kafka UI OK (port ${KAFKA_UI_PORT})."
           fi
 
       - name: Create app.env from secrets/vars
@@ -499,23 +481,13 @@ jobs:
               -R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT} \
               ${HELIOS_USER}@${HELIOS_HOST}"
 
-          echo "Waiting for helios:127.0.0.1:${DB_PORT} (max ~40s)..."
-          ok=0
-          for i in $(seq 1 20); do
-            if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $DB_PORT"; then
-              echo "Tunnel OK (${i}/20)."
-              ok=1
-              break
-            fi
-            if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
-              echo "  ... waiting (${i}/20)"
-            fi
-            sleep 2
-          done
-          if [ "$ok" -ne 1 ]; then
+          echo "Waiting for helios:127.0.0.1:${DB_PORT} (max ~40s, single SSH)..."
+          if ! ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_USER@$HELIOS_HOST" \
+            "env bash -c 'i=0; while [ \$i -lt 20 ]; do nc -z 127.0.0.1 ${DB_PORT} && exit 0; sleep 2; i=\$((i+1)); done; exit 1'"; then
             echo "::error::Tunnel did not open helios:127.0.0.1:${DB_PORT} — check VPS→helios SSH and Postgres on ${REMOTE_DB_HOST}:${REMOTE_DB_PORT}"
             exit 1
           fi
+          echo "Tunnel OK."
 
       - name: Restart service on server
         run: |
@@ -533,9 +505,9 @@ jobs:
           PORT="${{ vars.SERVER_PORT }}"
           [ -z "$PORT" ] && PORT=8080
           echo "Waiting for 127.0.0.1:${PORT} (max ~${TIMEOUT_SEC}s)..."
-          if ! ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=5 \
+          if ! ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "i=0; while [ \$i -lt ${TIMEOUT_SEC} ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; exit 1"; then
+            "env bash -c 'i=0; while [ \$i -lt ${TIMEOUT_SEC} ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; exit 1'"; then
             echo "::error::Nothing listening on stack host 127.0.0.1:${PORT} — check app.log on server"
             exit 1
           fi
