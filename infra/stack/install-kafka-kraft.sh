@@ -13,6 +13,11 @@ DATA_DIR="${DATA_DIR:-$INSTALL_ROOT/kafka-data}"
 CONFIG_PATH="${CONFIG_PATH:-$KAFKA_HOME/config/kraft/server.properties}"
 ADVERTISED_HOST="${KAFKA_ADVERTISED_HOST:?export KAFKA_ADVERTISED_HOST}"
 
+if ! command -v bash >/dev/null 2>&1; then
+  echo "bash is required to run Kafka shell scripts (their shebang is #!/bin/bash)." >&2
+  exit 1
+fi
+
 if ! command -v java >/dev/null 2>&1; then
   echo "Java is required on the server (JDK 17+). Install temurin-17-jdk or similar." >&2
   exit 1
@@ -40,7 +45,8 @@ mkdir -p "$(dirname "$CONFIG_PATH")" "$DATA_DIR/logs"
 
 CLUSTER_UUID_FILE="$DATA_DIR/cluster.uuid"
 if [ ! -f "$CLUSTER_UUID_FILE" ]; then
-  CLUSTER_UUID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+  # Invoke with explicit "bash": upstream scripts use #!/bin/bash; minimal systems may lack /bin/bash.
+  CLUSTER_UUID="$(bash "$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
   echo "$CLUSTER_UUID" >"$CLUSTER_UUID_FILE"
 fi
 CLUSTER_UUID="$(cat "$CLUSTER_UUID_FILE")"
@@ -74,7 +80,7 @@ EOF
 
 if [ ! -f "$DATA_DIR/logs/meta.properties" ]; then
   echo "Formatting KRaft storage..."
-  "$KAFKA_HOME/bin/kafka-storage.sh" format -t "$CLUSTER_UUID" -c "$CONFIG_PATH" --ignore-formatted
+  bash "$KAFKA_HOME/bin/kafka-storage.sh" format -t "$CLUSTER_UUID" -c "$CONFIG_PATH" --ignore-formatted
 fi
 
 echo "Kafka KRaft ready. Config: $CONFIG_PATH"

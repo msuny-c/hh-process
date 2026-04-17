@@ -16,8 +16,12 @@ start() {
     echo "Kafka not installed. Run install-kafka-kraft.sh first." >&2
     exit 1
   fi
+  if ! command -v bash >/dev/null 2>&1; then
+    echo "bash is required to run Kafka scripts." >&2
+    exit 1
+  fi
   : >"$LOG_FILE"
-  nohup "$KAFKA_HOME/bin/kafka-server-start.sh" "$CONFIG_PATH" >>"$LOG_FILE" 2>&1 &
+  nohup bash "$KAFKA_HOME/bin/kafka-server-start.sh" "$CONFIG_PATH" >>"$LOG_FILE" 2>&1 &
   echo $! >"$PID_FILE"
   echo "Kafka starting (PID $(cat "$PID_FILE")), log: $LOG_FILE"
 }
@@ -25,7 +29,7 @@ start() {
 stop() {
   if [ ! -f "$PID_FILE" ]; then
     echo "No pid file; trying kafka-server-stop"
-    "$KAFKA_HOME/bin/kafka-server-stop.sh" 2>/dev/null || true
+    bash "$KAFKA_HOME/bin/kafka-server-stop.sh" 2>/dev/null || true
     return 0
   fi
   pid="$(cat "$PID_FILE")"
@@ -43,7 +47,7 @@ stop() {
     kill -9 "$pid" 2>/dev/null || true
   fi
   rm -f "$PID_FILE"
-  "$KAFKA_HOME/bin/kafka-server-stop.sh" 2>/dev/null || true
+  bash "$KAFKA_HOME/bin/kafka-server-stop.sh" 2>/dev/null || true
   echo "Stopped"
 }
 
