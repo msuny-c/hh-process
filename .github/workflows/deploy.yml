@@ -293,11 +293,10 @@ jobs:
           RUSER="${{ env.SSH_USER }}"
           RHOST="${{ env.SSH_HOST }}"
           RPORT="${{ env.SSH_PORT }}"
-          echo "## Pre-deploy: stop API, Kafka UI, Kafka (frees RAM/ports; missing scripts are OK)"
+          echo "## Pre-deploy: stop API, Kafka (frees RAM/ports; missing scripts are OK)"
           ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
             "env bash -c 'set +e; \
             if [ -f \"\$HOME/apps/blps/appctl.sh\" ]; then echo \"Stopping API...\"; bash \"\$HOME/apps/blps/appctl.sh\" stop; else echo \"No appctl — skip API\"; fi; \
-            if [ -f \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\" ]; then echo \"Stopping Kafka UI...\"; bash \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\" stop; fi; \
             if [ -f \"\$HOME/hh-process/stack/kafka-ctl.sh\" ]; then echo \"Stopping Kafka...\"; bash \"\$HOME/hh-process/stack/kafka-ctl.sh\" stop; fi; \
             echo \"Pre-deploy stop done.\"'"
           sleep 2
@@ -723,21 +722,26 @@ jobs:
           fi
           echo "Worker health OK."
 
-      # Kafka UI (kafbat JAR) on the worker host; bootstrap = broker on STACK_HOST (same as worker.env KAFKA_BOOTSTRAP_SERVERS).
-      - name: Kafka UI on worker host
+      # kafbat Kafka UI (JAR) on worker; bootstrap = stack broker (same as worker.env KAFKA_BOOTSTRAP_SERVERS).
+      - name: Kafka UI (kafbat) on worker host
         if: ${{ vars.SKIP_KAFKA_UI != 'true' && vars.SKIP_KAFKA_UI != '1' }}
         env:
           KAFKA_UI_PORT: ${{ vars.KAFKA_UI_PORT || '8081' }}
           KAFKA_UI_VERSION: ${{ vars.KAFKA_UI_VERSION || '1.4.2' }}
         run: |
           set -eu
-          echo "## Kafka UI on worker — JAR (kafbat). KAFKA_UI_BOOTSTRAP=STACK_HOST:STACK_KAFKA_PORT; skip: SKIP_KAFKA_UI"
+          echo "## Kafka UI (kafbat) on worker — JAR from GitHub; default version 1.4.2 (override: KAFKA_UI_VERSION); skip: SKIP_KAFKA_UI"
           STACK_HOST="${{ vars.STACK_HOST }}"
           if [ -z "$STACK_HOST" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
           KPORT="${{ vars.STACK_KAFKA_PORT }}"
           [ -z "$KPORT" ] && KPORT=9092
           KAFKA_UI_BOOTSTRAP="${STACK_HOST}:${KPORT}"
           echo "KAFKA_UI_BOOTSTRAP=${KAFKA_UI_BOOTSTRAP}"
+          case "${STACK_HOST}" in
+            localhost|127.0.0.1|::1)
+              echo "::warning::STACK_HOST is ${STACK_HOST} — broker is not on worker localhost; set vars.STACK_HOST to the stack host/IP."
+              ;;
+          esac
           WPORT="${{ env.WORKER_SSH_PORT }}"
           REM="${{ env.WORKER_SSH_TARGET }}"
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "env bash -c 'mkdir -p \"\$HOME/hh-process/stack\"'"
@@ -746,7 +750,7 @@ jobs:
             "env bash -c 'chmod +x \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\"'"
           ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" \
             "env bash -c 'export KAFKA_UI_PORT=\"${KAFKA_UI_PORT}\" KAFKA_UI_VERSION=\"${KAFKA_UI_VERSION}\" KAFKA_UI_BOOTSTRAP=\"${KAFKA_UI_BOOTSTRAP}\" && \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\" restart'"
-          echo "Healthcheck: Kafka UI TCP on worker 127.0.0.1:${KAFKA_UI_PORT} (max ~45s; first run downloads ~130MB JAR)..."
+          echo "Healthcheck: Kafka UI TCP on worker 127.0.0.1:${KAFKA_UI_PORT} (max ~45s; first run downloads JAR ~130MB)..."
           if ! ssh -p "$WPORT" -i ~/.ssh/id_worker -o ConnectTimeout=5 -o BatchMode=yes "$REM" \
             "env bash -c 'i=0; while [ \$i -lt 22 ]; do nc -z 127.0.0.1 ${KAFKA_UI_PORT} && exit 0; sleep 2; i=\$((i+1)); done; exit 1'"; then
             echo "::warning::Kafka UI: port ${KAFKA_UI_PORT} not open on worker — see ~/hh-process/kafka-ui.log"

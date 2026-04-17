@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Kafka UI (kafbat) — standalone JAR from GitHub Releases, no Docker.
-# Default bootstrap 127.0.0.1:9092 (broker on same host). Set KAFKA_UI_BOOTSTRAP to reach a remote broker (e.g. worker UI → stack:9092).
+# Актуальная версия по умолчанию: см. KAFKA_UI_VERSION (GitHub: kafbat/kafka-ui releases).
 # Env:
-#   KAFKA_UI_PORT — HTTP port (Spring SERVER_PORT)
-#   KAFKA_UI_VERSION — release tag without v (default 1.4.2)
-#   KAFKA_UI_BOOTSTRAP — Kafka bootstrap (default 127.0.0.1:9092)
-#   KAFKA_UI_JAVA_OPTS — JVM args (default caps heap so the JVM won't try to grab ~25%+ RAM as one heap)
-#   SKIP_KAFKA_UI — true/1 to skip
+#   KAFKA_UI_PORT — HTTP (Spring SERVER_PORT)
+#   KAFKA_UI_VERSION — без v (по умолчанию 1.4.2 = последний стабильный релиз)
+#   KAFKA_UI_BOOTSTRAP — Kafka bootstrap (на worker до брокера на stack: host:9092)
+#   KAFKA_UI_JAVA_OPTS — JVM (по умолчанию ограничение heap)
+#   SKIP_KAFKA_UI — true/1 пропуск
 set -euo pipefail
 
 INSTALL_ROOT="${INSTALL_ROOT:-$HOME/hh-process}"
@@ -19,35 +19,85 @@ DOWNLOAD_URL="https://github.com/kafbat/kafka-ui/releases/download/v${KAFKA_UI_V
 PID_FILE="${INSTALL_ROOT}/kafka-ui.pid"
 LOG_FILE="${INSTALL_ROOT}/kafka-ui.log"
 BOOTSTRAP="${KAFKA_UI_BOOTSTRAP:-127.0.0.1:9092}"
-# Without explicit -Xmx, some JVMs on shared hosts pick an enormous heap and fail with:
-# "Could not reserve enough space for XXXXk object heap"
 KAFKA_UI_JAVA_OPTS="${KAFKA_UI_JAVA_OPTS:--Xms64m -Xmx512m -XX:MaxMetaspaceSize=256m}"
+
+download_to_tmp() {
+  local url="$1" dest="$2"
+  local tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/kafkaui.XXXXXX" 2>/dev/null)" || tmp="${dest}.part"
+  rm -f "$tmp"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --connect-timeout 30 --retry 2 --retry-delay 2 -o "$tmp" "$url"
+  else
+    fetch -o "$tmp" "$url" 2>/dev/null || wget -q -T 30 -O "$tmp" "$url"
+  fi
+  mv -f "$tmp" "$dest"
+}
 
 ensure_jar() {
   mkdir -p "$UI_DIR"
-  if [ -f "$JAR_PATH" ]; then
+  if [ -f "$JAR_PATH" ] && [ -s "$JAR_PATH" ]; then
     echo "[kafka-ui] using existing ${JAR_PATH}"
     return 0
   fi
-  echo "[kafka-ui] downloading ${JAR_NAME} ..."
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL -o "$JAR_PATH" "$DOWNLOAD_URL"
-  else
-    wget -q -O "$JAR_PATH" "$DOWNLOAD_URL"
+  rm -f "$JAR_PATH"
+  if ! touch "$UI_DIR/.write_test" 2>/dev/null; then
+    echo "[kafka-ui] cannot write to ${UI_DIR}" >&2
+    df -h "$UI_DIR" 2>/dev/null || true
+    exit 1
   fi
+  rm -f "$UI_DIR/.write_test"
+
+  local tmp
+  tmp=""
+  if command -v mktemp >/dev/null 2>&1; then
+    tmp="$(mktemp "${TMPDIR:-/tmp}/kafkaui.XXXXXX" 2>/dev/null)" || tmp=""
+  fi
+  if [ -z "$tmp" ] || [ ! -w "$(dirname "$tmp")" ]; then
+    tmp="${UI_DIR}/.${JAR_NAME}.download"
+  fi
+
+  echo "[kafka-ui] downloading ${JAR_NAME} ..."
+  local attempt
+  for attempt in 1 2 3; do
+    rm -f "$tmp"
+    if command -v curl >/dev/null 2>&1; then
+      if curl -fsSL --connect-timeout 30 --retry 2 --retry-delay 2 -o "$tmp" "$DOWNLOAD_URL"; then
+        break
+      fi
+    else
+      if fetch -o "$tmp" "$DOWNLOAD_URL" 2>/dev/null || wget -q -T 30 -O "$tmp" "$DOWNLOAD_URL"; then
+        break
+      fi
+    fi
+    echo "[kafka-ui] download attempt ${attempt}/3 failed" >&2
+    if [ "$attempt" -eq 3 ]; then
+      df -h "${TMPDIR:-/tmp}" "$UI_DIR" 2>/dev/null || true
+      rm -f "$tmp"
+      exit 1
+    fi
+    sleep 4
+  done
+
+  if [ ! -s "$tmp" ]; then
+    echo "[kafka-ui] downloaded file is empty" >&2
+    rm -f "$tmp"
+    exit 1
+  fi
+  mv -f "$tmp" "$JAR_PATH"
+  echo "[kafka-ui] saved ${JAR_PATH} ($(wc -c < "$JAR_PATH" | tr -d ' ') bytes)"
 }
 
 start() {
   if [ "${SKIP_KAFKA_UI:-}" = "true" ] || [ "${SKIP_KAFKA_UI:-}" = "1" ]; then
-    echo "[kafka-ui] SKIP_KAFKA_UI is set — not starting."
+    echo "[kafka-ui] SKIP_KAFKA_UI — not starting."
     exit 0
   fi
   if ! command -v java >/dev/null 2>&1; then
-    echo "[kafka-ui] java not found — install JDK 17+ (same as Kafka)." >&2
+    echo "[kafka-ui] java not found — install JDK 17+" >&2
     exit 1
   fi
 
-  # Clean up legacy Docker deployment if present.
   if command -v docker >/dev/null 2>&1; then
     docker rm -f hh-process-kafka-ui 2>/dev/null || true
   fi
