@@ -305,8 +305,9 @@ jobs:
             exit 1
           fi
           echo "Kafka healthcheck: verifying broker API..."
+          # Apache Kafka tarball ships kafka-broker-api-versions.sh (Confluent Docker image exposes name without .sh).
           ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=10 "${RUSER}@${RHOST}" \
-            '$HOME/hh-process/kafka/bin/kafka-broker-api-versions --bootstrap-server 127.0.0.1:9092 >/dev/null' \
+            'bash "$HOME/hh-process/kafka/bin/kafka-broker-api-versions.sh" --bootstrap-server 127.0.0.1:9092 >/dev/null' \
             && echo "Kafka OK: kafka-broker-api-versions succeeded."
 
       - name: Create app.env from secrets/vars
