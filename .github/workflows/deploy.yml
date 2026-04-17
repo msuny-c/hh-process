@@ -288,6 +288,21 @@ jobs:
           ssh-keyscan -p "${{ env.SSH_PORT }}" -H "${{ env.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
           echo "SSH ready."
 
+      - name: Stop stack services on host before deploy
+        run: |
+          set -eu
+          RUSER="${{ env.SSH_USER }}"
+          RHOST="${{ env.SSH_HOST }}"
+          RPORT="${{ env.SSH_PORT }}"
+          echo "## Pre-deploy: stop API, Kafka UI, Kafka (frees RAM/ports; missing scripts are OK)"
+          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c 'set +e; \
+            if [ -f \"\$HOME/apps/blps/appctl.sh\" ]; then echo \"Stopping API...\"; bash \"\$HOME/apps/blps/appctl.sh\" stop; else echo \"No appctl — skip API\"; fi; \
+            if [ -f \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\" ]; then echo \"Stopping Kafka UI...\"; bash \"\$HOME/hh-process/stack/kafka-ui-ctl.sh\" stop; fi; \
+            if [ -f \"\$HOME/hh-process/stack/kafka-ctl.sh\" ]; then echo \"Stopping Kafka...\"; bash \"\$HOME/hh-process/stack/kafka-ctl.sh\" stop; fi; \
+            echo \"Pre-deploy stop done.\"'"
+          sleep 2
+
       # Native Kafka (KRaft) on the same host as the API — no Docker. Set vars.SKIP_NATIVE_STACK=true to skip.
       - name: Install and start Kafka (KRaft) on stack host
         if: ${{ vars.SKIP_NATIVE_STACK != 'true' }}
