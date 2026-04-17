@@ -625,7 +625,7 @@ jobs:
   # Screening worker: single JAR on a separate node from API/Kafka (vars WORKER_SSH_* and STACK_HOST).
   deploy-worker:
     needs: [build, deploy]
-    if: ${{ always() && !cancelled() && vars.WORKER_SSH_HOST != '' && needs.build.result == 'success' && needs.deploy.result == 'success' }}
+    if: ${{ always() && !cancelled() && vars.WORKER_SSH_HOST != '' && vars.WORKER_SSH_USER != '' && needs.build.result == 'success' && needs.deploy.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       JAR_NAME: ${{ needs.build.outputs.jar_name }}
@@ -666,7 +666,14 @@ jobs:
       - name: Prepare SSH
         run: |
           set -eu
-          echo "## Worker — SSH (${{ vars.WORKER_SSH_USER }}@${{ vars.WORKER_SSH_HOST }})"
+          RUSER="${{ vars.WORKER_SSH_USER }}"
+          RHOST="${{ vars.WORKER_SSH_HOST }}"
+          if [ -z "$RUSER" ] || [ -z "$RHOST" ]; then
+            echo "::error::Worker SSH: set WORKER_SSH_HOST and WORKER_SSH_USER."
+            exit 1
+          fi
+          echo "WORKER_SSH_TARGET=${RUSER}@${RHOST}" >> "$GITHUB_ENV"
+          echo "## Worker — SSH (${RUSER}@${RHOST})"
           mkdir -p ~/.ssh
           if [ -n "${{ env.WORKER_SSH_KEY }}" ]; then
             echo "${{ env.WORKER_SSH_KEY }}" > ~/.ssh/id_worker
@@ -676,35 +683,30 @@ jobs:
           chmod 600 ~/.ssh/id_worker
           WPORT="${{ vars.WORKER_SSH_PORT }}"
           [ -z "$WPORT" ] && WPORT=22
-          ssh-keyscan -p "$WPORT" -H "${{ vars.WORKER_SSH_HOST }}" >> ~/.ssh/known_hosts
+          echo "WORKER_SSH_PORT=$WPORT" >> "$GITHUB_ENV"
+          ssh-keyscan -p "$WPORT" -H "$RHOST" >> ~/.ssh/known_hosts
 
       - name: Upload bundle to worker
         run: |
           set -eu
           echo "## Worker — upload JAR + env + appctl"
-          APP_DIR="~/apps/blps"
-          WPORT="${{ vars.WORKER_SSH_PORT }}"
-          [ -z "$WPORT" ] && WPORT=22
-          ssh -p "$WPORT" -i ~/.ssh/id_worker \
-            "${{ vars.WORKER_SSH_USER }}@${{ vars.WORKER_SSH_HOST }}" \
-            "mkdir -p ${APP_DIR}"
-          scp -P "$WPORT" -i ~/.ssh/id_worker \
-            "artifact/${{ env.JAR_NAME }}" \
-            "${{ vars.WORKER_SSH_USER }}@${{ vars.WORKER_SSH_HOST }}:${APP_DIR}/app.jar"
-          scp -P "$WPORT" -i ~/.ssh/id_worker \
-            worker.env \
-            "${{ vars.WORKER_SSH_USER }}@${{ vars.WORKER_SSH_HOST }}:${APP_DIR}/app.env"
-          scp -P "$WPORT" -i ~/.ssh/id_worker \
-            infra/appctl.sh \
-            "${{ vars.WORKER_SSH_USER }}@${{ vars.WORKER_SSH_HOST }}:${APP_DIR}/appctl.sh"
-          ssh -p "$WPORT" -i ~/.ssh/id_worker \
-            "${{ vars.WORKER_SSH_USER }}@${{ vars.WORKER_SSH_HOST }}" \
-            "chmod +x ${APP_DIR}/appctl.sh"
+          test -n "${{ env.WORKER_SSH_TARGET }}"
+          test -n "${{ env.JAR_NAME }}"
+          RJAR="artifact/${{ env.JAR_NAME }}"
+          test -f "$RJAR" || { echo "::error::Missing $RJAR (artifact download / JAR_NAME)"; exit 1; }
+          WPORT="${{ env.WORKER_SSH_PORT }}"
+          REM="${{ env.WORKER_SSH_TARGET }}"
+          REMOTE_DIR='~/apps/blps'
+          # Single-line ssh/scp avoids broken line continuations; explicit target fixes empty WORKER_SSH_USER → "ssh" usage dump.
+          ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "env bash -c 'mkdir -p \"\$HOME/apps/blps\"'"
+          scp -P "$WPORT" -i ~/.ssh/id_worker "$RJAR" "${REM}:${REMOTE_DIR}/app.jar"
+          scp -P "$WPORT" -i ~/.ssh/id_worker worker.env "${REM}:${REMOTE_DIR}/app.env"
+          scp -P "$WPORT" -i ~/.ssh/id_worker infra/appctl.sh "${REM}:${REMOTE_DIR}/appctl.sh"
+          ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "env bash -c 'chmod +x \"\$HOME/apps/blps/appctl.sh\"'"
 
       - name: Restart worker
         run: |
-          WPORT="${{ vars.WORKER_SSH_PORT }}"
-          [ -z "$WPORT" ] && WPORT=22
-          ssh -p "$WPORT" -i ~/.ssh/id_worker \
-            "${{ vars.WORKER_SSH_USER }}@${{ vars.WORKER_SSH_HOST }}" \
-            "cd \$HOME/apps/blps && ./appctl.sh restart"
+          set -eu
+          WPORT="${{ env.WORKER_SSH_PORT }}"
+          REM="${{ env.WORKER_SSH_TARGET }}"
+          ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes "$REM" "env bash -c 'cd \"\$HOME/apps/blps\" && ./appctl.sh restart'"
