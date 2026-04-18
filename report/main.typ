@@ -69,11 +69,8 @@
 == Диаграмма развёртывания
 
 #figure(
-  caption: [Deployment Diagram: серверы `helios-munir` (api) и `helios-grisha` (worker), одна PostgreSQL, Kafka и JCA → HTTP к `external-eis` (PlantUML — `diagrams/deployment.puml`).],
   image("diagrams/deployment_eis.svg", width: 100%),
 )
-
-На production-хосте (GitHub Actions) дополнительно выкладывается JAR `external-eis` и скрипт `eisctl.sh` в каталог `~/apps/blps-eis`; API получает `APP_EIS_REMOTE_BASE_URL=http://127.0.0.1:8090`.
 
 == Диаграмма пакетов
 
@@ -117,18 +114,6 @@
   ),
 )
 
-*Ответ при создании заявки* (фрагмент JSON):
-
-#align(center, block(width: 100%)[
-  #raw(block: true, lang: "json",
-    "{\n"
-    + "  \"application_id\": \"…\",\n"
-    + "  \"status\": \"APPLICATION_SUBMITTED\",\n"
-    + "  \"message\": \"Application submitted\"\n"
-    + "}\n"
-  )
-])
-
 == WebSocket (STOMP)
 
 - Точка подключения: `/ws` (с поддержкой SockJS и без).
@@ -160,16 +145,3 @@
 - `InterviewExportScheduler.scheduleInterviewExport()` — выбор интервью и запуск экспорта в EIS (через `InterviewExportRequestService` и JCA после commit).
 
 Обе задачи реализованы через Spring `@Scheduled`.
-
-= Выводы
-
-В ходе ЛР3 исходный сценарий ЛР2 был доработан в соответствии с требованиями: асинхронность на Kafka, независимые узлы `api` и `worker` (в отчёте — серверы `helios-munir` и `helios-grisha`), идемпотентность потребителей, периодические задачи, транзакции JTA/Narayana в одной PostgreSQL и интеграция с корпоративной системой через JCA.
-
-Основные результаты:
-
-- *Screening* вынесен в асинхронную цепочку: `application.submitted` → worker (расчёт) → `application.screened` → api (фиксация в БД и уведомления).
-- *Уведомления* доставляются с узла `api` напрямую в БД и по WebSocket, без отдельного Kafka-топика.
-- *Экспорт в EIS* выполняется с узла `api` через JCA; при развёртывании добавлен отдельный HTTP-процесс `external-eis`, с которым адаптер общается по REST.
-- Сохранена *модель безопасности* HTTP Basic и XML-пользователей; публичные интерфейсы задокументированы в отчёте и в OpenAPI (Swagger).
-
-Практическая значимость работы — демонстрация сочетания синхронного REST API, асинхронной шины событий, транзакционной согласованности данных в нескольких ресурсах и стандартизированного подхода к интеграции с внешней системой (JCA + отдельный контур EIS).
