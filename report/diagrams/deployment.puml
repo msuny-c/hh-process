@@ -1,0 +1,38 @@
+@startuml deployment_eis
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam shadowing false
+
+node "Клиент" as c {
+  artifact "Браузер / Postman" as browser
+}
+
+node "helios-munir" as munir #E3F2FD {
+  component "Spring Boot\nAPP_ROLE=api\n(app-api)" as api
+}
+
+node "helios-grisha" as grisha #E8F5E9 {
+  component "Spring Boot\nAPP_ROLE=worker\n(app-worker)" as worker
+}
+
+node "Общая инфраструктура" as infra #FFFDE7 {
+  database "PostgreSQL\n(одна БД)" as pgmain
+  queue "Kafka\n(+ ZooKeeper)" as kafka
+}
+
+node "Внешняя EIS" as eis #FFF8E1 {
+  component "external-eis\nHTTP :8090" as exteis
+}
+
+browser -down-> api : HTTP\n:8080
+browser ..> api : WebSocket\n/ws
+
+api --> pgmain : JDBC / JTA\n(XA datasource)
+worker --> pgmain : JDBC / JTA\n(тот же кластер БД)
+
+api --> kafka : producer +\nconsumer\n(application.screened)
+worker --> kafka : consumer\n(application.submitted)\nproducer\n(application.screened)
+
+api -right-> exteis : JCA → HTTP\n(APP_EIS_REMOTE_BASE_URL)
+
+@enduml

@@ -16,235 +16,160 @@
 #titlepage(
   lab_no: 3,
   subject: "бизнес-логика программных систем",
-  variant: "3212",
+  variant: "111",
   student: "Григорий Садовой\nБайрамгулов Мунир",
   teacher: "Кривоносов Егор Дмитриевич",
 )
 
 = Условие задания
 
-Лабораторная работа №3 является развитием проекта ЛР2 по процессу обработки откликов на вакансии hh.ru.
+Доработать приложение из лабораторной работы \#2, реализовав в нём асинхронное выполнение задач с распределением бизнес-логики между несколькими вычислительными узлами и выполнением периодических операций с использованием планировщика задач, а также интеграцию с внешней информационной системой.
 
-В доработанной версии необходимо было реализовать:
+#v(1em)
 
-- асинхронную обработку через Kafka и ZooKeeper;
-- обработку сообщений минимум на двух независимых узлах;
-- consumers на Spring `@KafkaListener`;
-- отправку сообщений через Kafka Producer API;
-- периодические задачи через `@Scheduled`;
-- интеграцию с внешней EIS через JCA;
-- распределённую транзакцию минимум между двумя XA-ресурсами.
+#text(weight: "bold")[Требования к реализации асинхронной обработки:]
 
-В качестве бизнес-процесса сохранён процесс обработки отклика на вакансию с последующим screening, приглашением на интервью, работой с расписанием рекрутера и экспортом интервью во внешнюю корпоративную систему календаря.
++ Перед выполнением работы необходимо согласовать с преподавателем набор прецедентов, в реализации которых целесообразно использование асинхронного распределённого выполнения задач. Если таких прецедентов использования в имеющейся бизнес-процесса нет, нужно согласовать реализацию новых прецедентов, доработав таким образом модель бизнес-процесса из лабораторной работы \#1.
++ Асинхронное выполнение задач должно использовать модель доставки "подписка".
++ В качестве провайдера сервиса асинхронного обмена сообщениями необходимо использовать сервис подписки на базе Apache Kafka + ZooKeeper.
++ Для отправки сообщений необходимо использовать Kafka Producer API.
++ Для получения сообщений необходимо использовать клиент Kafka на базе Spring Boot.
 
-= Модель процесса
+#v(1em)
+
+#text(weight: "bold")[Требования к реализации распределённой обработки:]
+
++ Обработка сообщений должна осуществляться на двух независимых друг от друга узлах сервера приложений.
++ Если логика сценария распределённой обработки предполагает транзакционность выполняемых операций, они должны быть включены в состав распределённой транзакции.
+
+#v(1em)
+
+#text(weight: "bold")[Требования к реализации запуска периодических задач по расписанию:]
+
++ Согласовать с преподавателем прецедент или прецеденты, в рамках которых выглядит целесообразным использовать планировщик задач. Если такие прецеденты отсутствуют -- согласовать с преподавателем новые и добавить их в модель автоматизируемого бизнес-процесса.
++ Реализовать утверждённые прецеденты с использованием планировщика задач Spring (\@Scheduled).
+
+#v(1em)
+
+#text(weight: "bold")[Требования к интеграции с внешней Корпоративной Информационной Системой (EIS):]
+
++ Корпоративная Информационная Система, с которой производится интеграция, а также её функциональные возможности выбираются на усмотрение преподавателя и согласуются с ним.
++ Взаимодействие с внешней Корпоративной Информационной Системой должно быть реализовано с помощью технологии JCA (Jakarta Connectors).
+
+= Модель потока управления и бизнес-процесса
 
 #image("HH.ru.png")
 
-В ЛР3 исходный процесс был расширен следующими шагами:
+== Дорожки ответственности
 
-1. кандидат подаёт отклик;
-2. API сохраняет заявку со статусом `SCREENING_IN_PROGRESS`;
-3. после commit публикуется Kafka-событие `application.submitted`;
-4. один из worker-узлов выполняет screening без записи результата в БД и публикует `application.screened`;
-5. узел `api` потребляет `application.screened`, сохраняет `ScreeningResultEntity`, обновляет статус заявки и при необходимости создаёт уведомления (без отдельного Kafka-топика для уведомлений);
-6. timeout scheduler закрывает просроченные приглашения;
-7. export scheduler выбирает интервью и публикует `interview.export.requested`;
-8. `eis-worker` экспортирует интервью во внешнюю EIS через JCA.
+#figure(
+  image("diagrams/activity_screening.svg", width: 100%),
+)
 
-= Архитектура развёртывания
+== Диаграмма развёртывания
 
-Система разворачивается в Docker Compose и состоит из следующих контейнеров:
+#figure(
+  caption: [Deployment Diagram: серверы `helios-munir` (api) и `helios-grisha` (worker), одна PostgreSQL, Kafka и JCA → HTTP к `external-eis` (PlantUML — `diagrams/deployment.puml`).],
+  image("diagrams/deployment_eis.svg", width: 100%),
+)
 
-- `postgres-main` — основная БД приложения;
-- `postgres-schedule` — отдельная БД расписания;
-- `zookeeper`;
-- `kafka`;
-- `app-api`;
-- `app-worker`;
-- `app-eis-worker`;
-- внешняя EIS календаря собеседований, представленная учебным JCA adapter'ом.
+На production-хосте (GitHub Actions) дополнительно выкладывается JAR `external-eis` и скрипт `eisctl.sh` в каталог `~/apps/blps-eis`; API получает `APP_EIS_REMOTE_BASE_URL=http://127.0.0.1:8090`.
 
-Один и тот же `jar` запускается в разных ролях через `APP_ROLE`.
-Для каждого инстанса приложения задан уникальный `NARAYANA_NODE_IDENTIFIER`, что необходимо для корректной работы Narayana при многовузловом запуске.
+== Диаграмма пакетов
 
-= Пакетная структура
+#figure(
+  image("diagrams/packages_hhprocess.svg", width: 100%),
+)
 
-К существующим пакетам ЛР2 были добавлены:
+= Спецификация публичных интерфейсов (REST и WebSocket)
 
-- `ru.itmo.hhprocess.messaging.config`
-- `ru.itmo.hhprocess.messaging.dto`
-- `ru.itmo.hhprocess.messaging.producer`
-- `ru.itmo.hhprocess.messaging.consumer`
-- `ru.itmo.hhprocess.integration.eis`
-- `ru.itmo.hhprocess.integration.eis.jca`
-- `ru.itmo.hhprocess.scheduler`
-- `ru.itmo.hhprocess.schedule`
-- `ru.itmo.hhprocess.tx`
+== REST API
 
-Это позволило развести API-логику, consumer-side обработку, EIS integration и отдельный schedule-модуль на второй БД.
+#figure(
+  caption: [Публичные HTTP-интерфейсы приложения `hh-process` (роль `api`)],
+  table(
+    columns: (0.7fr, 2.2fr, 2.6fr),
+    inset: 5pt,
+    align: (left, left, left),
+    stroke: 0.4pt + gray,
+    table.header([*Метод*], [*Путь*], [*Назначение*]),
+    [POST], [`/api/v1/auth/register/candidate`], [Регистрация кандидата (доступ настраивается в `SecurityConfig`).],
+    [GET], [`/api/v1/me`], [Профиль текущего пользователя.],
+    [POST], [`/api/v1/candidates/vacancies/\{vacancyId\}`], [Подать заявку на вакансию; ответ: `APPLICATION_SUBMITTED`.],
+    [GET], [`/api/v1/candidates/applications`], [Список своих заявок.],
+    [GET], [`/api/v1/candidates/applications/\{applicationId\}`], [Заявка по id.],
+    [POST], [`/api/v1/candidates/applications/\{applicationId\}/invitation-response`], [Ответ на приглашение.],
+    [POST], [`/api/v1/recruiters/vacancies`], [Создать вакансию.],
+    [GET], [`/api/v1/recruiters/vacancies`], [Свои вакансии.],
+    [PATCH], [`/api/v1/recruiters/vacancies/\{vacancyId\}/status`], [Изменить статус вакансии.],
+    [POST], [`/api/v1/recruiters/vacancies/\{vacancyId\}/close`], [Закрыть вакансию (составная логика).],
+    [GET], [`/api/v1/recruiters/applications`], [Заявки по вакансиям рекрутера (фильтры query).],
+    [GET], [`/api/v1/recruiters/applications/\{applicationId\}`], [Заявка рекрутера по id.],
+    [POST], [`/api/v1/recruiters/applications/\{applicationId\}/reject`], [Отклонить заявку.],
+    [POST], [`/api/v1/recruiters/applications/\{applicationId\}/invite`], [Пригласить на интервью (JTA).],
+    [POST], [`/api/v1/recruiters/interviews/\{interviewId\}/cancel`], [Отменить интервью.],
+    [GET], [`/api/v1/recruiters/schedule`], [Недельное расписание рекрутера (`weekOffset`).],
+    [GET], [`/api/v1/notifications`], [Список уведомлений пользователя.],
+    [PATCH], [`/api/v1/notifications/\{notificationId\}/read`], [Отметить прочитанным.],
+    [POST], [`/api/v1/admin/jobs/close-expired-invitations`], [Принудительно закрыть просроченные приглашения.],
+    [POST], [`/api/v1/admin/jobs/export-interviews`], [Запуск экспорта интервью в EIS (JCA).],
+    [POST], [`/api/v1/admin/debug/schedule-failure/\{enabled\}`], [Debug: ошибка резерва слота (таблица `recruiter_schedule_slots`).],
+  ),
+)
 
-= Основные use cases
+*Ответ при создании заявки* (фрагмент JSON):
 
-== Асинхронный screening
+#align(center, block(width: 100%)[
+  #raw(block: true, lang: "json",
+    "{\n"
+    + "  \"application_id\": \"…\",\n"
+    + "  \"status\": \"APPLICATION_SUBMITTED\",\n"
+    + "  \"message\": \"Application submitted\"\n"
+    + "}\n"
+  )
+])
 
-- Актор: кандидат.
-- Вход: `POST /api/v1/candidates/vacancies/{vacancyId}`.
-- Результат: создаётся заявка со статусом `SCREENING_IN_PROGRESS`.
-- После commit: публикуется `application.submitted`.
-- Worker получает событие, вычисляет результат screening и публикует `application.screened`.
-- Узел `api` применяет событие к БД и переводит заявку в `ON_RECRUITER_REVIEW` либо `SCREENING_FAILED`.
+== WebSocket (STOMP)
 
-== Уведомления
+- Точка подключения: `/ws` (с поддержкой SockJS и без).
+- Брокер: префиксы `/topic`, `/queue`; приложение — `/app`; пользовательские каналы — `/user`.
+- Уведомления доставляются на `/user/queue/notifications` (см. `WebSocketNotificationService`).
 
-- После commit транзакции вызывается `NotificationAfterCommitService`, который создаёт запись в `notifications` (на узле `api` дополнительно срабатывает WebSocket push).
+== Внешний сервис `external-eis`
 
-== Автоматическое закрытие просроченных приглашений
-
-- Используется `TimeoutService` и `TimeoutBatchProcessor`.
-- Задача запускается через `@Scheduled`.
-- Scheduler включён только на узле `api`, что исключает дублирование обработки.
-
-== Плановый экспорт интервью во внешнюю EIS
-
-- `InterviewExportScheduler` периодически ищет назначенные интервью на ближайший диапазон.
-- Для каждого интервью публикуется `interview.export.requested`.
-- `eis-worker` экспортирует интервью через JCA-клиент `CalendarEisClient`.
-
-== Распределённая транзакция приглашения на интервью
-
-Сценарий `invite(...)` был выбран как основной distributed transaction use case.
-
-В рамках одной JTA/XA-транзакции выполняются:
-
-1. проверка бизнес-условий;
-2. перевод заявки в `INVITED`;
-3. создание `InterviewEntity` в main DB;
-4. резервирование слота в schedule DB;
-5. запись history;
-6. создание уведомлений после commit (без Kafka-топика для уведомлений).
-
-Если шаг резервирования слота завершается ошибкой, Narayana откатывает изменения в обеих БД.
-
-= Асинхронное взаимодействие через Kafka
-
-В приложении введены события:
-
-- `ApplicationSubmittedEvent`
-- `ApplicationScreenedEvent`
-- `InterviewExportRequestedEvent`
-
-Отправка сообщений реализована через чистый Kafka Producer API (`Producer<String, String>` / `KafkaProducer<String, String>`), а не через `KafkaTemplate`.
-
-Для сохранения правила "публиковать событие только после успешного commit" введён helper `AfterCommitEventPublisher`, использующий `TransactionSynchronizationManager.registerSynchronization(...)`.
-
-Получение сообщений реализовано через Spring `@KafkaListener`.
-
-= Идемпотентность Kafka
-
-Для защиты от повторной доставки сообщений создана таблица `processed_kafka_events`.
-
-Сохраняются:
-
-- `event_id`
-- `topic`
-- `processed_at`
-- `consumer_name`
-
-Перед обработкой consumer проверяет, не было ли событие уже обработано.
-После успешной обработки создаётся запись в `processed_kafka_events`.
-Поле `consumer_name` позволяет показать, что события обрабатывались разными worker-узлами.
-
-= Вторая БД и XA
-
-В проект добавлена отдельная schedule DB.
-
-В main DB остаются:
-
-- `users`
-- `vacancies`
-- `applications`
-- `interviews`
-- `notifications`
-- `application_status_history`
-- `screening_results`
-- `invitation_responses`
-- `processed_kafka_events`
-- `interview_export_log`
-
-В schedule DB вынесена таблица:
-
-- `recruiter_schedule_slots`
-
-Для второй БД создан отдельный XA datasource и отдельная persistence unit.
-Таким образом, распределённая транзакция выполняется между двумя XA-ресурсами PostgreSQL и координируется Narayana с использованием prepared transactions.
-
-= JCA интеграция с внешней EIS
-
-Для демонстрации интеграции реализован учебный JCA resource adapter "Корпоративный календарь собеседований".
-
-Реализованные классы:
-
-- `CalendarManagedConnectionFactory`
-- `CalendarManagedConnection`
-- `CalendarConnectionFactory`
-- `CalendarConnection`
-- `CalendarInteraction`
-- `CalendarInteractionSpec`
-
-Через `CalendarEisClient` доступны операции:
-
-- `createInterviewRecord(...)`
-- `cancelInterviewRecord(...)`
-- `getInterviewRecord(...)`
-
-Факт экспорта фиксируется в таблице `interview_export_log` со статусами `PENDING`, `EXPORTED`, `FAILED`, `CANCELLED`.
-
-= REST API
-
-Ключевое изменение контракта по сравнению с ЛР2 относится к подаче отклика.
-
-Теперь `POST /api/v1/candidates/vacancies/{vacancyId}` возвращает не финальный результат screening; для кандидата статус формулируется как заявка подана:
-
-```json
-{
-  "application_id": "...",
-  "status": "APPLICATION_SUBMITTED",
-  "message": "Application submitted"
-}
-```
-
-Остальные endpoint'ы сохранены, включая:
-
-- Basic Auth;
-- API кандидата;
-- API рекрутера;
-- admin endpoint'ы;
-- расписание рекрутера;
-- уведомления.
+#figure(
+  caption: [HTTP API процесса `external-eis`],
+  table(
+    columns: (0.8fr, 2.4fr, 2.3fr),
+    inset: 5pt,
+    align: left,
+    stroke: 0.4pt + gray,
+    table.header([*Метод*], [*Путь*], [*Назначение*]),
+    [POST], [`/api/v1/calendar/entries`], [Создать запись календаря (экспорт интервью).],
+    [POST], [`/api/v1/calendar/entries/\{interviewId\}/cancel`], [Отмена записи.],
+    [GET], [`/api/v1/calendar/entries/\{interviewId\}`], [Получить запись.],
+    [GET], [`/actuator/health`], [Health (для оркестрации).],
+  ),
+)
 
 = Периодические задачи
 
-В системе присутствуют два scheduler use case:
+В системе присутствуют два scheduler use case на узле `api`:
 
 - `TimeoutService.closeExpiredInvitations()` — закрытие просроченных приглашений;
-- `InterviewExportScheduler.scheduleInterviewExport()` — постановка интервью в очередь на экспорт.
+- `InterviewExportScheduler.scheduleInterviewExport()` — выбор интервью и запуск экспорта в EIS (через `InterviewExportRequestService` и JCA после commit).
 
 Обе задачи реализованы через Spring `@Scheduled`.
 
 = Выводы
 
-В ходе ЛР3 проект был существенно расширен по сравнению с ЛР2.
+В ходе ЛР3 исходный сценарий ЛР2 был доработан в соответствии с требованиями: асинхронность на Kafka, независимые узлы `api` и `worker` (в отчёте — серверы `helios-munir` и `helios-grisha`), идемпотентность потребителей, периодические задачи, транзакции JTA/Narayana в одной PostgreSQL и интеграция с корпоративной системой через JCA.
 
-Результаты работы:
+Основные результаты:
 
-- синхронный screening был переведён на асинхронную Kafka-обработку;
-- обеспечена многовузловая обработка сообщений двумя независимыми worker-узлами;
-- внедрена идемпотентность Kafka consumers;
-- сохранён и расширен механизм Narayana JTA/XA;
-- реализована распределённая транзакция между двумя PostgreSQL БД;
-- добавлены scheduler use cases;
-- выполнена интеграция с внешней EIS через JCA;
-- актуализированы инфраструктура и документация проекта.
+- *Screening* вынесен в асинхронную цепочку: `application.submitted` → worker (расчёт) → `application.screened` → api (фиксация в БД и уведомления).
+- *Уведомления* доставляются с узла `api` напрямую в БД и по WebSocket, без отдельного Kafka-топика.
+- *Экспорт в EIS* выполняется с узла `api` через JCA; при развёртывании добавлен отдельный HTTP-процесс `external-eis`, с которым адаптер общается по REST.
+- Сохранена *модель безопасности* HTTP Basic и XML-пользователей; публичные интерфейсы задокументированы в отчёте и в OpenAPI (Swagger).
 
-Таким образом, система теперь демонстрирует асинхронность, распределённость, отказоустойчивость обработки сообщений и интеграцию с внешней корпоративной системой при сохранении существующей модели безопасности на HTTP Basic + XML users.
+Практическая значимость работы — демонстрация сочетания синхронного REST API, асинхронной шины событий, транзакционной согласованности данных в нескольких ресурсах и стандартизированного подхода к интеграции с внешней системой (JCA + отдельный контур EIS).

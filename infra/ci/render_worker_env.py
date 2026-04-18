@@ -81,7 +81,6 @@ def main() -> None:
     merged["NARAYANA_NODE_IDENTIFIER"] = narayana
     merged["KAFKA_GROUP_ID"] = "hh-process-worker"
     merged["APP_SCREENING_ENABLED"] = "true"
-    merged["APP_EIS_ENABLED"] = "false"
 
     # Не наследовать SERVER_PORT от общих vars (там порт API, тот же 8080) — у воркера свой порт.
     merged.pop("SERVER_PORT", None)

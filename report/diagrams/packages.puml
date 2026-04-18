@@ -1,0 +1,35 @@
+@startuml packages_hhprocess
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam packageStyle rectangle
+
+package "ru.itmo.hhprocess" {
+  package "controller" as ctrl <<REST>>
+  package "service" as svc
+  package "repository" as repo
+  package "entity" as ent
+  package "messaging" as msg {
+    package "producer" as mprod
+    package "consumer" as mcons
+    package "dto" as mdto
+  }
+  package "integration.eis" as inteis
+  package "integration.eis.jca" as jca
+  package "scheduler" as sch
+  package "schedule" as schedmod
+  package "tx" as tx
+  package "config" as cfg
+  package "security" as sec
+}
+
+inteis ..> jca : uses
+mcons ..> svc
+mprod ..> svc
+
+package "ru.itmo.externaleis" as extroot <<отдельный модуль>> {
+  package "web" as extweb <<REST mock EIS>>
+}
+
+jca ..> extweb : HTTP при\nAPP_EIS_REMOTE_BASE_URL
+
+@enduml

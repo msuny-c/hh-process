@@ -1,0 +1,38 @@
+@startuml classes_jca
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+class CalendarEisClient {
+  +createInterviewRecord(interview)
+  +cancelInterviewRecord(id)
+  +getInterviewRecord(id)
+}
+
+interface ConnectionFactory
+class CalendarConnectionFactory
+class CalendarConnection
+class CalendarInteraction
+class CalendarInteractionSpec
+class CalendarMappedRecord
+class CalendarManagedConnectionFactory {
+  +execute(spec, input)
+}
+class CalendarManagedConnection
+
+CalendarEisClient o-- CalendarConnectionFactory : uses
+CalendarConnectionFactory ..|> ConnectionFactory
+CalendarConnectionFactory ..> CalendarManagedConnection : creates MCF
+CalendarConnectionFactory ..> CalendarManagedConnection : creates
+CalendarManagedConnection ..> CalendarManagedConnectionFactory
+CalendarConnection ..> CalendarManagedConnection
+CalendarConnection ..> CalendarInteraction : createInteraction()
+CalendarInteraction ..> CalendarInteractionSpec
+CalendarInteraction ..> CalendarMappedRecord
+
+note bottom of CalendarManagedConnectionFactory
+  При заданном remote URL:
+  CREATE/CANCEL/GET → HTTP
+  к external-eis
+end note
+
+@enduml

@@ -1,0 +1,35 @@
+@startuml activity_screening
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+|Кандидат|
+start
+:POST отклик (REST);
+
+|app-api|
+:Сохранить заявку\nSCREENING_IN_PROGRESS;
+:После commit →\nKafka application.submitted;
+
+|Kafka|
+:Топик application.submitted;
+
+|app-worker|
+:Событие получено;
+:computeScreening();
+:Kafka application.screened\n(payload);
+
+|Kafka|
+:Топик application.screened;
+
+|app-api|
+:ApplicationScreenedConsumer;
+:Сохранить ScreeningResultEntity;
+:Обновить статус заявки;
+:Уведомления после commit;
+
+|Кандидат/рекрутер|
+:Опрос GET / оповещение WS;
+
+stop
+
+@enduml

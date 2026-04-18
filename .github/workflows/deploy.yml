@@ -223,6 +223,9 @@ jobs:
           echo "## Maven package (skip unit tests)"
           mvn -B clean package -DskipTests
 
+      - name: Build external EIS JAR
+        run: mvn -B package -f external-eis/pom.xml -DskipTests
+
       - name: Detect JAR name
         id: vars
         run: |
@@ -235,6 +238,12 @@ jobs:
         with:
           name: jar
           path: target/${{ steps.vars.outputs.jar_name }}
+
+      - name: Upload external EIS artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: external-eis-jar
+          path: external-eis/target/external-eis-0.0.1-SNAPSHOT.jar
 
   deploy:
     needs: build
@@ -256,6 +265,7 @@ jobs:
         with:
           sparse-checkout: |
             infra/appctl.sh
+            infra/eisctl.sh
             infra/ci/render_worker_env.py
             infra/stack/install-kafka-kraft.sh
             infra/stack/kafka-ctl.sh
@@ -277,6 +287,12 @@ jobs:
           name: jar
           path: artifact
 
+      - name: Download external EIS artifact
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: external-eis-jar
+          path: external-eis-artifact
+
       - name: Prepare SSH
         run: |
           set -eu
@@ -297,6 +313,7 @@ jobs:
           ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
             "env bash -c 'set +e; \
             if [ -f \"\$HOME/apps/blps/appctl.sh\" ]; then echo \"Stopping API...\"; bash \"\$HOME/apps/blps/appctl.sh\" stop; else echo \"No appctl — skip API\"; fi; \
+            if [ -f \"\$HOME/apps/blps-eis/eisctl.sh\" ]; then echo \"Stopping external EIS...\"; bash \"\$HOME/apps/blps-eis/eisctl.sh\" stop; else echo \"No eisctl — skip EIS\"; fi; \
             if [ -f \"\$HOME/hh-process/stack/kafka-ctl.sh\" ]; then echo \"Stopping Kafka...\"; bash \"\$HOME/hh-process/stack/kafka-ctl.sh\" stop; fi; \
             echo \"Pre-deploy stop done.\"'"
           sleep 2
@@ -386,6 +403,15 @@ jobs:
           echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092" >> app.env
           echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092"
 
+      - name: Pin EIS URL for API (localhost broker on stack host)
+        run: |
+          set -eu
+          echo "## APP_EIS_REMOTE_BASE_URL → external EIS on same host"
+          grep -v '^APP_EIS_REMOTE_BASE_URL=' app.env > app.env.tmp || cp app.env app.env.tmp
+          mv app.env.tmp app.env
+          echo "APP_EIS_REMOTE_BASE_URL=http://127.0.0.1:8090" >> app.env
+          echo "APP_EIS_REMOTE_BASE_URL=http://127.0.0.1:8090"
+
       - name: Prepare VPS SSH for DB tunnel
         if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
         run: |
@@ -429,7 +455,25 @@ jobs:
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "chmod +x ${APP_DIR}/appctl.sh"
-          echo "Upload done."
+          echo "Upload main app done."
+
+          EIS_DIR="~/apps/blps-eis"
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
+            "mkdir -p ${EIS_DIR}"
+
+          scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+            "external-eis-artifact/external-eis-0.0.1-SNAPSHOT.jar" \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${EIS_DIR}/eis.jar"
+
+          scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+            infra/eisctl.sh \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${EIS_DIR}/eisctl.sh"
+
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
+            "chmod +x ${EIS_DIR}/eisctl.sh"
+          echo "Upload external EIS done."
 
       - name: Ensure DB reverse tunnel on helios
         if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
@@ -485,7 +529,10 @@ jobs:
       - name: Restart service on server
         run: |
           set -eu
-          echo "## Restart Spring Boot (appctl.sh restart)"
+          echo "## Restart external EIS then Spring Boot"
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
+            "cd \$HOME/apps/blps-eis && ./eisctl.sh restart"
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "cd \$HOME/apps/blps && ./appctl.sh restart"

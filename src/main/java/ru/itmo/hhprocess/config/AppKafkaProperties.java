@@ -16,6 +16,5 @@ public class AppKafkaProperties {
     public static class Topics {
         private String applicationSubmitted;
         private String applicationScreened;
-        private String interviewExportRequested;
     }
 }

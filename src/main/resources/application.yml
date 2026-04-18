@@ -72,10 +72,10 @@ app:
     topics:
       application-submitted: ${APP_TOPIC_APPLICATION_SUBMITTED:application.submitted}
       application-screened: ${APP_TOPIC_APPLICATION_SCREENED:application.screened}
-      interview-export-requested: ${APP_TOPIC_INTERVIEW_EXPORT_REQUESTED:interview.export.requested}
+  eis:
+    remote-base-url: ${APP_EIS_REMOTE_BASE_URL:}
   workers:
     screening-enabled: ${APP_SCREENING_ENABLED:true}
-    eis-enabled: ${APP_EIS_ENABLED:false}
   export:
     cron: ${APP_EXPORT_CRON:0 0 6 * * *}
     lookahead-hours: ${APP_EXPORT_LOOKAHEAD_HOURS:24}

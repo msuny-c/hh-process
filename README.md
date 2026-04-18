@@ -11,15 +11,14 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 - Идемпотентность Kafka consumers через таблицу `processed_kafka_events`.
 - Уведомления: запись в БД и WebSocket push после commit транзакции (без отдельного Kafka-топика).
 - `@Scheduled` для timeout-закрытия приглашений и планового экспорта интервью в EIS.
-- Учебная JCA-интеграция с внешней EIS календаря собеседований (роль `eis-worker`).
+- Отдельный HTTP-сервис **`external-eis/`** (внешняя EIS); **`api`** вызывает его через JCA-адаптер (`CalendarManagedConnectionFactory`), без Kafka.
 
 ## Архитектура
 
 Один и тот же `jar` запускается в разных ролях через `APP_ROLE`:
 
-- `api`: REST, WebSocket, Swagger UI, schedulers (timeout, export), Kafka consumer на `application.screened` (фиксация результата screening в БД) и producers по мере сценариев.
+- `api`: REST, WebSocket, Swagger UI, schedulers (timeout, **прямой экспорт в EIS через JCA** после commit), Kafka consumer на `application.screened`.
 - `worker`: Kafka listener на `application.submitted` (только расчёт screening и публикация `application.screened`, без записи результата в БД); `APP_SCREENING_ENABLED=true`.
-- `eis-worker`: Kafka listener на `interview.export.requested`, JCA-клиент и экспорт в EIS; `APP_EIS_ENABLED=true`.
 
 В `docker-compose.yml` поднимается:
 
@@ -27,13 +26,13 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 - `zookeeper`, `kafka` — брокер (внутри сети `kafka:9092`, с хоста `localhost:29092`).
 - `kafka-topics-init` — однократное создание топиков.
 - `kafka-ui` — веб-интерфейс к Kafka (см. порты ниже).
-- `app-api`, `app-worker`, `app-eis-worker` — три контейнера приложения с разными `APP_ROLE` и флагами воркеров.
+- **`external-eis`** — внешний учебный EIS (HTTP, порт 8090).
+- `app-api`, `app-worker` — два контейнера основного приложения с разными `APP_ROLE`.
 
 Топики Kafka (имена по умолчанию, переопределяются через `APP_TOPIC_*`):
 
 - `application.submitted` — отклик принят, нужен screening.
 - `application.screened` — результат screening (payload с score, matched skills и т.д.); публикует **worker**, в БД применяет **api**.
-- `interview.export.requested` — выгрузка интервью во внешнюю EIS.
 
 ## Бизнес-сценарии ЛР3
 
@@ -59,18 +58,13 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 ### Scheduler use cases
 
 - `TimeoutService` закрывает просроченные приглашения на роли `api`.
-- `InterviewExportScheduler` по cron ставит интервью в очередь на экспорт в EIS (топик `interview.export.requested`).
+- `InterviewExportScheduler` по cron ставит интервью на экспорт: после commit транзакции вызывается `InterviewExportService` → JCA → HTTP к **`external-eis`** (без Kafka).
 
 ### JCA EIS
 
-В пакете `ru.itmo.hhprocess.integration.eis.jca` реализован учебный resource adapter:
+В пакете `ru.itmo.hhprocess.integration.eis.jca` — учебный resource adapter; при заданном **`APP_EIS_REMOTE_BASE_URL`** операции CREATE/CANCEL/GET уходят на внешний сервис по HTTP. Если URL пустой, используется in-memory хранилище внутри JVM (удобно для тестов без `external-eis`).
 
-- `CalendarManagedConnectionFactory`
-- `CalendarManagedConnection`
-- `CalendarConnectionFactory`
-- `CalendarConnection`
-- `CalendarInteraction`
-- `CalendarInteractionSpec`
+- `CalendarManagedConnectionFactory`, `CalendarManagedConnection`, `CalendarConnectionFactory`, `CalendarConnection`, `CalendarInteraction`, `CalendarInteractionSpec`
 
 Высокоуровневый клиент: `CalendarEisClient`.
 
@@ -90,7 +84,7 @@ POSTGRES_PASSWORD=postgres
 ### App role / Narayana
 
 ```text
-APP_ROLE=api|worker|eis-worker
+APP_ROLE=api|worker
 APP_INSTANCE_NAME=hh-api
 NARAYANA_NODE_IDENTIFIER=hh-api
 NARAYANA_LOG_DIR=/app/transaction-logs
@@ -106,17 +100,23 @@ NARAYANA_LOG_DIR=/app/transaction-logs
 KAFKA_BOOTSTRAP_SERVERS=kafka:9092
 KAFKA_GROUP_ID=hh-process-worker
 APP_SCREENING_ENABLED=true
-APP_EIS_ENABLED=false
 ```
 
-Для **api** обычно `APP_SCREENING_ENABLED=false` (consumer на `application.submitted` на worker), но у API должен быть доступ к Kafka для consumer `application.screened`. В `docker-compose` у API и worker разные `KAFKA_GROUP_ID`.
+Для **api** обычно `APP_SCREENING_ENABLED=false`; у API нужен Kafka для consumer `application.screened`. В `docker-compose` у API и worker разные `KAFKA_GROUP_ID`.
+
+### Внешняя EIS (HTTP)
+
+```text
+APP_EIS_REMOTE_BASE_URL=http://external-eis:8090
+```
+
+Пустое значение — режим in-memory внутри JCA (без отдельного сервиса).
 
 Имена топиков (опционально):
 
 ```text
 APP_TOPIC_APPLICATION_SUBMITTED=application.submitted
 APP_TOPIC_APPLICATION_SCREENED=application.screened
-APP_TOPIC_INTERVIEW_EXPORT_REQUESTED=interview.export.requested
 ```
 
 ### Прочее
@@ -209,6 +209,7 @@ docker compose up --build
 Порты:
 
 - API и Actuator: `http://localhost:8080` (health: `/actuator/health`)
+- Внешняя EIS: `http://localhost:8090` (health: `/actuator/health`)
 - Kafka UI: `http://localhost:8081`
 - Kafka с хоста: `localhost:29092`
 - PostgreSQL: `localhost:5432`
@@ -219,10 +220,10 @@ docker compose up --build
 
 - Асинхронный screening: `POST apply` → polling `GET application`.
 - Откат транзакции при invite: `POST /api/v1/admin/debug/schedule-failure/true`, затем `invite` — заявка/интервью/слот не должны остаться в несогласованном состоянии.
-- Export to EIS: интервью в подходящем статусе, `POST /api/v1/admin/jobs/export-interviews`, обработка в `app-eis-worker`.
+- Export to EIS: интервью в подходящем статусе, cron или `POST /api/v1/admin/jobs/export-interviews` — экспорт на **`external-eis`** через JCA (`APP_EIS_REMOTE_BASE_URL`).
 
 ## Важные ограничения реализации
 
 - Распределённой транзакции между Kafka и PostgreSQL нет; события публикуются после commit (см. `AfterCommitEventPublisher`).
-- WebSocket push локален для инстанса с включённым notification consumer.
+- WebSocket push только на процессах `api`.
 - Идемпотентность обработки сообщений Kafka — таблица `processed_kafka_events`.

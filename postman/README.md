@@ -60,10 +60,10 @@
 
 ### Export to EIS
 
-1. Создать интервью.
-2. Вызвать `POST /api/v1/admin/jobs/export-interviews`.
-3. Проверить, что `app-eis-worker` обработал событие.
-4. Проверить запись в `interview_export_log`.
+1. Поднять стек с `external-eis` (в `docker-compose`) или задать `APP_EIS_REMOTE_BASE_URL`.
+2. Создать интервью.
+3. Вызвать `POST /api/v1/admin/jobs/export-interviews`.
+4. Проверить запись в `interview_export_log` и ответ внешней EIS.
 
 ## Аутентификация
 

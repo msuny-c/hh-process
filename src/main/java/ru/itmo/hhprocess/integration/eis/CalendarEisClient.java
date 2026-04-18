@@ -4,27 +4,24 @@ import jakarta.resource.ResourceException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import ru.itmo.hhprocess.entity.InterviewEntity;
 import ru.itmo.hhprocess.integration.eis.jca.CalendarConnection;
 import ru.itmo.hhprocess.integration.eis.jca.CalendarConnectionFactory;
 import ru.itmo.hhprocess.integration.eis.jca.CalendarInteraction;
 import ru.itmo.hhprocess.integration.eis.jca.CalendarInteractionSpec;
-import ru.itmo.hhprocess.integration.eis.jca.CalendarManagedConnectionFactory;
 import ru.itmo.hhprocess.integration.eis.jca.CalendarMappedRecord;
 
 @Component
+@RequiredArgsConstructor
 public class CalendarEisClient {
 
     private final CalendarConnectionFactory connectionFactory;
 
-    public CalendarEisClient() throws ResourceException {
-        this.connectionFactory = (CalendarConnectionFactory) new CalendarManagedConnectionFactory().createConnectionFactory();
-    }
-
     public String createInterviewRecord(InterviewEntity interview) throws ResourceException {
         try (CalendarConnection connection = (CalendarConnection) connectionFactory.getConnection();
-             CalendarInteraction interaction = (CalendarInteraction) connection.createInteraction()) {
+                CalendarInteraction interaction = (CalendarInteraction) connection.createInteraction()) {
             CalendarMappedRecord input = record(Map.of(
                     "interviewId", interview.getId().toString(),
                     "scheduledAt", interview.getScheduledAt().toString(),
@@ -42,7 +39,7 @@ public class CalendarEisClient {
 
     public String cancelInterviewRecord(UUID interviewId) throws ResourceException {
         try (CalendarConnection connection = (CalendarConnection) connectionFactory.getConnection();
-             CalendarInteraction interaction = (CalendarInteraction) connection.createInteraction()) {
+                CalendarInteraction interaction = (CalendarInteraction) connection.createInteraction()) {
             CalendarMappedRecord output = (CalendarMappedRecord) interaction.execute(
                     CalendarInteractionSpec.cancel(),
                     record(Map.of("interviewId", interviewId.toString()))
@@ -53,7 +50,7 @@ public class CalendarEisClient {
 
     public CalendarInterviewRecord getInterviewRecord(UUID interviewId) throws ResourceException {
         try (CalendarConnection connection = (CalendarConnection) connectionFactory.getConnection();
-             CalendarInteraction interaction = (CalendarInteraction) connection.createInteraction()) {
+                CalendarInteraction interaction = (CalendarInteraction) connection.createInteraction()) {
             CalendarMappedRecord output = (CalendarMappedRecord) interaction.execute(
                     CalendarInteractionSpec.get(),
                     record(Map.of("interviewId", interviewId.toString()))
