@@ -70,7 +70,7 @@ services:
     entrypoint: ["/bin/bash", "-ec"]
     command:
       - |
-        for t in application.submitted application.screened notification.requested interview.export.requested; do
+        for t in application.submitted application.screened interview.export.requested; do
           kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$t" --partitions 2 --replication-factor 1
           kafka-topics --bootstrap-server kafka:9092 --alter --topic "$$t" --partitions 2 || true
         done
@@ -112,9 +112,8 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_SCHEMA: public
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_GROUP_ID: hh-process-notifications
+      KAFKA_GROUP_ID: hh-process-api
       APP_SCREENING_ENABLED: "false"
-      APP_NOTIFICATIONS_ENABLED: "true"
       APP_EIS_ENABLED: "false"
     ports:
       - "8080:8080"
@@ -144,9 +143,8 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_SCHEMA: public
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_GROUP_ID: hh-process-screening
+      KAFKA_GROUP_ID: hh-process-worker
       APP_SCREENING_ENABLED: "true"
-      APP_NOTIFICATIONS_ENABLED: "false"
       APP_EIS_ENABLED: "false"
     volumes:
       - narayana_logs_worker:/app/transaction-logs
@@ -175,7 +173,6 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_GROUP_ID: hh-process-eis
       APP_SCREENING_ENABLED: "false"
-      APP_NOTIFICATIONS_ENABLED: "false"
       APP_EIS_ENABLED: "true"
     volumes:
       - narayana_logs_eis:/app/transaction-logs

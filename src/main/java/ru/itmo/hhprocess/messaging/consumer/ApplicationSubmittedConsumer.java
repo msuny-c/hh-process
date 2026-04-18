@@ -1,6 +1,8 @@
 package ru.itmo.hhprocess.messaging.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Instant;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,10 +12,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.config.WorkerRoleOnly;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
+import ru.itmo.hhprocess.enums.ApplicationStatus;
+import ru.itmo.hhprocess.messaging.dto.ApplicationScreenedEvent;
 import ru.itmo.hhprocess.messaging.dto.ApplicationSubmittedEvent;
+import ru.itmo.hhprocess.messaging.producer.ApplicationScreenedPublisher;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
-import ru.itmo.hhprocess.service.AsyncScreeningResultService;
 import ru.itmo.hhprocess.service.KafkaIdempotencyService;
+import ru.itmo.hhprocess.service.ScreeningComputation;
 import ru.itmo.hhprocess.service.ScreeningService;
 
 @Slf4j
@@ -26,7 +31,7 @@ public class ApplicationSubmittedConsumer {
     private final ObjectMapper objectMapper;
     private final ApplicationRepository applicationRepository;
     private final ScreeningService screeningService;
-    private final AsyncScreeningResultService asyncScreeningResultService;
+    private final ApplicationScreenedPublisher applicationScreenedPublisher;
     private final KafkaIdempotencyService kafkaIdempotencyService;
 
     @Value("${app.instance-name}")
@@ -49,7 +54,7 @@ public class ApplicationSubmittedConsumer {
                     consumerName());
             return;
         }
-        if (application.getStatus() != ru.itmo.hhprocess.enums.ApplicationStatus.SCREENING_IN_PROGRESS) {
+        if (application.getStatus() != ApplicationStatus.SCREENING_IN_PROGRESS) {
             log.info("Application {} is already in status {}, skipping screening",
                     application.getId(), application.getStatus());
             kafkaIdempotencyService.markProcessed(event.eventId(),
@@ -58,12 +63,22 @@ public class ApplicationSubmittedConsumer {
             return;
         }
 
-        if (application.getScreeningStartedAt() == null) {
-            application.setScreeningStartedAt(java.time.Instant.now());
-        }
-        application.setScreeningError(null);
-        var screeningResult = screeningService.performScreening(application);
-        asyncScreeningResultService.applyScreeningResult(application, screeningResult);
+        Instant screeningStartedAt = Instant.now();
+        ScreeningComputation computation = screeningService.computeScreening(application);
+        Instant processedAt = Instant.now();
+
+        ApplicationScreenedEvent screenedEvent = new ApplicationScreenedEvent(
+                UUID.randomUUID(),
+                application.getId(),
+                computation.passed(),
+                computation.score(),
+                computation.matchedSkills(),
+                computation.detailsJson(),
+                screeningStartedAt,
+                processedAt
+        );
+        applicationScreenedPublisher.publish(screenedEvent);
+
         kafkaIdempotencyService.markProcessed(event.eventId(),
                 "application.submitted",
                 consumerName());

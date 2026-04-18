@@ -14,8 +14,8 @@
 ```json
 {
   "application_id": "...",
-  "status": "SCREENING_IN_PROGRESS",
-  "message": "Application accepted for asynchronous screening"
+  "status": "APPLICATION_SUBMITTED",
+  "message": "Application submitted"
 }
 ```
 
@@ -23,7 +23,7 @@
 
 1. сохранить `application_id` в переменную окружения;
 2. вызывать `GET /api/v1/candidates/applications/{{application_id}}`;
-3. повторять, пока `status` не станет `ON_RECRUITER_REVIEW` или `SCREENING_FAILED`.
+3. повторять, пока `status` не станет `ON_RECRUITER_REVIEW` или `SCREENING_FAILED` (пока идёт скрининг, для кандидата отображается `APPLICATION_SUBMITTED`).
 
 ### 2. Для distributed transaction появился debug trigger
 

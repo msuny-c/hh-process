@@ -46,8 +46,8 @@
 1. кандидат подаёт отклик;
 2. API сохраняет заявку со статусом `SCREENING_IN_PROGRESS`;
 3. после commit публикуется Kafka-событие `application.submitted`;
-4. один из worker-узлов выполняет screening;
-5. worker меняет статус заявки и публикует `notification.requested`;
+4. один из worker-узлов выполняет screening без записи результата в БД и публикует `application.screened`;
+5. узел `api` потребляет `application.screened`, сохраняет `ScreeningResultEntity`, обновляет статус заявки и при необходимости создаёт уведомления (без отдельного Kafka-топика для уведомлений);
 6. timeout scheduler закрывает просроченные приглашения;
 7. export scheduler выбирает интервью и публикует `interview.export.requested`;
 8. `eis-worker` экспортирует интервью во внешнюю EIS через JCA.
@@ -92,13 +92,12 @@
 - Вход: `POST /api/v1/candidates/vacancies/{vacancyId}`.
 - Результат: создаётся заявка со статусом `SCREENING_IN_PROGRESS`.
 - После commit: публикуется `application.submitted`.
-- Worker получает событие, выполняет screening и переводит заявку в `ON_RECRUITER_REVIEW` либо `SCREENING_FAILED`.
+- Worker получает событие, вычисляет результат screening и публикует `application.screened`.
+- Узел `api` применяет событие к БД и переводит заявку в `ON_RECRUITER_REVIEW` либо `SCREENING_FAILED`.
 
-== Асинхронные уведомления
+== Уведомления
 
-- Бизнес-сервисы не обязаны создавать уведомления синхронно.
-- Вместо этого после commit публикуется `notification.requested`.
-- Consumer создаёт запись в `notifications`.
+- После commit транзакции вызывается `NotificationAfterCommitService`, который создаёт запись в `notifications` (на узле `api` дополнительно срабатывает WebSocket push).
 
 == Автоматическое закрытие просроченных приглашений
 
@@ -123,7 +122,7 @@
 3. создание `InterviewEntity` в main DB;
 4. резервирование слота в schedule DB;
 5. запись history;
-6. публикация `notification.requested` после commit.
+6. создание уведомлений после commit (без Kafka-топика для уведомлений).
 
 Если шаг резервирования слота завершается ошибкой, Narayana откатывает изменения в обеих БД.
 
@@ -133,7 +132,6 @@
 
 - `ApplicationSubmittedEvent`
 - `ApplicationScreenedEvent`
-- `NotificationRequestedEvent`
 - `InterviewExportRequestedEvent`
 
 Отправка сообщений реализована через чистый Kafka Producer API (`Producer<String, String>` / `KafkaProducer<String, String>`), а не через `KafkaTemplate`.
@@ -206,13 +204,13 @@
 
 Ключевое изменение контракта по сравнению с ЛР2 относится к подаче отклика.
 
-Теперь `POST /api/v1/candidates/vacancies/{vacancyId}` возвращает не финальный результат screening, а промежуточный статус:
+Теперь `POST /api/v1/candidates/vacancies/{vacancyId}` возвращает не финальный результат screening; для кандидата статус формулируется как заявка подана:
 
 ```json
 {
   "application_id": "...",
-  "status": "SCREENING_IN_PROGRESS",
-  "message": "Application accepted for asynchronous screening"
+  "status": "APPLICATION_SUBMITTED",
+  "message": "Application submitted"
 }
 ```
 

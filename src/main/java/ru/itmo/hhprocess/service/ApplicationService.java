@@ -19,7 +19,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -54,8 +53,8 @@ public class ApplicationService {
                 applicationSubmittedPublisher.publishAfterCommit(application);
                 return CreateApplicationResponse.builder()
                                 .applicationId(application.getId())
-                                .status(ApplicationStatus.SCREENING_IN_PROGRESS.name())
-                                .message("Application accepted for asynchronous screening")
+                                .status(ApplicationStatus.SCREENING_IN_PROGRESS.toCandidateExternalStatus())
+                                .message("Application submitted")
                                 .build();
         }
 

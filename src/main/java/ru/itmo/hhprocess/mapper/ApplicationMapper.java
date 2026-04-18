@@ -15,7 +15,7 @@ public class ApplicationMapper {
         CandidateApplicationResponse.CandidateApplicationResponseBuilder builder = CandidateApplicationResponse.builder()
                 .applicationId(a.getId())
                 .vacancyId(a.getVacancy().getId())
-                .status(a.getStatus().toExternalStatus())
+                .status(a.getStatus().toCandidateExternalStatus())
                 .createdAt(a.getCreatedAt())
                 .updatedAt(a.getUpdatedAt());
 

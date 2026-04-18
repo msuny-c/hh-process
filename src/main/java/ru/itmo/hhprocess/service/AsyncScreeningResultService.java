@@ -8,21 +8,23 @@ import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.ScreeningResultEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.enums.NotificationType;
-import ru.itmo.hhprocess.messaging.producer.ApplicationScreenedPublisher;
-import ru.itmo.hhprocess.messaging.producer.NotificationRequestPublisher;
 
 @Service
 @RequiredArgsConstructor
 public class AsyncScreeningResultService {
 
     private final HistoryService historyService;
-    private final NotificationRequestPublisher notificationRequestPublisher;
-    private final ApplicationScreenedPublisher applicationScreenedPublisher;
+    private final NotificationAfterCommitService notificationAfterCommitService;
 
     @Transactional
-    public void applyScreeningResult(ApplicationEntity application, ScreeningResultEntity screeningResult) {
-        Instant now = Instant.now();
-        application.setScreeningFinishedAt(now);
+    public void applyScreeningResult(
+            ApplicationEntity application,
+            ScreeningResultEntity screeningResult,
+            Instant screeningStartedAt,
+            Instant screeningFinishedAt
+    ) {
+        application.setScreeningStartedAt(screeningStartedAt);
+        application.setScreeningFinishedAt(screeningFinishedAt);
         application.setScreeningError(null);
 
         if (screeningResult.isPassed()) {
@@ -31,7 +33,7 @@ public class AsyncScreeningResultService {
                     ApplicationStatus.SCREENING_IN_PROGRESS,
                     ApplicationStatus.ON_RECRUITER_REVIEW,
                     null);
-            notificationRequestPublisher.publishAfterCommit(
+            notificationAfterCommitService.publishAfterCommit(
                     application.getVacancy().getRecruiterUser(),
                     application,
                     NotificationType.NEW_APPLICATION,
@@ -39,23 +41,17 @@ public class AsyncScreeningResultService {
             );
         } else {
             application.setStatus(ApplicationStatus.SCREENING_FAILED);
-            application.setClosedAt(now);
+            application.setClosedAt(screeningFinishedAt);
             historyService.record(application,
                     ApplicationStatus.SCREENING_IN_PROGRESS,
                     ApplicationStatus.SCREENING_FAILED,
                     null);
-            notificationRequestPublisher.publishAfterCommit(
+            notificationAfterCommitService.publishAfterCommit(
                     application.getCandidateUser(),
                     application,
                     NotificationType.SCREENING_RESULT,
                     "Your application has been rejected"
             );
         }
-
-        applicationScreenedPublisher.publishAfterCommit(
-                application.getId(),
-                screeningResult.isPassed(),
-                screeningResult.getScore()
-        );
     }
 }

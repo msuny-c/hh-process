@@ -7,7 +7,6 @@ import ru.itmo.hhprocess.entity.*;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.exception.ApiException;
-import ru.itmo.hhprocess.messaging.producer.NotificationRequestPublisher;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 import ru.itmo.hhprocess.repository.InvitationResponseRepository;
 
@@ -25,7 +24,7 @@ public class InvitationResponseService {
     private final ApplicationRepository applicationRepository;
     private final InvitationResponseRepository invitationResponseRepository;
     private final HistoryService historyService;
-    private final NotificationRequestPublisher notificationRequestPublisher;
+    private final NotificationAfterCommitService notificationAfterCommitService;
     private final AuthService authService;
 
     @Transactional
@@ -73,7 +72,7 @@ public class InvitationResponseService {
                 ApplicationStatus.INVITATION_RESPONDED,
                 candidateUser);
 
-        notificationRequestPublisher.publishAfterCommit(application.getVacancy().getRecruiterUser(), application,
+        notificationAfterCommitService.publishAfterCommit(application.getVacancy().getRecruiterUser(), application,
                 ru.itmo.hhprocess.enums.NotificationType.INVITATION_RESPONSE,
                 "Candidate responded to interview invitation");
 

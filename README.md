@@ -7,9 +7,9 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 - HTTP Basic + XML users, без JWT.
 - PostgreSQL + Flyway (одна БД: заявки, интервью, слоты расписания, уведомления, служебные таблицы).
 - Narayana JTA и XA-драйвер PostgreSQL для основной БД.
-- Асинхронный screening через Kafka (`application.submitted` → worker → результат и событие `application.screened`).
+- Асинхронный screening через Kafka: worker считает результат по `application.submitted` и публикует `application.screened`; запись в БД (`screening_results`, смена статуса заявки, уведомления) делает consumer на **`api`**.
 - Идемпотентность Kafka consumers через таблицу `processed_kafka_events`.
-- Асинхронные уведомления через Kafka (`notification.requested`).
+- Уведомления: запись в БД и WebSocket push после commit транзакции (без отдельного Kafka-топика).
 - `@Scheduled` для timeout-закрытия приглашений и планового экспорта интервью в EIS.
 - Учебная JCA-интеграция с внешней EIS календаря собеседований (роль `eis-worker`).
 
@@ -17,8 +17,8 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 
 Один и тот же `jar` запускается в разных ролях через `APP_ROLE`:
 
-- `api`: REST, WebSocket, Swagger UI, schedulers (timeout, export), Kafka producers; consumer уведомлений, если `APP_NOTIFICATIONS_ENABLED=true`.
-- `worker`: Kafka listener на `application.submitted`, screening; `APP_SCREENING_ENABLED=true`.
+- `api`: REST, WebSocket, Swagger UI, schedulers (timeout, export), Kafka consumer на `application.screened` (фиксация результата screening в БД) и producers по мере сценариев.
+- `worker`: Kafka listener на `application.submitted` (только расчёт screening и публикация `application.screened`, без записи результата в БД); `APP_SCREENING_ENABLED=true`.
 - `eis-worker`: Kafka listener на `interview.export.requested`, JCA-клиент и экспорт в EIS; `APP_EIS_ENABLED=true`.
 
 В `docker-compose.yml` поднимается:
@@ -32,8 +32,7 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 Топики Kafka (имена по умолчанию, переопределяются через `APP_TOPIC_*`):
 
 - `application.submitted` — отклик принят, нужен screening.
-- `application.screened` — screening завершён (публикуется после обновления статуса заявки).
-- `notification.requested` — создать уведомление и при необходимости WebSocket push.
+- `application.screened` — результат screening (payload с score, matched skills и т.д.); публикует **worker**, в БД применяет **api**.
 - `interview.export.requested` — выгрузка интервью во внешнюю EIS.
 
 ## Бизнес-сценарии ЛР3
@@ -45,13 +44,13 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 1. сохраняет `ApplicationEntity` со статусом `SCREENING_IN_PROGRESS`;
 2. пишет history;
 3. после commit публикует `application.submitted`;
-4. worker получает событие через `@KafkaListener`;
-5. выполняет screening и через `AsyncScreeningResultService` переводит заявку в `ON_RECRUITER_REVIEW` или `SCREENING_FAILED`;
-6. публикует `application.screened` и при необходимости `notification.requested`.
+4. worker получает событие, **без записи в БД** считает screening и публикует `application.screened`;
+5. **api** (`ApplicationScreenedConsumer`) сохраняет `ScreeningResultEntity`, обновляет заявку (`AsyncScreeningResultService`);
+6. уведомления рекрутеру/кандидату — после commit на **api** (`NotificationAfterCommitService` → `NotificationService` + WebSocket).
 
-### Асинхронные уведомления
+### Уведомления
 
-Сервисы публикуют `notification.requested` после commit. Consumer создаёт запись в `notifications`; WebSocket push выполняется на том инстансе, где включён consumer уведомлений (`app.workers.notifications-enabled`).
+После commit транзакции вызывается `NotificationAfterCommitService`: запись в `notifications` и push через `WebSocketNotificationService` (только на процессах `api`). Уведомления по завершении screening создаются вместе с пунктом 5 выше.
 
 ### Транзакционная целостность приглашения на интервью
 
@@ -101,22 +100,22 @@ NARAYANA_LOG_DIR=/app/transaction-logs
 
 ### Kafka
 
+Пример для **worker** (screening):
+
 ```text
 KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-KAFKA_GROUP_ID=hh-process-screening
+KAFKA_GROUP_ID=hh-process-worker
 APP_SCREENING_ENABLED=true
-APP_NOTIFICATIONS_ENABLED=true
 APP_EIS_ENABLED=false
 ```
 
-В `docker-compose` для разных контейнеров заданы разные `KAFKA_GROUP_ID` (например, `hh-process-notifications` у API и `hh-process-screening` у worker), чтобы группы не пересекались между ролями.
+Для **api** обычно `APP_SCREENING_ENABLED=false` (consumer на `application.submitted` на worker), но у API должен быть доступ к Kafka для consumer `application.screened`. В `docker-compose` у API и worker разные `KAFKA_GROUP_ID`.
 
 Имена топиков (опционально):
 
 ```text
 APP_TOPIC_APPLICATION_SUBMITTED=application.submitted
 APP_TOPIC_APPLICATION_SCREENED=application.screened
-APP_TOPIC_NOTIFICATION_REQUESTED=notification.requested
 APP_TOPIC_INTERVIEW_EXPORT_REQUESTED=interview.export.requested
 ```
 
@@ -158,17 +157,17 @@ APP_TIMEOUT_INITIAL_DELAY_MS=30000
 - `GET /api/v1/candidates/applications/{applicationId}`
 - `POST /api/v1/candidates/applications/{applicationId}/invitation-response`
 
-Создание отклика возвращает промежуточный статус:
+Создание отклика возвращает статус для кандидата «заявка подана» (внутри до завершения screening хранится `SCREENING_IN_PROGRESS`):
 
 ```json
 {
   "application_id": "7a9c3c4d-6bdf-4a77-9f67-6f1db4fd74fe",
-  "status": "SCREENING_IN_PROGRESS",
-  "message": "Application accepted for asynchronous screening"
+  "status": "APPLICATION_SUBMITTED",
+  "message": "Application submitted"
 }
 ```
 
-Далее клиент опрашивает `GET /api/v1/candidates/applications/{applicationId}` или recruiter-view, пока статус не станет `ON_RECRUITER_REVIEW` либо `SCREENING_FAILED`.
+Далее клиент опрашивает `GET /api/v1/candidates/applications/{applicationId}`, пока статус не станет `ON_RECRUITER_REVIEW` либо `SCREENING_FAILED` (пока идёт скрининг, в ответе кандидату по-прежнему `APPLICATION_SUBMITTED`).
 
 ### Recruiter
 

@@ -15,6 +15,13 @@ public enum ApplicationStatus {
         return name();
     }
 
+    public String toCandidateExternalStatus() {
+        if (this == SCREENING_IN_PROGRESS) {
+            return "APPLICATION_SUBMITTED";
+        }
+        return toExternalStatus();
+    }
+
     public boolean isTerminal() {
         return this == SCREENING_FAILED
                 || this == REJECTED_BY_RECRUITER

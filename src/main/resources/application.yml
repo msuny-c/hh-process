@@ -72,11 +72,9 @@ app:
     topics:
       application-submitted: ${APP_TOPIC_APPLICATION_SUBMITTED:application.submitted}
       application-screened: ${APP_TOPIC_APPLICATION_SCREENED:application.screened}
-      notification-requested: ${APP_TOPIC_NOTIFICATION_REQUESTED:notification.requested}
       interview-export-requested: ${APP_TOPIC_INTERVIEW_EXPORT_REQUESTED:interview.export.requested}
   workers:
     screening-enabled: ${APP_SCREENING_ENABLED:true}
-    notifications-enabled: ${APP_NOTIFICATIONS_ENABLED:true}
     eis-enabled: ${APP_EIS_ENABLED:false}
   export:
     cron: ${APP_EXPORT_CRON:0 0 6 * * *}
