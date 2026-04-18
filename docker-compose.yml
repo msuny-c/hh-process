@@ -76,7 +76,10 @@ services:
         done
     restart: "no"
 
+  # Включить: COMPOSE_PROFILES=eis (или docker compose --profile eis up) и задать APP_EIS_REMOTE_BASE_URL=http://external-eis:8090
   external-eis:
+    profiles:
+      - eis
     build: ./external-eis
     container_name: hh-process-external-eis
     ports:
@@ -111,8 +114,6 @@ services:
         condition: service_healthy
       kafka-topics-init:
         condition: service_completed_successfully
-      external-eis:
-        condition: service_healthy
     environment:
       APP_ROLE: api
       APP_INSTANCE_NAME: hh-api
@@ -128,7 +129,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_GROUP_ID: hh-process-api
       APP_SCREENING_ENABLED: "false"
-      APP_EIS_REMOTE_BASE_URL: http://external-eis:8090
+      # Пусто = in-memory JCA; с профилем eis задайте в .env: APP_EIS_REMOTE_BASE_URL=http://external-eis:8090
+      APP_EIS_REMOTE_BASE_URL: ${APP_EIS_REMOTE_BASE_URL:-}
     ports:
       - "8080:8080"
     volumes:

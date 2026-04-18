@@ -26,6 +26,7 @@ env:
   TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS: 1
 
 # Repository variable CI_SKIP_TESTS: set to "true" or "1" to skip the test job and deployed API tests in deploy (build and later jobs still run).
+# Repository variable SKIP_EXTERNAL_EIS: set to "true" or "1" to skip building/uploading/restarting the external-eis JAR on the stack host (API uses in-memory JCA; APP_EIS_REMOTE_BASE_URL is not pinned to localhost:8090).
 jobs:
   test:
     if: ${{ vars.CI_SKIP_TESTS != 'true' && vars.CI_SKIP_TESTS != '1' }}
@@ -224,6 +225,7 @@ jobs:
           mvn -B clean package -DskipTests
 
       - name: Build external EIS JAR
+        if: ${{ vars.SKIP_EXTERNAL_EIS != 'true' && vars.SKIP_EXTERNAL_EIS != '1' }}
         run: mvn -B package -f external-eis/pom.xml -DskipTests
 
       - name: Detect JAR name
@@ -240,6 +242,7 @@ jobs:
           path: target/${{ steps.vars.outputs.jar_name }}
 
       - name: Upload external EIS artifact
+        if: ${{ vars.SKIP_EXTERNAL_EIS != 'true' && vars.SKIP_EXTERNAL_EIS != '1' }}
         uses: actions/upload-artifact@v7.0.1
         with:
           name: external-eis-jar
@@ -288,6 +291,7 @@ jobs:
           path: artifact
 
       - name: Download external EIS artifact
+        if: ${{ vars.SKIP_EXTERNAL_EIS != 'true' && vars.SKIP_EXTERNAL_EIS != '1' }}
         uses: actions/download-artifact@v8.0.1
         with:
           name: external-eis-jar
@@ -403,14 +407,18 @@ jobs:
           echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092" >> app.env
           echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092"
 
-      - name: Pin EIS URL for API (localhost broker on stack host)
+      - name: Pin EIS URL for API (localhost EIS on stack host)
         run: |
           set -eu
-          echo "## APP_EIS_REMOTE_BASE_URL → external EIS on same host"
           grep -v '^APP_EIS_REMOTE_BASE_URL=' app.env > app.env.tmp || cp app.env app.env.tmp
           mv app.env.tmp app.env
-          echo "APP_EIS_REMOTE_BASE_URL=http://127.0.0.1:8090" >> app.env
-          echo "APP_EIS_REMOTE_BASE_URL=http://127.0.0.1:8090"
+          if [ "${{ vars.SKIP_EXTERNAL_EIS }}" = "true" ] || [ "${{ vars.SKIP_EXTERNAL_EIS }}" = "1" ]; then
+            echo "## SKIP_EXTERNAL_EIS: in-memory JCA (no APP_EIS_REMOTE_BASE_URL)"
+          else
+            echo "## APP_EIS_REMOTE_BASE_URL → external EIS on same host"
+            echo "APP_EIS_REMOTE_BASE_URL=http://127.0.0.1:8090" >> app.env
+            echo "APP_EIS_REMOTE_BASE_URL=http://127.0.0.1:8090"
+          fi
 
       - name: Prepare VPS SSH for DB tunnel
         if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
@@ -457,23 +465,27 @@ jobs:
             "chmod +x ${APP_DIR}/appctl.sh"
           echo "Upload main app done."
 
-          EIS_DIR="~/apps/blps-eis"
-          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "mkdir -p ${EIS_DIR}"
+          if [ "${{ vars.SKIP_EXTERNAL_EIS }}" = "true" ] || [ "${{ vars.SKIP_EXTERNAL_EIS }}" = "1" ]; then
+            echo "SKIP_EXTERNAL_EIS — не выкладываем external-eis на сервер."
+          else
+            EIS_DIR="~/apps/blps-eis"
+            ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+              "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
+              "mkdir -p ${EIS_DIR}"
 
-          scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-            "external-eis-artifact/external-eis-0.0.1-SNAPSHOT.jar" \
-            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${EIS_DIR}/eis.jar"
+            scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+              "external-eis-artifact/external-eis-0.0.1-SNAPSHOT.jar" \
+              "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${EIS_DIR}/eis.jar"
 
-          scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-            infra/eisctl.sh \
-            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${EIS_DIR}/eisctl.sh"
+            scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+              infra/eisctl.sh \
+              "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${EIS_DIR}/eisctl.sh"
 
-          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "chmod +x ${EIS_DIR}/eisctl.sh"
-          echo "Upload external EIS done."
+            ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+              "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
+              "chmod +x ${EIS_DIR}/eisctl.sh"
+            echo "Upload external EIS done."
+          fi
 
       - name: Ensure DB reverse tunnel on helios
         if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
@@ -529,10 +541,14 @@ jobs:
       - name: Restart service on server
         run: |
           set -eu
-          echo "## Restart external EIS then Spring Boot"
-          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "cd \$HOME/apps/blps-eis && ./eisctl.sh restart"
+          if [ "${{ vars.SKIP_EXTERNAL_EIS }}" != "true" ] && [ "${{ vars.SKIP_EXTERNAL_EIS }}" != "1" ]; then
+            echo "## Restart external EIS then Spring Boot"
+            ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
+              "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
+              "cd \$HOME/apps/blps-eis && ./eisctl.sh restart"
+          else
+            echo "## SKIP_EXTERNAL_EIS — перезапуск только Spring Boot"
+          fi
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "cd \$HOME/apps/blps && ./appctl.sh restart"
