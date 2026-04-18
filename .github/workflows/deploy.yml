@@ -262,6 +262,10 @@ jobs:
       SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
       SSH_PORT: ${{ secrets.SSH_PORT || vars.SSH_PORT || '22' }}
       SSH_USER: ${{ secrets.SSH_USER || vars.SSH_USER }}
+      # VPS (туннель БД + external-eis): как SSH — сначала secrets, иначе vars (иначе target=vps не сработает при хосте только в Variables).
+      VPS_DEPLOY_HOST: ${{ secrets.VPS_SSH_HOST || vars.VPS_SSH_HOST }}
+      VPS_DEPLOY_USER: ${{ secrets.VPS_SSH_USER || vars.VPS_SSH_USER }}
+      VPS_DEPLOY_PORT: ${{ secrets.VPS_SSH_PORT || vars.VPS_SSH_PORT || '22' }}
       # Seconds: TCP wait on stack + actuator poll via SSH tunnel (vars.API_HEALTHCHECK_TIMEOUT_SEC, default 60).
       API_HEALTHCHECK_TIMEOUT_SEC: ${{ vars.API_HEALTHCHECK_TIMEOUT_SEC || '60' }}
     steps:
@@ -314,10 +318,11 @@ jobs:
           set -eu
           SKIP="${{ vars.SKIP_EXTERNAL_EIS }}"
           PH="${{ vars.POSTGRES_HOST }}"
-          VPS_HOST="${{ secrets.VPS_SSH_HOST }}"
+          VPS_HOST="${{ env.VPS_DEPLOY_HOST }}"
           TUNNEL_PORT="${{ vars.EIS_TUNNEL_LOCAL_PORT }}"
           [ -z "$TUNNEL_PORT" ] && TUNNEL_PORT=18090
           echo "tunnel_port=$TUNNEL_PORT" >> "$GITHUB_OUTPUT"
+          echo "## EIS: POSTGRES_HOST=$PH, VPS_DEPLOY_HOST=$([ -n "$VPS_HOST" ] && echo set || echo empty)"
           if [ "$SKIP" = "true" ] || [ "$SKIP" = "1" ]; then
             echo "target=skip" >> "$GITHUB_OUTPUT"
             echo "app_url=" >> "$GITHUB_OUTPUT"
@@ -327,6 +332,9 @@ jobs:
           else
             echo "target=helios" >> "$GITHUB_OUTPUT"
             echo "app_url=http://127.0.0.1:8090" >> "$GITHUB_OUTPUT"
+            if { [ "$PH" = "127.0.0.1" ] || [ "$PH" = "localhost" ]; } && [ -z "$VPS_HOST" ]; then
+              echo "::notice::EIS остаётся на helios: задайте VPS_SSH_HOST (secret или variable), иначе target≠vps."
+            fi
           fi
 
       - name: Prepare VPS SSH for DB tunnel and EIS on VPS
@@ -334,19 +342,18 @@ jobs:
         run: |
           set -eu
           echo "## VPS SSH client (reverse tunnels — needs VPS_* and HELIOS_TUNNEL_PRIVATE_KEY)"
-          if [ -z "${{ secrets.VPS_SSH_HOST }}" ] || [ -z "${{ secrets.VPS_SSH_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
+          if [ -z "${{ env.VPS_DEPLOY_HOST }}" ] || [ -z "${{ env.VPS_DEPLOY_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
             echo "VPS secrets incomplete — skipping key setup (tunnel only works if already up on helios)."
             exit 0
           fi
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_vps
           chmod 600 ~/.ssh/id_vps
-          VPS_PORT="${{ secrets.VPS_SSH_PORT }}"
-          [ -z "$VPS_PORT" ] && VPS_PORT=22
-          ssh-keyscan -p "$VPS_PORT" -H "${{ secrets.VPS_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
+          ssh-keyscan -p "$VPS_PORT" -H "${{ env.VPS_DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
           printf '%s\n' "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" > helios_tunnel_key
           chmod 600 helios_tunnel_key
-          echo "VPS SSH ready for ${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}"
+          echo "VPS SSH ready for ${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}"
 
       - name: Stop EIS on VPS before deploy
         if: ${{ steps.eis_deploy.outputs.target == 'vps' }}
@@ -357,9 +364,8 @@ jobs:
             exit 0
           fi
           echo "## Pre-deploy: stop external EIS on VPS (tunnel host)"
-          VPS_PORT="${{ secrets.VPS_SSH_PORT }}"
-          [ -z "$VPS_PORT" ] && VPS_PORT=22
-          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}" \
+          VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
+          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
             "env bash -c 'set +e; if [ -f \"\$HOME/apps/blps-eis/eisctl.sh\" ]; then bash \"\$HOME/apps/blps-eis/eisctl.sh\" stop; else echo \"No eisctl on VPS — skip\"; fi'"
 
       - name: Stop stack services on host before deploy
@@ -507,23 +513,22 @@ jobs:
             echo "SKIP_EXTERNAL_EIS — не выкладываем external-eis."
           elif [ "${{ steps.eis_deploy.outputs.target }}" = "vps" ]; then
             echo "## Upload external-eis JAR → VPS (тот же хост, что и туннель БД)"
-            VPS_PORT="${{ secrets.VPS_SSH_PORT }}"
-            [ -z "$VPS_PORT" ] && VPS_PORT=22
+            VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
             EIS_DIR="~/apps/blps-eis"
             ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes \
-              "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}" \
+              "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
               "mkdir -p ${EIS_DIR}"
             scp -P "$VPS_PORT" -i ~/.ssh/id_vps \
               "external-eis-artifact/external-eis-0.0.1-SNAPSHOT.jar" \
-              "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}:${EIS_DIR}/eis.jar"
+              "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}:${EIS_DIR}/eis.jar"
             scp -P "$VPS_PORT" -i ~/.ssh/id_vps \
               infra/eisctl.sh \
-              "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}:${EIS_DIR}/eisctl.sh"
+              "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}:${EIS_DIR}/eisctl.sh"
             ssh -p "$VPS_PORT" -i ~/.ssh/id_vps \
-              "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}" \
+              "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
               "chmod +x ${EIS_DIR}/eisctl.sh"
             ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes \
-              "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}" \
+              "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
               "env bash -c 'cd \$HOME/apps/blps-eis && ./eisctl.sh restart'"
             echo "external-eis on VPS started."
           else
@@ -581,15 +586,14 @@ jobs:
             echo "No listener on helios:${DB_PORT} — opening tunnel from VPS..."
           fi
 
-          if [ -z "${{ secrets.VPS_SSH_HOST }}" ] || [ -z "${{ secrets.VPS_SSH_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
+          if [ -z "${{ env.VPS_DEPLOY_HOST }}" ] || [ -z "${{ env.VPS_DEPLOY_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
             echo "::error::Tunnel down and secrets missing: set VPS_SSH_HOST, VPS_SSH_USER, VPS_SSH_KEY, HELIOS_TUNNEL_PRIVATE_KEY (or start tunnel manually on helios)."
             exit 1
           fi
 
-          VPS_PORT="${{ secrets.VPS_SSH_PORT }}"
-          [ -z "$VPS_PORT" ] && VPS_PORT=22
+          VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
 
-          scp -P "$VPS_PORT" -i ~/.ssh/id_vps helios_tunnel_key "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}:~/.ssh/helios_tunnel_key"
+          scp -P "$VPS_PORT" -i ~/.ssh/id_vps helios_tunnel_key "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}:~/.ssh/helios_tunnel_key"
 
           REV_ARGS="-R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}"
           if [ "$TARGET" = "vps" ]; then
@@ -597,7 +601,7 @@ jobs:
           fi
 
           echo "Starting reverse SSH from VPS to helios..."
-          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}" \
+          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
             "set -eu; \
             mkdir -p ~/.ssh; chmod 700 ~/.ssh; chmod 600 ~/.ssh/helios_tunnel_key; \
             ssh-keyscan -p ${HELIOS_PORT} -H ${HELIOS_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true; \
