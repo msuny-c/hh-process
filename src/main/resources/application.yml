@@ -73,12 +73,12 @@ app:
       application-submitted: ${APP_TOPIC_APPLICATION_SUBMITTED:application.submitted}
       application-screened: ${APP_TOPIC_APPLICATION_SCREENED:application.screened}
   eis:
+    # Обязателен для APP_ROLE=api (модуль Odoo hh_process_eis или другой HTTP EIS). In-memory EIS в приложении нет.
     remote-base-url: ${APP_EIS_REMOTE_BASE_URL:}
+    # Опционально: X-API-Key к Odoo/моку
+    api-key: ${APP_EIS_API_KEY:}
   workers:
     screening-enabled: ${APP_SCREENING_ENABLED:true}
-  export:
-    cron: ${APP_EXPORT_CRON:0 0 6 * * *}
-    lookahead-hours: ${APP_EXPORT_LOOKAHEAD_HOURS:24}
   schedule:
     debug:
       fail-on-reserve: ${APP_SCHEDULE_DEBUG_FAIL_ON_RESERVE:false}

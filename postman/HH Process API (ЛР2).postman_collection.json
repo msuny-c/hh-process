@@ -911,7 +911,7 @@
                 "invite"
               ]
             },
-            "description": "Создаёт интервью и слот расписания. В ответе interview_id сохраняется в переменную окружения.",
+            "description": "Создаёт интервью и слот расписания. Обязательны дата/время (`scheduled_at`, ISO-8601, в будущем) и текст приглашения; `duration_minutes` опционально. В ответе `interview_id` сохраняется в окружение.",
             "auth": {
               "type": "basic",
               "basic": [
@@ -929,7 +929,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"message\": \"Приглашаем вас на интервью\"\n}",
+              "raw": "{\n  \"message\": \"Приглашаем вас на интервью\",\n  \"scheduled_at\": \"{{interview_scheduled_at}}\",\n  \"duration_minutes\": 60\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -940,6 +940,17 @@
           "response": [],
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);",
+                  "d.setUTCHours(10, 0, 0, 0);",
+                  "pm.environment.set(\"interview_scheduled_at\", d.toISOString());"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -949,7 +960,8 @@
                   "if (json && json.expires_at !== undefined) pm.environment.set(\"application_invite_expires_at\", json.expires_at);",
                   "if (json && json.interview_id) pm.environment.set(\"interview_id\", json.interview_id);",
                   "pm.test(\"status is INVITED\", function () { pm.expect(json.status).to.eql(\"INVITED\"); });",
-                  "pm.test(\"interview_id present\", function () { pm.expect(json.interview_id).to.exist; });"
+                  "pm.test(\"interview_id present\", function () { pm.expect(json.interview_id).to.exist; });",
+                  "pm.test(\"scheduled_at in response\", function () { pm.expect(json.scheduled_at).to.exist; });"
                 ]
               }
             }
@@ -1016,6 +1028,7 @@
                 "value": "application/json"
               }
             ],
+            "description": "При `response_type: ACCEPT` выгрузка в EIS (JCA → Odoo) выполняется синхронно в этом запросе; смотрите `interview_export_log` и Odoo.",
             "url": {
               "raw": "{{base_url}}/api/v1/candidates/applications/{{application_id}}/invitation-response",
               "host": [

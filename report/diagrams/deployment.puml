@@ -21,7 +21,7 @@ node "Общая инфраструктура" as infra #FFFDE7 {
 }
 
 node "Внешняя EIS" as eis #FFF8E1 {
-  component "external-eis\nHTTP :8090" as exteis
+  component "Odoo + hh_process_eis\nHTTP :8069" as exteis
 }
 
 browser -down-> api : HTTP\n:8080

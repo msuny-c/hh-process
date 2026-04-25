@@ -26,8 +26,8 @@ env:
   TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS: 1
 
 # Repository variable CI_SKIP_TESTS: set to "true" or "1" to skip the test job and deployed API tests in deploy (build and later jobs still run).
-# Repository variable SKIP_EXTERNAL_EIS: set to "true" or "1" to skip building/uploading/restarting the external-eis JAR on the stack host (API uses in-memory JCA; APP_EIS_REMOTE_BASE_URL is not pinned to localhost:8090).
-# When POSTGRES_HOST is 127.0.0.1/localhost and VPS_SSH_* + HELIOS_TUNNEL_PRIVATE_KEY are set (DB reverse tunnel), external-eis is deployed on the VPS (same host as DB), and the workflow adds a second reverse forward so API on helios calls http://127.0.0.1:EIS_TUNNEL_LOCAL_PORT (default 18090). Otherwise EIS stays on the API host (8090).
+# Repository variable APP_EIS_REMOTE_BASE_URL: Odoo (hh_process_eis) or any HTTP EIS. Required for api role. In-app in-memory EIS is not supported; the "Pin EIS" step fails if it is empty.
+# When POSTGRES_HOST is 127.0.0.1/localhost, set VPS_SSH_* and HELIOS_TUNNEL_PRIVATE_KEY so the deploy job can (re)open the Postgres reverse tunnel from the VPS to helios.
 jobs:
   test:
     if: ${{ vars.CI_SKIP_TESTS != 'true' && vars.CI_SKIP_TESTS != '1' }}
@@ -150,6 +150,7 @@ jobs:
       - name: Start application
         env:
           KAFKA_BOOTSTRAP_SERVERS: localhost:29092
+          APP_EIS_REMOTE_BASE_URL: http://127.0.0.1:65530
         run: |
           mkdir -p "$NARAYANA_LOG_DIR" "$(dirname "$APP_SECURITY_USERS_XML")"
           nohup java -Dnarayana.log-dir="$NARAYANA_LOG_DIR" -Dapp.security.users-xml-path="$APP_SECURITY_USERS_XML" -jar target/*.jar > app-ci.log 2>&1 &
@@ -225,10 +226,6 @@ jobs:
           echo "## Maven package (skip unit tests)"
           mvn -B clean package -DskipTests
 
-      - name: Build external EIS JAR
-        if: ${{ vars.SKIP_EXTERNAL_EIS != 'true' && vars.SKIP_EXTERNAL_EIS != '1' }}
-        run: mvn -B package -f external-eis/pom.xml -DskipTests
-
       - name: Detect JAR name
         id: vars
         run: |
@@ -241,13 +238,6 @@ jobs:
         with:
           name: jar
           path: target/${{ steps.vars.outputs.jar_name }}
-
-      - name: Upload external EIS artifact
-        if: ${{ vars.SKIP_EXTERNAL_EIS != 'true' && vars.SKIP_EXTERNAL_EIS != '1' }}
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: external-eis-jar
-          path: external-eis/target/external-eis-0.0.1-SNAPSHOT.jar
 
   deploy:
     needs: build
@@ -262,7 +252,7 @@ jobs:
       SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
       SSH_PORT: ${{ secrets.SSH_PORT || vars.SSH_PORT || '22' }}
       SSH_USER: ${{ secrets.SSH_USER || vars.SSH_USER }}
-      # VPS (туннель БД + external-eis): как SSH — сначала secrets, иначе vars (иначе target=vps не сработает при хосте только в Variables).
+      # VPS (туннель БД): как SSH — сначала secrets, иначе vars.
       VPS_DEPLOY_HOST: ${{ secrets.VPS_SSH_HOST || vars.VPS_SSH_HOST }}
       VPS_DEPLOY_USER: ${{ secrets.VPS_SSH_USER || vars.VPS_SSH_USER }}
       VPS_DEPLOY_PORT: ${{ secrets.VPS_SSH_PORT || vars.VPS_SSH_PORT || '22' }}
@@ -273,7 +263,6 @@ jobs:
         with:
           sparse-checkout: |
             infra/appctl.sh
-            infra/eisctl.sh
             infra/ci/render_worker_env.py
             infra/stack/install-kafka-kraft.sh
             infra/stack/kafka-ctl.sh
@@ -295,13 +284,6 @@ jobs:
           name: jar
           path: artifact
 
-      - name: Download external EIS artifact
-        if: ${{ vars.SKIP_EXTERNAL_EIS != 'true' && vars.SKIP_EXTERNAL_EIS != '1' }}
-        uses: actions/download-artifact@v8.0.1
-        with:
-          name: external-eis-jar
-          path: external-eis-artifact
-
       - name: Prepare SSH
         run: |
           set -eu
@@ -312,32 +294,7 @@ jobs:
           ssh-keyscan -p "${{ env.SSH_PORT }}" -H "${{ env.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
           echo "SSH ready."
 
-      - name: Configure EIS deploy target (VPS vs helios)
-        id: eis_deploy
-        run: |
-          set -eu
-          SKIP="${{ vars.SKIP_EXTERNAL_EIS }}"
-          PH="${{ vars.POSTGRES_HOST }}"
-          VPS_HOST="${{ env.VPS_DEPLOY_HOST }}"
-          TUNNEL_PORT="${{ vars.EIS_TUNNEL_LOCAL_PORT }}"
-          [ -z "$TUNNEL_PORT" ] && TUNNEL_PORT=18090
-          echo "tunnel_port=$TUNNEL_PORT" >> "$GITHUB_OUTPUT"
-          echo "## EIS: POSTGRES_HOST=$PH, VPS_DEPLOY_HOST=$([ -n "$VPS_HOST" ] && echo set || echo empty)"
-          if [ "$SKIP" = "true" ] || [ "$SKIP" = "1" ]; then
-            echo "target=skip" >> "$GITHUB_OUTPUT"
-            echo "app_url=" >> "$GITHUB_OUTPUT"
-          elif { [ "$PH" = "127.0.0.1" ] || [ "$PH" = "localhost" ]; } && [ -n "$VPS_HOST" ]; then
-            echo "target=vps" >> "$GITHUB_OUTPUT"
-            echo "app_url=http://127.0.0.1:${TUNNEL_PORT}" >> "$GITHUB_OUTPUT"
-          else
-            echo "target=helios" >> "$GITHUB_OUTPUT"
-            echo "app_url=http://127.0.0.1:8090" >> "$GITHUB_OUTPUT"
-            if { [ "$PH" = "127.0.0.1" ] || [ "$PH" = "localhost" ]; } && [ -z "$VPS_HOST" ]; then
-              echo "::notice::EIS остаётся на helios: задайте VPS_SSH_HOST (secret или variable), иначе target≠vps."
-            fi
-          fi
-
-      - name: Prepare VPS SSH for DB tunnel and EIS on VPS
+      - name: Prepare VPS SSH for DB tunnel
         if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
         run: |
           set -eu
@@ -355,19 +312,6 @@ jobs:
           chmod 600 helios_tunnel_key
           echo "VPS SSH ready for ${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}"
 
-      - name: Stop EIS on VPS before deploy
-        if: ${{ steps.eis_deploy.outputs.target == 'vps' }}
-        run: |
-          set -eu
-          if [ ! -f ~/.ssh/id_vps ]; then
-            echo "::warning::Нет ключа VPS (~/.ssh/id_vps) — пропуск остановки EIS на VPS"
-            exit 0
-          fi
-          echo "## Pre-deploy: stop external EIS on VPS (tunnel host)"
-          VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
-          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
-            "env bash -c 'set +e; if [ -f \"\$HOME/apps/blps-eis/eisctl.sh\" ]; then bash \"\$HOME/apps/blps-eis/eisctl.sh\" stop; else echo \"No eisctl on VPS — skip\"; fi'"
-
       - name: Stop stack services on host before deploy
         run: |
           set -eu
@@ -378,7 +322,6 @@ jobs:
           ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
             "env bash -c 'set +e; \
             if [ -f \"\$HOME/apps/blps/appctl.sh\" ]; then echo \"Stopping API...\"; bash \"\$HOME/apps/blps/appctl.sh\" stop; else echo \"No appctl — skip API\"; fi; \
-            if [ -f \"\$HOME/apps/blps-eis/eisctl.sh\" ]; then echo \"Stopping external EIS...\"; bash \"\$HOME/apps/blps-eis/eisctl.sh\" stop; else echo \"No eisctl — skip EIS\"; fi; \
             if [ -f \"\$HOME/hh-process/stack/kafka-ctl.sh\" ]; then echo \"Stopping Kafka...\"; bash \"\$HOME/hh-process/stack/kafka-ctl.sh\" stop; fi; \
             echo \"Pre-deploy stop done.\"'"
           sleep 2
@@ -468,20 +411,18 @@ jobs:
           echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092" >> app.env
           echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092"
 
-      - name: Pin EIS URL for API (helios → localhost; VPS EIS via reverse tunnel uses EIS_TUNNEL_LOCAL_PORT)
+      - name: Pin EIS URL for API
         run: |
           set -eu
           grep -v '^APP_EIS_REMOTE_BASE_URL=' app.env > app.env.tmp || cp app.env app.env.tmp
           mv app.env.tmp app.env
-          TARGET="${{ steps.eis_deploy.outputs.target }}"
-          APP_URL="${{ steps.eis_deploy.outputs.app_url }}"
-          if [ "$TARGET" = "skip" ]; then
-            echo "## SKIP_EXTERNAL_EIS: in-memory JCA (no APP_EIS_REMOTE_BASE_URL)"
-          elif [ -n "$APP_URL" ]; then
-            echo "## APP_EIS_REMOTE_BASE_URL=$APP_URL"
-            echo "APP_EIS_REMOTE_BASE_URL=$APP_URL" >> app.env
-            echo "APP_EIS_REMOTE_BASE_URL=$APP_URL"
+          FALLBACK_URL="${{ vars.APP_EIS_REMOTE_BASE_URL }}"
+          if [ -z "$FALLBACK_URL" ]; then
+            echo "::error::Задайте repository variable APP_EIS_REMOTE_BASE_URL (база Odoo или другой HTTP EIS). In-memory EIS в приложении отключён."
+            exit 1
           fi
+          echo "APP_EIS_REMOTE_BASE_URL=$FALLBACK_URL" >> app.env
+          echo "APP_EIS_REMOTE_BASE_URL=$FALLBACK_URL"
 
       - name: Upload bundle to server
         run: |
@@ -509,55 +450,11 @@ jobs:
             "chmod +x ${APP_DIR}/appctl.sh"
           echo "Upload main app done."
 
-          if [ "${{ vars.SKIP_EXTERNAL_EIS }}" = "true" ] || [ "${{ vars.SKIP_EXTERNAL_EIS }}" = "1" ]; then
-            echo "SKIP_EXTERNAL_EIS — не выкладываем external-eis."
-          elif [ "${{ steps.eis_deploy.outputs.target }}" = "vps" ]; then
-            echo "## Upload external-eis JAR → VPS (тот же хост, что и туннель БД)"
-            VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
-            EIS_DIR="~/apps/blps-eis"
-            ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes \
-              "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
-              "mkdir -p ${EIS_DIR}"
-            scp -P "$VPS_PORT" -i ~/.ssh/id_vps \
-              "external-eis-artifact/external-eis-0.0.1-SNAPSHOT.jar" \
-              "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}:${EIS_DIR}/eis.jar"
-            scp -P "$VPS_PORT" -i ~/.ssh/id_vps \
-              infra/eisctl.sh \
-              "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}:${EIS_DIR}/eisctl.sh"
-            ssh -p "$VPS_PORT" -i ~/.ssh/id_vps \
-              "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
-              "chmod +x ${EIS_DIR}/eisctl.sh"
-            ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes \
-              "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
-              "env bash -c 'cd \$HOME/apps/blps-eis && ./eisctl.sh restart'"
-            echo "external-eis on VPS started."
-          else
-            EIS_DIR="~/apps/blps-eis"
-            ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-              "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-              "mkdir -p ${EIS_DIR}"
-
-            scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-              "external-eis-artifact/external-eis-0.0.1-SNAPSHOT.jar" \
-              "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${EIS_DIR}/eis.jar"
-
-            scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-              infra/eisctl.sh \
-              "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${EIS_DIR}/eisctl.sh"
-
-            ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-              "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-              "chmod +x ${EIS_DIR}/eisctl.sh"
-            echo "Upload external EIS to helios done."
-          fi
-
-      - name: Ensure reverse SSH tunnels on helios (DB + optional EIS from VPS)
+      - name: Ensure reverse SSH tunnel on helios (Postgres from VPS)
         if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
         run: |
           set -eu
-          TARGET="${{ steps.eis_deploy.outputs.target }}"
-          EIS_TP="${{ steps.eis_deploy.outputs.tunnel_port }}"
-          echo "## Reverse SSH from VPS → helios: DB port + (if EIS on VPS) EIS forward"
+          echo "## Reverse SSH from VPS → helios: Postgres"
           DB_PORT="${{ vars.POSTGRES_PORT }}"
           [ -z "$DB_PORT" ] && DB_PORT=15432
           REMOTE_DB_HOST="${{ vars.DB_TUNNEL_REMOTE_HOST }}"
@@ -568,23 +465,12 @@ jobs:
           HELIOS_PORT="${{ env.SSH_PORT }}"
           HELIOS_USER="${{ env.SSH_USER }}"
           echo "Map: helios:127.0.0.1:${DB_PORT} ← reverse SSH ← ${REMOTE_DB_HOST}:${REMOTE_DB_PORT} (Postgres на VPS)"
-          if [ "$TARGET" = "vps" ]; then
-            echo "Also: helios:127.0.0.1:${EIS_TP} ← reverse SSH ← 127.0.0.1:8090 (external-eis на VPS)"
-          fi
 
           if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $DB_PORT" 2>/dev/null; then
-            if [ "$TARGET" != "vps" ]; then
-              echo "Tunnel already up on helios:127.0.0.1:${DB_PORT}"
-              exit 0
-            fi
-            if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $EIS_TP" 2>/dev/null; then
-              echo "Tunnels already up (DB + EIS forward)."
-              exit 0
-            fi
-            echo "DB listener OK but EIS forward missing — reopening combined tunnel..."
-          else
-            echo "No listener on helios:${DB_PORT} — opening tunnel from VPS..."
+            echo "Tunnel already up on helios:127.0.0.1:${DB_PORT}"
+            exit 0
           fi
+          echo "No listener on helios:${DB_PORT} — opening tunnel from VPS..."
 
           if [ -z "${{ env.VPS_DEPLOY_HOST }}" ] || [ -z "${{ env.VPS_DEPLOY_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
             echo "::error::Tunnel down and secrets missing: set VPS_SSH_HOST, VPS_SSH_USER, VPS_SSH_KEY, HELIOS_TUNNEL_PRIVATE_KEY (or start tunnel manually on helios)."
@@ -596,9 +482,6 @@ jobs:
           scp -P "$VPS_PORT" -i ~/.ssh/id_vps helios_tunnel_key "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}:~/.ssh/helios_tunnel_key"
 
           REV_ARGS="-R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}"
-          if [ "$TARGET" = "vps" ]; then
-            REV_ARGS="$REV_ARGS -R ${EIS_TP}:127.0.0.1:8090"
-          fi
 
           echo "Starting reverse SSH from VPS to helios..."
           ssh -p "$VPS_PORT" -i ~/.ssh/id_vps "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
@@ -617,30 +500,12 @@ jobs:
             echo "::error::Tunnel did not open helios:127.0.0.1:${DB_PORT} — check VPS→helios SSH and Postgres on ${REMOTE_DB_HOST}:${REMOTE_DB_PORT}"
             exit 1
           fi
-          if [ "$TARGET" = "vps" ]; then
-            echo "Waiting for helios:127.0.0.1:${EIS_TP} (EIS reverse forward)..."
-            if ! ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_USER@$HELIOS_HOST" \
-              "env bash -c 'i=0; while [ \$i -lt 20 ]; do nc -z 127.0.0.1 ${EIS_TP} && exit 0; sleep 2; i=\$((i+1)); done; exit 1'"; then
-              echo "::error::EIS reverse forward did not open on helios:${EIS_TP} — check external-eis on VPS :8090"
-              exit 1
-            fi
-          fi
           echo "Tunnel OK."
 
       - name: Restart service on server
         run: |
           set -eu
-          TARGET="${{ steps.eis_deploy.outputs.target }}"
-          if [ "${{ vars.SKIP_EXTERNAL_EIS }}" = "true" ] || [ "${{ vars.SKIP_EXTERNAL_EIS }}" = "1" ]; then
-            echo "## SKIP_EXTERNAL_EIS — перезапуск только Spring Boot"
-          elif [ "$TARGET" = "helios" ]; then
-            echo "## Restart external EIS on helios, затем Spring Boot"
-            ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-              "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-              "cd \$HOME/apps/blps-eis && ./eisctl.sh restart"
-          elif [ "$TARGET" = "vps" ]; then
-            echo "## external-eis на VPS уже перезапущен при выкладке — только Spring Boot на helios"
-          fi
+          echo "## Restart Spring Boot (API)"
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "cd \$HOME/apps/blps && ./appctl.sh restart"

@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.UUID;
 
+import ru.itmo.hhprocess.enums.ResponseType;
+
 @Service
 @RequiredArgsConstructor
 public class InvitationResponseService {
@@ -26,6 +28,8 @@ public class InvitationResponseService {
     private final HistoryService historyService;
     private final NotificationAfterCommitService notificationAfterCommitService;
     private final AuthService authService;
+    private final InterviewService interviewService;
+    private final InterviewExportRequestService interviewExportRequestService;
 
     @Transactional
     public InvitationResponseResponse respond(UUID applicationId, InvitationResponseRequest request) {
@@ -75,6 +79,13 @@ public class InvitationResponseService {
         notificationAfterCommitService.publishAfterCommit(application.getVacancy().getRecruiterUser(), application,
                 ru.itmo.hhprocess.enums.NotificationType.INVITATION_RESPONSE,
                 "Candidate responded to interview invitation");
+
+        if (request.getResponseType() == ResponseType.ACCEPT) {
+            interviewService.findActiveByApplicationId(application.getId())
+                    .ifPresent(
+                            i -> interviewExportRequestService.export(i.getId())
+                    );
+        }
 
         return InvitationResponseResponse.builder()
                 .applicationId(application.getId())

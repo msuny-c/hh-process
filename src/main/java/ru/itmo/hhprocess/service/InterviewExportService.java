@@ -23,7 +23,7 @@ public class InterviewExportService {
             interviewExportLogService.markExported(interview, eisReference);
         } catch (ResourceException e) {
             interviewExportLogService.markFailed(interview, e.getMessage());
-            throw new IllegalStateException("Interview export failed for " + interview.getId(), e);
+            log.error("Interview export failed for {}", interview.getId(), e);
         }
     }
 

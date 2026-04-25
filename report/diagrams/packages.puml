@@ -26,10 +26,7 @@ inteis ..> jca : uses
 mcons ..> svc
 mprod ..> svc
 
-package "ru.itmo.externaleis" as extroot <<отдельный модуль>> {
-  package "web" as extweb <<REST mock EIS>>
-}
-
-jca ..> extweb : HTTP при\nAPP_EIS_REMOTE_BASE_URL
+cloud "EIS (HTTP)\nвнешний" as eiscloud
+jca ..> eiscloud
 
 @enduml

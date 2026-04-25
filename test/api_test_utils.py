@@ -260,10 +260,6 @@ def wait_for_recruiter_application_status(api: API, recruiter: SessionCtx, appli
     raise CheckError(f'recruiter application {application_id} did not reach {list(expected_statuses)}; last payload={last_payload}')
 
 
-def run_export_job(api: API, admin: SessionCtx) -> Dict[str, Any]:
-    return api.json('POST', '/api/v1/admin/jobs/export-interviews', auth=admin.auth, expected=[200])
-
-
 def set_schedule_failure(api: API, admin: SessionCtx, enabled: bool) -> Dict[str, Any]:
     return api.json('POST', f'/api/v1/admin/debug/schedule-failure/{str(enabled).lower()}', auth=admin.auth, expected=[200])
 

@@ -16,35 +16,47 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import javax.security.auth.Subject;
 
 public class CalendarManagedConnectionFactory implements ManagedConnectionFactory {
 
     @Serial
-    private static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = 3L;
+
+    private static final String NOT_CONFIGURED =
+            "EIS is not configured: set app.eis.remote-base-url (e.g. APP_EIS_REMOTE_BASE_URL=http://odoo:8069). In-memory EIS is not supported.";
+
+    private static final Set<String> CREATE_EXTRA_STRING_KEYS = Set.of(
+            "recruiterEmail", "candidateName", "candidateEmail", "recruiterName",
+            "vacancyTitle", "interviewMessage", "applicationId", "invitationText"
+    );
 
     private final String remoteBaseUrl;
-    private final Map<UUID, CalendarEntry> storage = new ConcurrentHashMap<>();
+    private final String apiKey;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private transient HttpClient httpClient;
     private PrintWriter logWriter;
 
     public CalendarManagedConnectionFactory() {
-        this("");
+        this("", "");
     }
 
     public CalendarManagedConnectionFactory(String remoteBaseUrl) {
-        this.remoteBaseUrl = remoteBaseUrl == null ? "" : remoteBaseUrl.trim().replaceAll("/+$", "");
+        this(remoteBaseUrl, "");
     }
 
-    private boolean useRemote() {
-        return !remoteBaseUrl.isEmpty();
+    public CalendarManagedConnectionFactory(String remoteBaseUrl, String apiKey) {
+        this.remoteBaseUrl = remoteBaseUrl == null ? "" : remoteBaseUrl.trim().replaceAll("/+$", "");
+        this.apiKey = apiKey == null ? "" : apiKey.trim();
+    }
+
+    private void ensureEisConfigured() throws ResourceException {
+        if (remoteBaseUrl.isEmpty()) {
+            throw new ResourceException(NOT_CONFIGURED);
+        }
     }
 
     private HttpClient http() {
@@ -91,18 +103,10 @@ public class CalendarManagedConnectionFactory implements ManagedConnectionFactor
     }
 
     CalendarMappedRecord execute(CalendarInteractionSpec spec, CalendarMappedRecord input) throws ResourceException {
-        if (useRemote()) {
-            return switch (spec.getOperation()) {
-                case "CREATE" -> createRemote(input);
-                case "CANCEL" -> cancelRemote(input);
-                case "GET" -> getRemote(input);
-                default -> throw new ResourceException("Unsupported operation: " + spec.getOperation());
-            };
-        }
+        ensureEisConfigured();
         return switch (spec.getOperation()) {
-            case "CREATE" -> createLocal(input);
-            case "CANCEL" -> cancelLocal(input);
-            case "GET" -> getLocal(input);
+            case "CREATE" -> createRemote(input);
+            case "CANCEL" -> cancelRemote(input);
             default -> throw new ResourceException("Unsupported operation: " + spec.getOperation());
         };
     }
@@ -115,13 +119,24 @@ public class CalendarManagedConnectionFactory implements ManagedConnectionFactor
             body.put("durationMinutes", Integer.parseInt(String.valueOf(input.get("durationMinutes"))));
             body.put("candidateId", String.valueOf(input.get("candidateId")));
             body.put("recruiterId", String.valueOf(input.get("recruiterId")));
+            for (String key : CREATE_EXTRA_STRING_KEYS) {
+                Object v = input.get(key);
+                if (v == null) {
+                    continue;
+                }
+                String s = String.valueOf(v);
+                if (s.isBlank() || "null".equals(s)) {
+                    continue;
+                }
+                body.put(key, s);
+            }
             String json = objectMapper.writeValueAsString(body);
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder createReq = HttpRequest.newBuilder()
                     .uri(URI.create(remoteBaseUrl + "/api/v1/calendar/entries"))
                     .timeout(Duration.ofSeconds(30))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(json));
+            HttpRequest request = withEisAuth(createReq).build();
             HttpResponse<String> response = http().send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
                 throw new ResourceException("EIS create HTTP " + response.statusCode() + ": " + response.body());
@@ -136,11 +151,11 @@ public class CalendarManagedConnectionFactory implements ManagedConnectionFactor
     private CalendarMappedRecord cancelRemote(CalendarMappedRecord input) throws ResourceException {
         try {
             UUID interviewId = UUID.fromString(String.valueOf(input.get("interviewId")));
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder cancelReq = HttpRequest.newBuilder()
                     .uri(URI.create(remoteBaseUrl + "/api/v1/calendar/entries/" + interviewId + "/cancel"))
                     .timeout(Duration.ofSeconds(30))
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.noBody());
+            HttpRequest request = withEisAuth(cancelReq).build();
             HttpResponse<String> response = http().send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
                 throw new ResourceException("EIS cancel HTTP " + response.statusCode() + ": " + response.body());
@@ -152,26 +167,11 @@ public class CalendarManagedConnectionFactory implements ManagedConnectionFactor
         }
     }
 
-    private CalendarMappedRecord getRemote(CalendarMappedRecord input) throws ResourceException {
-        try {
-            UUID interviewId = UUID.fromString(String.valueOf(input.get("interviewId")));
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(remoteBaseUrl + "/api/v1/calendar/entries/" + interviewId))
-                    .timeout(Duration.ofSeconds(30))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = http().send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 404) {
-                throw new ResourceException("Calendar record not found for interview " + interviewId);
-            }
-            if (response.statusCode() >= 400) {
-                throw new ResourceException("EIS get HTTP " + response.statusCode() + ": " + response.body());
-            }
-            return jsonToOutput(response.body());
-        } catch (IOException | InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new ResourceException("EIS get failed: " + e.getMessage(), e);
+    private HttpRequest.Builder withEisAuth(HttpRequest.Builder base) {
+        if (!apiKey.isEmpty()) {
+            base = base.header("X-API-Key", apiKey);
         }
+        return base;
     }
 
     private CalendarMappedRecord jsonToOutput(String json) throws IOException {
@@ -194,63 +194,15 @@ public class CalendarManagedConnectionFactory implements ManagedConnectionFactor
         return n == null || n.isNull() ? null : n.asText();
     }
 
-    private CalendarMappedRecord createLocal(CalendarMappedRecord input) {
-        UUID interviewId = UUID.fromString(String.valueOf(input.get("interviewId")));
-        String eisReference = "EIS-" + interviewId.toString().substring(0, 8);
-        CalendarEntry entry = new CalendarEntry(
-                eisReference,
-                interviewId,
-                String.valueOf(input.get("scheduledAt")),
-                "EXPORTED"
-        );
-        storage.put(interviewId, entry);
-        CalendarMappedRecord output = new CalendarMappedRecord("calendar-response");
-        output.put("eisReference", eisReference);
-        output.put("interviewId", interviewId.toString());
-        output.put("status", entry.status());
-        output.put("scheduledAt", entry.scheduledAt());
-        output.put("updatedAt", Instant.now().toString());
-        return output;
-    }
-
-    private CalendarMappedRecord cancelLocal(CalendarMappedRecord input) {
-        UUID interviewId = UUID.fromString(String.valueOf(input.get("interviewId")));
-        CalendarEntry existing = storage.get(interviewId);
-        CalendarEntry entry = existing == null
-                ? new CalendarEntry("EIS-" + interviewId.toString().substring(0, 8), interviewId, null, "CANCELLED")
-                : new CalendarEntry(existing.eisReference(), interviewId, existing.scheduledAt(), "CANCELLED");
-        storage.put(interviewId, entry);
-        CalendarMappedRecord output = new CalendarMappedRecord("calendar-response");
-        output.put("eisReference", entry.eisReference());
-        output.put("interviewId", interviewId.toString());
-        output.put("status", entry.status());
-        return output;
-    }
-
-    private CalendarMappedRecord getLocal(CalendarMappedRecord input) throws ResourceException {
-        UUID interviewId = UUID.fromString(String.valueOf(input.get("interviewId")));
-        CalendarEntry entry = storage.get(interviewId);
-        if (entry == null) {
-            throw new ResourceException("Calendar record not found for interview " + interviewId);
-        }
-        CalendarMappedRecord output = new CalendarMappedRecord("calendar-response");
-        output.put("eisReference", entry.eisReference());
-        output.put("interviewId", entry.interviewId().toString());
-        output.put("status", entry.status());
-        output.put("scheduledAt", entry.scheduledAt());
-        return output;
-    }
-
     @Override
     public int hashCode() {
-        return Objects.hash(remoteBaseUrl);
+        return Objects.hash(remoteBaseUrl, apiKey);
     }
 
     @Override
     public boolean equals(Object obj) {
-        return obj instanceof CalendarManagedConnectionFactory o && Objects.equals(remoteBaseUrl, o.remoteBaseUrl);
-    }
-
-    record CalendarEntry(String eisReference, UUID interviewId, String scheduledAt, String status) {
+        return obj instanceof CalendarManagedConnectionFactory o
+                && Objects.equals(remoteBaseUrl, o.remoteBaseUrl)
+                && Objects.equals(apiKey, o.apiKey);
     }
 }

@@ -22,10 +22,6 @@ public class CalendarInteractionSpec implements InteractionSpec {
         return new CalendarInteractionSpec("CANCEL");
     }
 
-    public static CalendarInteractionSpec get() {
-        return new CalendarInteractionSpec("GET");
-    }
-
     public String getOperation() {
         return operation;
     }

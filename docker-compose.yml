@@ -1,3 +1,9 @@
+# Полный стек: app DB, ZooKeeper, Kafka, Kafka UI, Odoo (реальный EIS + календарь), API + worker.
+# Запуск: docker compose up -d --build
+# EIS: события попадают в calendar.event в Odoo (см. odoo-addons/hh_process_eis).
+# Переменная EIS_API_KEY — общий секрет для hh-process и модуля Odoo.
+name: hh-process
+
 services:
   postgres-main:
     image: postgres:16-alpine
@@ -76,20 +82,77 @@ services:
         done
     restart: "no"
 
-  # Включить: COMPOSE_PROFILES=eis (или docker compose --profile eis up) и задать APP_EIS_REMOTE_BASE_URL=http://external-eis:8090
-  external-eis:
-    profiles:
-      - eis
-    build: ./external-eis
-    container_name: hh-process-external-eis
-    ports:
-      - "8090:8090"
+  # Отдельная БД и сервис для Odoo Community (не путать с postgres-main для Spring).
+  odoo-db:
+    image: postgres:16
+    container_name: hh-process-odoo-db
+    environment:
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+      POSTGRES_DB: postgres
+    volumes:
+      - odoo_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8090/actuator/health | grep -q '\"status\":\"UP\"'"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
+      interval: 5s
       timeout: 5s
-      retries: 8
-      start_period: 20s
+      retries: 10
+      start_period: 10s
+
+  # Однократная установка модули hh_process_eis (при смене модуля перезапустите этот шаг: docker compose run --rm odoo-install)
+  odoo-install:
+    image: odoo:17.0
+    container_name: hh-process-odoo-install
+    depends_on:
+      odoo-db:
+        condition: service_healthy
+    environment:
+      HOST: odoo-db
+      USER: odoo
+      PASSWORD: odoo
+      ODOO_EIS_API_KEY: ${EIS_API_KEY:-dev-eis-key}
+    volumes:
+      - odoo_data:/var/lib/odoo
+      - ./odoo-addons:/mnt/extra-addons
+    command:
+      - odoo
+      - -d
+      - odoo
+      - -i
+      - base,web,calendar,hh_process_eis
+      - --stop-after-init
+      - --without-demo=all
+    restart: "no"
+
+  odoo:
+    image: odoo:17.0
+    container_name: hh-process-odoo
+    depends_on:
+      odoo-db:
+        condition: service_healthy
+      odoo-install:
+        condition: service_completed_successfully
+    environment:
+      HOST: odoo-db
+      USER: odoo
+      PASSWORD: odoo
+      ODOO_EIS_API_KEY: ${EIS_API_KEY:-dev-eis-key}
+    ports:
+      - "8069:8069"
+    volumes:
+      - odoo_data:/var/lib/odoo
+      - ./odoo-addons:/mnt/extra-addons
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import socket; s=socket.create_connection(('127.0.0.1',8069),2); s.close()\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    command: [odoo, -d, odoo]
 
   kafka-ui:
     image: kafbat/kafka-ui:v1.4.2
@@ -114,6 +177,8 @@ services:
         condition: service_healthy
       kafka-topics-init:
         condition: service_completed_successfully
+      odoo:
+        condition: service_healthy
     environment:
       APP_ROLE: api
       APP_INSTANCE_NAME: hh-api
@@ -129,8 +194,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_GROUP_ID: hh-process-api
       APP_SCREENING_ENABLED: "false"
-      # Пусто = in-memory JCA; с профилем eis задайте в .env: APP_EIS_REMOTE_BASE_URL=http://external-eis:8090
-      APP_EIS_REMOTE_BASE_URL: ${APP_EIS_REMOTE_BASE_URL:-}
+      APP_EIS_REMOTE_BASE_URL: ${APP_EIS_REMOTE_BASE_URL:-http://odoo:8069}
+      APP_EIS_API_KEY: ${EIS_API_KEY:-dev-eis-key}
     ports:
       - "8080:8080"
     volumes:
@@ -166,6 +231,8 @@ services:
 
 volumes:
   postgres_main_data:
+  odoo_pg_data:
+  odoo_data:
   narayana_logs_api:
   narayana_logs_worker:
   app_api_data:

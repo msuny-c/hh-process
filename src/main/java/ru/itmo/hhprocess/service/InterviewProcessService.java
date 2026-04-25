@@ -25,7 +25,6 @@ public class InterviewProcessService {
 
     private static final long INVITATION_TTL_HOURS = 48;
     private static final int DEFAULT_DURATION_MINUTES = 60;
-    private static final long DEFAULT_DELAY_HOURS = 24;
 
     private final ApplicationRepository applicationRepository;
     private final VacancyService vacancyService;
@@ -47,7 +46,7 @@ public class InterviewProcessService {
         }
 
         Instant now = Instant.now();
-        Instant scheduledAt = request.getScheduledAt() != null ? request.getScheduledAt() : now.plus(DEFAULT_DELAY_HOURS, ChronoUnit.HOURS);
+        Instant scheduledAt = request.getScheduledAt();
         if (scheduledAt.isBefore(now.plus(5, ChronoUnit.MINUTES))) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE, "Interview must be scheduled in the future");
         }

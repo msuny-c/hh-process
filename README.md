@@ -10,23 +10,23 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 - Асинхронный screening через Kafka: worker считает результат по `application.submitted` и публикует `application.screened`; запись в БД (`screening_results`, смена статуса заявки, уведомления) делает consumer на **`api`**.
 - Идемпотентность Kafka consumers через таблицу `processed_kafka_events`.
 - Уведомления: запись в БД и WebSocket push после commit транзакции (без отдельного Kafka-топика).
-- `@Scheduled` для timeout-закрытия приглашений и планового экспорта интервью в EIS.
-- Отдельный HTTP-сервис **`external-eis/`** (внешняя EIS); **`api`** вызывает его через JCA-адаптер (`CalendarManagedConnectionFactory`), без Kafka.
+- `@Scheduled` только для timeout-закрытия приглашений; экспорт в EIS — **синхронно** при ответе кандидата (ACCEPT), без фоновых job по расписанию.
+- **Odoo Community 17** с модулем **`odoo-addons/hh_process_eis`**: JSON REST (см. `controllers/main.py` в модуле), записи в `calendar.event`. **`api`** зовёт EIS по HTTP через JCA (`CalendarManagedConnectionFactory`), без Kafka; `APP_EIS_REMOTE_BASE_URL` обязателен (in-memory EIS в JVM отключён).
 
 ## Архитектура
 
 Один и тот же `jar` запускается в разных ролях через `APP_ROLE`:
 
-- `api`: REST, WebSocket, Swagger UI, schedulers (timeout, **прямой экспорт в EIS через JCA** после commit), Kafka consumer на `application.screened`.
+- `api`: REST, WebSocket, Swagger UI, `TimeoutService` (scheduled), **синхронный** экспорт в EIS через JCA при ACCEPT, Kafka consumer на `application.screened`.
 - `worker`: Kafka listener на `application.submitted` (только расчёт screening и публикация `application.screened`, без записи результата в БД); `APP_SCREENING_ENABLED=true`.
 
 В `docker-compose.yml` поднимается:
 
-- `postgres-main` — единственная PostgreSQL.
+- `postgres-main` — PostgreSQL для Spring / Flyway.
 - `zookeeper`, `kafka` — брокер (внутри сети `kafka:9092`, с хоста `localhost:29092`).
 - `kafka-topics-init` — однократное создание топиков.
 - `kafka-ui` — веб-интерфейс к Kafka (см. порты ниже).
-- **`external-eis`** — внешний учебный EIS (HTTP, порт 8090).
+- `odoo-db`, `odoo-install`, **`odoo`** — Odoo Community 17, календарь (порт 8069); EIS-эндпоинты в модуле `hh_process_eis` (общий секрет `EIS_API_KEY` / `APP_EIS_API_KEY`).
 - `app-api`, `app-worker` — два контейнера основного приложения с разными `APP_ROLE`.
 
 Топики Kafka (имена по умолчанию, переопределяются через `APP_TOPIC_*`):
@@ -55,14 +55,14 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 
 Сценарий `invite interview` обновляет в **одной** БД заявку, интервью и таблицу `recruiter_schedule_slots`. При ошибке (в т.ч. при включённом debug `fail-on-reserve`) откатывается вся транзакция — без второй отдельной БД расписания.
 
-### Scheduler use cases
+### Плановые задачи и экспорт в EIS
 
-- `TimeoutService` закрывает просроченные приглашения на роли `api`.
-- `InterviewExportScheduler` по cron ставит интервью на экспорт: после commit транзакции вызывается `InterviewExportService` → JCA → HTTP к **`external-eis`** (без Kafka).
+- `TimeoutService` (@Scheduled) закрывает просроченные приглашения на роли `api`.
+- Экспорт в EIS: при `response_type: ACCEPT` в **том же** HTTP-запросе, в одной транзакции: `InvitationResponseService` → `InterviewExportRequestService` → `InterviewExportService` → JCA → HTTP.
 
 ### JCA EIS
 
-В пакете `ru.itmo.hhprocess.integration.eis.jca` — учебный resource adapter; при заданном **`APP_EIS_REMOTE_BASE_URL`** операции CREATE/CANCEL/GET уходят на внешний сервис по HTTP. Если URL пустой, используется in-memory хранилище внутри JVM (удобно для тестов без `external-eis`).
+В пакете `ru.itmo.hhprocess.integration.eis.jca` — resource adapter: операции CREATE и CANCEL к внешнему HTTP JSON API (`/api/v1/calendar/...`); для **api** **`APP_EIS_REMOTE_BASE_URL` обязателен** (in-memory EIS в JVM нет). Заголовок **`X-API-Key`**, если задан **`APP_EIS_API_KEY`**.
 
 - `CalendarManagedConnectionFactory`, `CalendarManagedConnection`, `CalendarConnectionFactory`, `CalendarConnection`, `CalendarInteraction`, `CalendarInteractionSpec`
 
@@ -107,10 +107,13 @@ APP_SCREENING_ENABLED=true
 ### Внешняя EIS (HTTP)
 
 ```text
-APP_EIS_REMOTE_BASE_URL=http://external-eis:8090
+APP_EIS_REMOTE_BASE_URL=http://odoo:8069
+APP_EIS_API_KEY=dev-eis-key
 ```
 
-Пустое значение — режим in-memory внутри JCA (без отдельного сервиса).
+`APP_EIS_REMOTE_BASE_URL` **нельзя** оставлять пустым на **api** (приложение не стартует). Ключ: как в Odoo `ODOO_EIS_API_KEY`; `APP_EIS_API_KEY` можно не задавать, если EIS не требует `X-API-Key`.
+
+**Календарь в Odoo:** встреча привязывается к пользователю по **той же почте**, что у рекрутера в hh-process: в Odoo должен быть внутренний пользователь с **логином** (или email контакта), совпадающим с этой почтой (например `recruiter@example.com`). Иначе организатором остаётся fallback (пользователь `admin`).
 
 Имена топиков (опционально):
 
@@ -125,8 +128,6 @@ APP_TOPIC_APPLICATION_SCREENED=application.screened
 SERVER_PORT=8080
 APP_SECURITY_USERS_XML=/app/data/users.xml
 WS_ALLOWED_ORIGINS=http://localhost:3000
-APP_EXPORT_CRON=0 0 6 * * *
-APP_EXPORT_LOOKAHEAD_HOURS=24
 APP_SCHEDULE_DEBUG_FAIL_ON_RESERVE=false
 APP_TIMEOUT_CHECK_INTERVAL_MS=60000
 APP_TIMEOUT_INITIAL_DELAY_MS=30000
@@ -177,7 +178,7 @@ APP_TIMEOUT_INITIAL_DELAY_MS=30000
 - `POST /api/v1/recruiters/vacancies/{vacancyId}/close`
 - `GET /api/v1/recruiters/applications`
 - `GET /api/v1/recruiters/applications/{applicationId}`
-- `POST /api/v1/recruiters/applications/{applicationId}/invite`
+- `POST /api/v1/recruiters/applications/{applicationId}/invite` — тело: `message`, обязательный `scheduled_at` (ISO, в будущем), опционально `duration_minutes` (15–480; иначе 60)
 - `POST /api/v1/recruiters/applications/{applicationId}/reject`
 - `GET /api/v1/recruiters/schedule`
 - `POST /api/v1/recruiters/interviews/{interviewId}/cancel`
@@ -192,7 +193,6 @@ APP_TIMEOUT_INITIAL_DELAY_MS=30000
 Требуется роль admin и соответствующие привилегии:
 
 - `POST /api/v1/admin/jobs/close-expired-invitations`
-- `POST /api/v1/admin/jobs/export-interviews`
 - `POST /api/v1/admin/debug/schedule-failure/{enabled}`
 
 ## Flyway
@@ -209,7 +209,7 @@ docker compose up --build
 Порты:
 
 - API и Actuator: `http://localhost:8080` (health: `/actuator/health`)
-- Внешняя EIS: `http://localhost:8090` (health: `/actuator/health`)
+- Odoo (календарь EIS): `http://localhost:8069` (создание БД и модули — один раз делает `odoo-install` при `docker compose up`)
 - Kafka UI: `http://localhost:8081`
 - Kafka с хоста: `localhost:29092`
 - PostgreSQL: `localhost:5432`
@@ -220,7 +220,7 @@ docker compose up --build
 
 - Асинхронный screening: `POST apply` → polling `GET application`.
 - Откат транзакции при invite: `POST /api/v1/admin/debug/schedule-failure/true`, затем `invite` — заявка/интервью/слот не должны остаться в несогласованном состоянии.
-- Export to EIS: интервью в подходящем статусе, cron или `POST /api/v1/admin/jobs/export-interviews` — экспорт на **`external-eis`** через JCA (`APP_EIS_REMOTE_BASE_URL`).
+- Export to EIS: `ACCEPT` на приглашение (синхронно); Odoo через JCA (`APP_EIS_REMOTE_BASE_URL`, `APP_EIS_API_KEY`).
 
 ## Важные ограничения реализации
 

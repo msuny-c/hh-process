@@ -4,9 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.itmo.hhprocess.config.ApiRoleOnly;
 import ru.itmo.hhprocess.dto.admin.DebugFlagResponse;
-import ru.itmo.hhprocess.dto.admin.ExportJobResponse;
 import ru.itmo.hhprocess.dto.admin.JobResultResponse;
-import ru.itmo.hhprocess.scheduler.InterviewExportScheduler;
 import ru.itmo.hhprocess.service.ScheduleDebugService;
 import ru.itmo.hhprocess.service.TimeoutService;
 
@@ -27,7 +25,6 @@ import io.swagger.v3.oas.annotations.Operation;
 public class AdminController {
 
     private final TimeoutService timeoutService;
-    private final InterviewExportScheduler interviewExportScheduler;
     private final ScheduleDebugService scheduleDebugService;
 
     @Operation(summary = "Закрыть просроченные приглашения")
@@ -51,15 +48,6 @@ public class AdminController {
             long durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
             log.info("Admin timeout endpoint leaving controller method; durationMs={}", durationMs);
         }
-    }
-
-    @Operation(summary = "Поставить экспорт интервью в очередь")
-    @PostMapping("/jobs/export-interviews")
-    @PreAuthorize("hasAuthority('JOB_RUN_INTERVIEW_EXPORT')")
-    public ExportJobResponse exportInterviews() {
-        return ExportJobResponse.builder()
-                .scheduledCount(interviewExportScheduler.runOnce())
-                .build();
     }
 
     @Operation(summary = "Включить/выключить искусственную ошибку reserve в schedule DB")

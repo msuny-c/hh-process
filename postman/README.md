@@ -33,11 +33,9 @@
 
 После этого `invite` должен упасть, а данные в main DB и schedule DB не должны зафиксироваться частично.
 
-### 3. Для EIS export появился admin trigger
+### 3. EIS export
 
-Для ручной постановки интервью на экспорт:
-
-`POST /api/v1/admin/jobs/export-interviews`
+При **`response_type: ACCEPT`** на `POST /api/v1/candidates/.../invitation-response` выгрузка в EIS выполняется **синхронно** в том же запросе (JCA-HTTP к Odoo/модулю).
 
 ## Рекомендуемые сценарии коллекции
 
@@ -54,16 +52,16 @@
 1. Создать вакансию.
 2. Подать отклик и дождаться `ON_RECRUITER_REVIEW`.
 3. Включить `schedule-failure`.
-4. Попробовать `invite`.
+4. Попробовать `invite` (в теле должны быть `message` и `scheduled_at` в будущем).
 5. Проверить, что интервью не появилось и статус заявки не стал `INVITED`.
 6. Выключить `schedule-failure`.
 
 ### Export to EIS
 
-1. Поднять стек с `external-eis` (в `docker-compose`) или задать `APP_EIS_REMOTE_BASE_URL`.
-2. Создать интервью.
-3. Вызвать `POST /api/v1/admin/jobs/export-interviews`.
-4. Проверить запись в `interview_export_log` и ответ внешней EIS.
+1. Поднять стек с Odoo/мок EIS и задать `APP_EIS_REMOTE_BASE_URL` / при необходимости `APP_EIS_API_KEY`.
+2. Рекрутер: `POST .../invite` с полями `message`, **`scheduled_at`** (обязательно, в будущем), при желании `duration_minutes`.
+3. Кандидат: `POST .../invitation-response` с `response_type: ACCEPT` — экспорт в EIS в том же запросе, до ответа клиенту.
+4. Проверить `interview_export_log` и событие в Odoo.
 
 ## Аутентификация
 

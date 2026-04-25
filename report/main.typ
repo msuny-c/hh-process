@@ -109,7 +109,6 @@
     [GET], [`/api/v1/notifications`], [Список уведомлений пользователя.],
     [PATCH], [`/api/v1/notifications/\{notificationId\}/read`], [Отметить прочитанным.],
     [POST], [`/api/v1/admin/jobs/close-expired-invitations`], [Принудительно закрыть просроченные приглашения.],
-    [POST], [`/api/v1/admin/jobs/export-interviews`], [Запуск экспорта интервью в EIS (JCA).],
     [POST], [`/api/v1/admin/debug/schedule-failure/\{enabled\}`], [Debug: ошибка резерва слота (таблица `recruiter_schedule_slots`).],
   ),
 )
@@ -120,10 +119,10 @@
 - Брокер: префиксы `/topic`, `/queue`; приложение — `/app`; пользовательские каналы — `/user`.
 - Уведомления доставляются на `/user/queue/notifications` (см. `WebSocketNotificationService`).
 
-== Внешний сервис `external-eis`
+== Модуль Odoo `hh_process_eis` (HTTP EIS)
 
 #figure(
-  caption: [HTTP API процесса `external-eis`],
+  caption: [JSON REST, реализованный в `odoo-addons/hh_process_eis`],
   table(
     columns: (0.8fr, 2.4fr, 2.3fr),
     inset: 5pt,
@@ -137,11 +136,6 @@
   ),
 )
 
-= Периодические задачи
+= Плановые задачи и экспорт в EIS
 
-В системе присутствуют два scheduler use case на узле `api`:
-
-- `TimeoutService.closeExpiredInvitations()` — закрытие просроченных приглашений;
-- `InterviewExportScheduler.scheduleInterviewExport()` — выбор интервью и запуск экспорта в EIS (через `InterviewExportRequestService` и JCA после commit).
-
-Обе задачи реализованы через Spring `@Scheduled`.
+Через Spring `@Scheduled` на узле `api` реализован только `TimeoutService` (закрытие просроченных приглашений). Экспорт интервью в EIS — **синхронно** в запросе кандидата (ACCEPT): `InvitationResponseService` → `InterviewExportRequestService` → JCA-HTTP.

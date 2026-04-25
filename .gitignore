@@ -44,3 +44,8 @@ coverage/
 .nyc_output/
 
 transaction-logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo

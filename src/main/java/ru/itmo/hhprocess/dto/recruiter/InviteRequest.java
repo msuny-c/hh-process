@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -17,6 +18,7 @@ public class InviteRequest {
     @Size(max = 5_000, message = "Message must not exceed 5000 characters")
     private String message;
 
+    @NotNull(message = "scheduledAt (date and time) is required")
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     @Future(message = "scheduledAt must be in the future")
     private Instant scheduledAt;
