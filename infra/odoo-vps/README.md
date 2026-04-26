@@ -41,6 +41,19 @@ sudo bash infra/odoo-vps/install-odoo-ubuntu.sh
    - `APP_EIS_REMOTE_BASE_URL` — публичный URL Odoo, например `http://<vps-адрес>:8069` (или `https://…` за reverse proxy).
    - при использовании ключа: согласованные `APP_EIS_API_KEY` и `ODOO_EIS_API_KEY` в `/etc/odoo/hhprocess-eis.env`.
 
+### `permission denied for schema public` (PostgreSQL 15+)
+
+Пакет Odoo часто подключается к БД, где владелец `public` не совпадает с пользователем `odoo`. Скрипт [ensure-postgres-for-odoo.sh](ensure-postgres-for-odoo.sh) выставляет `ALTER DATABASE … OWNER`, `ALTER SCHEMA public OWNER TO odoo` (его вызывают `install-odoo-ubuntu.sh` при наличии файла рядом и [deploy-odoo-vps.sh](deploy-odoo-vps.sh) перед `odoo -i`).
+
+Если `odoo -i` **уже один раз падал** и в БД остались кривые объекты, на VPS (осторожно, удалит БД):
+
+```bash
+sudo -u postgres dropdb ИМЯ_БД
+sudo rm -f /etc/odoo/.hh_eis_db_inited
+```
+
+затем снова deploy или: `sudo bash ~/hh-process/odoo-ci/ensure-postgres-for-odoo.sh ИМЯ_БД` и `sudo -u odoo odoo -c /etc/odoo/odoo.conf -d ИМЯ_БД -i base,web,calendar,hh_process_eis --stop-after-init --without-demo=all`
+
 ## Обновления модуля
 
 После изменений в `odoo-addons/hh_process_eis` снова выполните `rsync` и при необходимости обновление модуля в Odoo (`-u hh_process_eis`) или рестарт сервиса, если менялся только Python/XML.

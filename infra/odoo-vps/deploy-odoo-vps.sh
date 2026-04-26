@@ -41,10 +41,10 @@ fi
 echo "## mkdir ~/hh-process/odoo-ci on VPS"
 "${SSH_[@]}" "$REM" "mkdir -p ~/hh-process/odoo-ci"
 
-echo "## scp install-odoo-ubuntu.sh"
-"${SCP_[@]}" infra/odoo-vps/install-odoo-ubuntu.sh "${REM}:~/hh-process/odoo-ci/"
+echo "## scp install + postgres fix (нужен ensure рядом с install — PG15+ public)"
+"${SCP_[@]}" infra/odoo-vps/install-odoo-ubuntu.sh infra/odoo-vps/ensure-postgres-for-odoo.sh "${REM}:~/hh-process/odoo-ci/"
 
-echo "## install-odoo-ubuntu.sh (apt, odoo 17, может занять несколько минут)"
+echo "## install-odoo-ubuntu.sh (apt, odoo 17, может занять несколько минут; ensure вызывается из него)"
 # shellcheck disable=SC2029
 "${SSH_[@]}" "$REM" "sudo -n env DEBIAN_FRONTEND=noninteractive bash ~/hh-process/odoo-ci/install-odoo-ubuntu.sh"
 
@@ -60,6 +60,10 @@ rsync -az --delete -e "ssh -p $VPSP -i $KEY -o BatchMode=yes" \
   "${REM}:~/hh-process/odoo-ci/hh_process_eis/"
 # shellcheck disable=SC2029
 "${SSH_[@]}" "$REM" "sudo -n rsync -a --delete ~/hh-process/odoo-ci/hh_process_eis/ ${HH_ADDON}/ && sudo -n chown -R odoo:odoo /var/lib/odoo/hh-process-addons"
+
+echo "## PostgreSQL: владелец БД + public (без повторов при частично созданной БД — см. README)"
+# shellcheck disable=SC2029
+"${SSH_[@]}" "$REM" "sudo -n bash ~/hh-process/odoo-ci/ensure-postgres-for-odoo.sh ${ODOO_DB}"
 
 echo "## first-time DB + modules (если нет ${MARKER})"
 if ! "${SSH_[@]}" "$REM" "sudo -n test -f ${MARKER}"; then

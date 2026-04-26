@@ -65,10 +65,20 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now odoo 2>/dev/null || true
 
+ODOO_DB_NAME="${ODOO_DATABASE_NAME:-hh_process}"
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${_SCRIPT_DIR}/ensure-postgres-for-odoo.sh" ]; then
+  echo "Running ensure-postgres-for-odoo.sh ${ODOO_DB_NAME} (Postgres 15+ / schema public)..."
+  bash "${_SCRIPT_DIR}/ensure-postgres-for-odoo.sh" "$ODOO_DB_NAME"
+else
+  echo "Optional: if odoo -i fails with 'permission denied for schema public', put ensure-postgres-for-odoo.sh"
+  echo "  next to this script and re-run, or: sudo bash ensure-postgres-for-odoo.sh ${ODOO_DB_NAME}"
+fi
+
 echo ""
 echo "OK: Odoo service enabled. Addons: ${HH_ADDONS_DIR}"
 echo "1) rsync or copy repo odoo-addons/hh_process_eis -> ${HH_ADDONS_DIR}/"
 echo "2) sudo chown -R odoo:odoo ${HH_ADDONS_DIR}"
-echo "3) sudo -u odoo /usr/bin/odoo -c $ODOO_CONF -d YOUR_DB -i base,web,calendar,hh_process_eis --stop-after-init --without-demo=all"
+echo "3) sudo -u odoo /usr/bin/odoo -c $ODOO_CONF -d ${ODOO_DB_NAME} -i base,web,calendar,hh_process_eis --stop-after-init --without-demo=all"
 echo "4) systemctl restart odoo"
 echo "5) In Spring: APP_EIS_REMOTE_BASE_URL=http://<VPS_IP_or_DNS>:8069  (and matching APP_EIS_API_KEY if used)"

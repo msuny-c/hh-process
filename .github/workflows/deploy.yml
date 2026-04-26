@@ -266,6 +266,7 @@ jobs:
             infra/appctl.sh
             infra/ci/render_worker_env.py
             infra/odoo-vps/deploy-odoo-vps.sh
+            infra/odoo-vps/ensure-postgres-for-odoo.sh
             infra/odoo-vps/install-odoo-ubuntu.sh
             infra/stack/install-zookeeper.sh
             infra/stack/zookeeper-ctl.sh
