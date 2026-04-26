@@ -474,6 +474,18 @@ jobs:
           echo "APP_EIS_REMOTE_BASE_URL=$FALLBACK_URL" >> app.env
           echo "APP_EIS_REMOTE_BASE_URL=$FALLBACK_URL"
 
+      - name: Pin EIS API key for API and Odoo
+        env:
+          EIS_KEY_FOR_ODOO: ${{ secrets.EIS_API_KEY || secrets.APP_EIS_API_KEY || vars.EIS_API_KEY || vars.APP_EIS_API_KEY || 'dev-eis-key' }}
+        run: |
+          set -eu
+          grep -v '^APP_EIS_API_KEY=' app.env > app.env.tmp || cp app.env app.env.tmp
+          mv app.env.tmp app.env
+          # Odoo reads ODOO_EIS_API_KEY; Spring reads APP_EIS_API_KEY and sends X-API-Key.
+          # Keep them identical; otherwise Odoo returns HTTP 401 {"error":"unauthorized"}.
+          echo "APP_EIS_API_KEY=${EIS_KEY_FOR_ODOO}" >> app.env
+          echo "APP_EIS_API_KEY is pinned to the same value used for Odoo (value hidden)"
+
       - name: Deploy Odoo on VPS
         if: ${{ env.VPS_DEPLOY_HOST && vars.SKIP_ODOO_VPS != 'true' && vars.SKIP_ODOO_VPS != '1' }}
         env:
