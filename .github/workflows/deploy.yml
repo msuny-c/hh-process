@@ -528,7 +528,8 @@ jobs:
           # ssh -f -N -i ~/.ssh/id_ed25519_helios -p 2222 ... s368748@helios.se.ifmo.ru
           if [ -z "$HELIOS_TH" ]; then HELIOS_TH="helios.se.ifmo.ru"; fi
           if [ -z "$HELIOS_TP" ]; then HELIOS_TP="2222"; fi
-          if [ -z "$HELIOS_TU" ]; then HELIOS_TU="${{ env.SSH_USER }}"; fi
+          if [ -z "$HELIOS_TU" ]; then HELIOS_TU="s368748"; fi
+          ssh-keyscan -p "$HELIOS_TP" -H "$HELIOS_TH" >> ~/.ssh/known_hosts 2>/dev/null || true
           KTP="${{ vars.HELIOS_KAFKA_TUNNEL_PORT }}"
           if [ -z "$KTP" ]; then KTP=9092; fi
           REMOTE_DB_HOST="${{ vars.DB_TUNNEL_REMOTE_HOST }}"
