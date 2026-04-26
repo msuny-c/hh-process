@@ -26,8 +26,9 @@ env:
   TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS: 1
 
 # Repository variable CI_SKIP_TESTS: set to "true" or "1" to skip the test job and deployed API tests in deploy (build and later jobs still run).
-# Repository variable APP_EIS_REMOTE_BASE_URL: Odoo (hh_process_eis) or any HTTP EIS. Required for api role. In-app in-memory EIS is not supported; the "Pin EIS" step fails if it is empty.
-# When POSTGRES_HOST is 127.0.0.1/localhost, set VPS_SSH_* and HELIOS_TUNNEL_PRIVATE_KEY so the deploy job can (re)open the Postgres reverse tunnel from the VPS to helios.
+# On stack host (helios): native Zookeeper (2181) + Kafka (9092) via install-zookeeper + install-kafka-broker-zookeeper. Set vars.SKIP_NATIVE_STACK=true to skip.
+# EIS (Odoo): same VPS and credentials as туннель БД — repository secrets/vars VPS_SSH_HOST, VPS_SSH_USER, VPS_SSH_PORT, VPS_SSH_KEY. Deploy rsync'ит `odoo-addons/hh_process_eis` в ~/VPS_ODOO_ADDONS_RPATH (по умолчанию `hh-process/odoo-addons`). EIS URL по умолчанию `http://<VPS_SSH_HOST>:8069` если нет APP_EIS_REMOTE_BASE_URL/ODOO_VPS_PUBLIC_BASE_URL.
+# When POSTGRES_HOST is 127.0.0.1/localhost, also set HELIOS_TUNNEL_PRIVATE_KEY so the deploy job can (re)open the Postgres reverse tunnel from the VPS to helios.
 jobs:
   test:
     if: ${{ vars.CI_SKIP_TESTS != 'true' && vars.CI_SKIP_TESTS != '1' }}
@@ -264,8 +265,11 @@ jobs:
           sparse-checkout: |
             infra/appctl.sh
             infra/ci/render_worker_env.py
-            infra/stack/install-kafka-kraft.sh
+            infra/stack/install-zookeeper.sh
+            infra/stack/zookeeper-ctl.sh
+            infra/stack/install-kafka-broker-zookeeper.sh
             infra/stack/kafka-ctl.sh
+            odoo-addons
             test
           sparse-checkout-cone-mode: false
 
@@ -294,13 +298,13 @@ jobs:
           ssh-keyscan -p "${{ env.SSH_PORT }}" -H "${{ env.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
           echo "SSH ready."
 
-      - name: Prepare VPS SSH for DB tunnel
-        if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
+      - name: "Prepare VPS SSH (same as VPS_SSH_HOST / USER / KEY)"
+        if: ${{ env.VPS_DEPLOY_HOST }}
         run: |
           set -eu
-          echo "## VPS SSH client (reverse tunnels — needs VPS_* and HELIOS_TUNNEL_PRIVATE_KEY)"
-          if [ -z "${{ env.VPS_DEPLOY_HOST }}" ] || [ -z "${{ env.VPS_DEPLOY_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
-            echo "VPS secrets incomplete — skipping key setup (tunnel only works if already up on helios)."
+          echo "## VPS — ~/.ssh/id_vps for ${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }} (VPS_SSH_*)"
+          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
+            echo "::warning::VPS_SSH_KEY пуст: rsync Odoo и reverse SSH с VPS к helios невозможны без ключа. Задайте secret (или org secret) VPS_SSH_KEY."
             exit 0
           fi
           mkdir -p ~/.ssh
@@ -308,9 +312,19 @@ jobs:
           chmod 600 ~/.ssh/id_vps
           VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
           ssh-keyscan -p "$VPS_PORT" -H "${{ env.VPS_DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          printf '%s\n' "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" > helios_tunnel_key
-          chmod 600 helios_tunnel_key
-          echo "VPS SSH ready for ${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}"
+          echo "VPS id_vps готов (тот же key для туннеля БД и для rsync модуля Odoo)."
+
+      - name: Write helios tunnel private key to workspace
+        if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
+        run: |
+          set -eu
+          if [ -n "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
+            printf '%s\n' "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" > helios_tunnel_key
+            chmod 600 helios_tunnel_key
+            echo "helios_tunnel_key в workspace (для reverse SSH: VPS_SSH_*)"
+          else
+            echo "HELIOS_TUNNEL_PRIVATE_KEY не задан (если туннель уже поднят вручную — ок)"
+          fi
 
       - name: Stop stack services on host before deploy
         run: |
@@ -318,51 +332,67 @@ jobs:
           RUSER="${{ env.SSH_USER }}"
           RHOST="${{ env.SSH_HOST }}"
           RPORT="${{ env.SSH_PORT }}"
-          echo "## Pre-deploy: stop API, Kafka (frees RAM/ports; missing scripts are OK)"
+          echo "## Pre-deploy: stop API, Kafka, Zookeeper (frees RAM/ports; missing scripts are OK)"
           ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
             "env bash -c 'set +e; \
             if [ -f \"\$HOME/apps/blps/appctl.sh\" ]; then echo \"Stopping API...\"; bash \"\$HOME/apps/blps/appctl.sh\" stop; else echo \"No appctl — skip API\"; fi; \
             if [ -f \"\$HOME/hh-process/stack/kafka-ctl.sh\" ]; then echo \"Stopping Kafka...\"; bash \"\$HOME/hh-process/stack/kafka-ctl.sh\" stop; fi; \
+            if [ -f \"\$HOME/hh-process/stack/zookeeper-ctl.sh\" ]; then echo \"Stopping Zookeeper...\"; bash \"\$HOME/hh-process/stack/zookeeper-ctl.sh\" stop; fi; \
             echo \"Pre-deploy stop done.\"'"
           sleep 2
 
-      # Native Kafka (KRaft) on the same host as the API — no Docker. Set vars.SKIP_NATIVE_STACK=true to skip.
-      - name: Install and start Kafka (KRaft) on stack host
-        if: ${{ vars.SKIP_NATIVE_STACK != 'true' }}
+      # Native Zookeeper + Kafka (в ~/hh-process), без Docker. Set vars.SKIP_NATIVE_STACK=true to skip.
+      - name: Install and start Zookeeper + Kafka on stack host
+        if: ${{ vars.SKIP_NATIVE_STACK != 'true' && vars.SKIP_NATIVE_STACK != '1' }}
         run: |
           set -eu
-          echo "## Kafka (KRaft) — install, start broker, health"
+          echo "## Zookeeper + Kafka — install, start, health"
           STACK_HOST="${{ vars.STACK_HOST }}"
           if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
           RUSER="${{ env.SSH_USER }}"
           RHOST="${{ env.SSH_HOST }}"
           RPORT="${{ env.SSH_PORT }}"
-          echo "STACK_HOST=${STACK_HOST} (advertised listener for clients)"
-          # Non-POSIX login shells (e.g. tcsh on FreeBSD) break "export ... && ..."; always use bash -c.
+          echo "STACK_HOST=${STACK_HOST} (Kafka advertised); ZK: 127.0.0.1:2181 on stack"
           ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
             "env bash -c 'mkdir -p \"\$HOME/hh-process/stack\"'"
           scp -P "$RPORT" -i ~/.ssh/id_key \
-            infra/stack/install-kafka-kraft.sh \
+            infra/stack/install-zookeeper.sh \
+            infra/stack/zookeeper-ctl.sh \
+            infra/stack/install-kafka-broker-zookeeper.sh \
             infra/stack/kafka-ctl.sh \
             "${RUSER}@${RHOST}:~/hh-process/stack/"
           ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
-            "env bash -c 'chmod +x \"\$HOME/hh-process/stack/install-kafka-kraft.sh\" \"\$HOME/hh-process/stack/kafka-ctl.sh\"'"
-          echo "Running install-kafka-kraft.sh on stack host..."
+            "env bash -c 'chmod +x \
+              \"\$HOME/hh-process/stack/install-zookeeper.sh\" \
+              \"\$HOME/hh-process/stack/zookeeper-ctl.sh\" \
+              \"\$HOME/hh-process/stack/install-kafka-broker-zookeeper.sh\" \
+              \"\$HOME/hh-process/stack/kafka-ctl.sh\"'"
+          echo "install-zookeeper.sh..."
           ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
-            "env bash -c 'export KAFKA_ADVERTISED_HOST=${STACK_HOST} && \"\$HOME/hh-process/stack/install-kafka-kraft.sh\"'"
-          # install-kafka-kraft.sh rewrites server.properties; "start" skips if already running — broker would keep old advertised.listeners.
-          echo "Restarting broker (kafka-ctl.sh restart) so advertised.listeners matches STACK_HOST..."
+            "env bash -c '\$HOME/hh-process/stack/install-zookeeper.sh'"
+          echo "install-kafka-broker-zookeeper.sh (KAFKA_ADVERTISED_HOST)..."
+          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c 'export KAFKA_ADVERTISED_HOST=\"${STACK_HOST}\" && \"\$HOME/hh-process/stack/install-kafka-broker-zookeeper.sh\"'"
+          echo "Starting Zookeeper (2181)..."
+          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c '\$HOME/hh-process/stack/zookeeper-ctl.sh start || \$HOME/hh-process/stack/zookeeper-ctl.sh restart'"
+          echo "Healthcheck: Zookeeper TCP 127.0.0.1:2181 (max ~40s)..."
+          if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "env bash -c 'i=0; while [ \$i -lt 20 ]; do nc -z 127.0.0.1 2181 && exit 0; sleep 2; i=\$((i+1)); done; exit 1'"; then
+            echo "::error::Zookeeper: port 2181 did not open — see ~/hh-process/zookeeper.log"
+            exit 1
+          fi
+          echo "Zookeeper port OK."
+          echo "Starting Kafka (broker uses server-zk.properties)..."
           ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
             "env bash -c '\$HOME/hh-process/stack/kafka-ctl.sh restart'"
-          # One SSH session with a remote wait loop (avoids dozens of connections — helps with MaxStartups / per-user limits).
-          echo "Healthcheck: broker TCP 127.0.0.1:9092 (max ~80s, single SSH)..."
+          echo "Healthcheck: broker TCP 127.0.0.1:9092 (max ~80s)..."
           if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "${RUSER}@${RHOST}" \
             "env bash -c 'i=0; while [ \$i -lt 40 ]; do nc -z 127.0.0.1 9092 && exit 0; sleep 2; i=\$((i+1)); done; exit 1'"; then
             echo "::error::Kafka: port 9092 did not open — check ~/hh-process/kafka.log on the host"
             exit 1
           fi
-          echo "Broker OK: port 9092 open."
-          echo "Healthcheck: kafka-broker-api-versions (Apache tarball uses .sh)..."
+          echo "Healthcheck: kafka-broker-api-versions..."
           if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=10 -o BatchMode=yes "${RUSER}@${RHOST}" \
             "env bash -c 'bash \"\$HOME/hh-process/kafka/bin/kafka-broker-api-versions.sh\" --bootstrap-server 127.0.0.1:9092 >/dev/null'"; then
             echo "::error::Kafka broker API check failed"
@@ -400,7 +430,7 @@ jobs:
           echo "app.env: $(wc -l < app.env | tr -d ' ') variables"
 
       - name: Pin Kafka bootstrap for API (native broker on stack host)
-        if: ${{ vars.SKIP_NATIVE_STACK != 'true' }}
+        if: ${{ vars.SKIP_NATIVE_STACK != 'true' && vars.SKIP_NATIVE_STACK != '1' }}
         run: |
           set -eu
           echo "## Set KAFKA_BOOTSTRAP_SERVERS to stack broker"
@@ -416,13 +446,45 @@ jobs:
           set -eu
           grep -v '^APP_EIS_REMOTE_BASE_URL=' app.env > app.env.tmp || cp app.env app.env.tmp
           mv app.env.tmp app.env
-          FALLBACK_URL="${{ vars.APP_EIS_REMOTE_BASE_URL }}"
-          if [ -z "$FALLBACK_URL" ]; then
-            echo "::error::Задайте repository variable APP_EIS_REMOTE_BASE_URL (база Odoo или другой HTTP EIS). In-memory EIS в приложении отключён."
+          VPSH="${VPS_DEPLOY_HOST:-}"
+          # 1) ODOO_VPS_PUBLIC_BASE_URL  2) APP_EIS_REMOTE_BASE_URL  3) same VPS: http://<VPS_SSH_HOST>:8069
+          if [ -n "${{ vars.ODOO_VPS_PUBLIC_BASE_URL }}" ]; then
+            FALLBACK_URL="${{ vars.ODOO_VPS_PUBLIC_BASE_URL }}"
+            echo "EIS: ODOO_VPS_PUBLIC_BASE_URL"
+          elif [ -n "${{ vars.APP_EIS_REMOTE_BASE_URL }}" ]; then
+            FALLBACK_URL="${{ vars.APP_EIS_REMOTE_BASE_URL }}"
+            echo "EIS: APP_EIS_REMOTE_BASE_URL"
+          elif [ -n "$VPSH" ]; then
+            FALLBACK_URL="http://${VPSH}:8069"
+            echo "EIS: default to same VPS (VPS_SSH_HOST) — $FALLBACK_URL"
+          else
+            echo "::error::Задайте APP_EIS_REMOTE_BASE_URL, ODOO_VPS_PUBLIC_BASE_URL или VPS_SSH_HOST (будет http://host:8069)."
             exit 1
           fi
           echo "APP_EIS_REMOTE_BASE_URL=$FALLBACK_URL" >> app.env
           echo "APP_EIS_REMOTE_BASE_URL=$FALLBACK_URL"
+
+      - name: Sync Odoo EIS add-on to VPS
+        if: ${{ env.VPS_DEPLOY_HOST && vars.SKIP_ODOO_VPS_ADDONS_SYNC != 'true' && vars.SKIP_ODOO_VPS_ADDONS_SYNC != '1' }}
+        run: |
+          set -eu
+          if [ ! -f ~/.ssh/id_vps ]; then
+            echo "::error::Нет ~/.ssh/id_vps — задайте secret VPS_SSH_KEY (те же креды, что для туннеля БД)"
+            exit 1
+          fi
+          VPSP="${VPS_DEPLOY_PORT:-22}"
+          RPATH="hh-process/odoo-addons"
+          if [ -n "${{ vars.VPS_ODOO_ADDONS_RPATH }}" ]; then
+            RPATH="${{ vars.VPS_ODOO_ADDONS_RPATH }}"
+          fi
+          REM="${VPS_DEPLOY_USER}@${VPS_DEPLOY_HOST}"
+          test -d odoo-addons/hh_process_eis
+          echo "## rsync -> ${REM}:~/${RPATH}/hh_process_eis/ (VPS_ODOO_ADDONS_RPATH, те же VPS_SSH_*)"
+          ssh -p "$VPSP" -i ~/.ssh/id_vps -o BatchMode=yes -o ConnectTimeout=30 "$REM" "mkdir -p ~/${RPATH}/hh_process_eis"
+          rsync -az --delete -e "ssh -p $VPSP -i $HOME/.ssh/id_vps -o BatchMode=yes" \
+            odoo-addons/hh_process_eis/ \
+            "${REM}:~/${RPATH}/hh_process_eis/"
+          echo "OK. Пропиши ~/${RPATH} в addons_path Odoo (или скопируй в /var/lib/odoo/hh-process-addons) — infra/odoo-vps/README.md"
 
       - name: Upload bundle to server
         run: |

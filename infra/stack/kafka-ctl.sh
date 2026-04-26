@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
+# Kafka broker: KRaft (config/kraft/server.properties) или classic + Zookeeper (config/server-zk.properties).
 set -euo pipefail
 
 INSTALL_ROOT="${INSTALL_ROOT:-$HOME/hh-process}"
 KAFKA_HOME="${KAFKA_HOME:-$INSTALL_ROOT/kafka}"
-CONFIG_PATH="${CONFIG_PATH:-$KAFKA_HOME/config/kraft/server.properties}"
+# Предпочтение: Zookeeper-стек; иначе KRaft
+if [ -f "$KAFKA_HOME/config/server-zk.properties" ]; then
+  CONFIG_PATH="${KAFKA_BROKER_CONFIG:-$KAFKA_HOME/config/server-zk.properties}"
+elif [ -f "${KAFKA_BROKER_CONFIG:-}" ]; then
+  CONFIG_PATH="${KAFKA_BROKER_CONFIG}"
+else
+  CONFIG_PATH="${KAFKA_BROKER_CONFIG:-$KAFKA_HOME/config/kraft/server.properties}"
+fi
 LOG_FILE="${KAFKA_LOG_FILE:-$INSTALL_ROOT/kafka.log}"
 PID_FILE="${KAFKA_PID_FILE:-$INSTALL_ROOT/kafka.pid}"
 
@@ -13,15 +21,13 @@ start() {
     return 0
   fi
   if ! [ -f "$KAFKA_HOME/bin/kafka-server-start.sh" ]; then
-    echo "Kafka not installed. Run install-kafka-kraft.sh first." >&2
+    echo "Kafka not installed. Run install-kafka-broker-zookeeper.sh (or install-kafka-kraft.sh) first." >&2
     exit 1
   fi
   if ! command -v bash >/dev/null 2>&1; then
-    echo "bash is required to run Kafka scripts." >&2
+    echo "bash is required" >&2
     exit 1
   fi
-  # kafka-run-class.sh picks Java 8 GC flags (-Xloggc, PrintGCDateStamps) when it mis-detects the JDK
-  # or when KAFKA_GC_LOG_OPTS is empty. JDK 9+ rejects those; use unified GC logging instead.
   if [ -z "${KAFKA_GC_LOG_OPTS:-}" ]; then
     GC_LOG="${INSTALL_ROOT}/kafka-gc.log"
     export KAFKA_GC_LOG_OPTS="-Xlog:gc*:file=${GC_LOG}:time,tags:filecount=10,filesize=100M"

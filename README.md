@@ -113,6 +113,8 @@ APP_EIS_API_KEY=dev-eis-key
 
 `APP_EIS_REMOTE_BASE_URL` **нельзя** оставлять пустым на **api** (приложение не стартует). Ключ: как в Odoo `ODOO_EIS_API_KEY`; `APP_EIS_API_KEY` можно не задавать, если EIS не требует `X-API-Key`.
 
+Развёртывание Odoo (EIS) **без Docker** на VPS: [infra/odoo-vps/README.md](infra/odoo-vps/README.md).
+
 **Календарь в Odoo:** встреча привязывается к пользователю по **той же почте**, что у рекрутера в hh-process: в Odoo должен быть внутренний пользователь с **логином** (или email контакта), совпадающим с этой почтой (например `recruiter@example.com`). Иначе организатором остаётся fallback (пользователь `admin`).
 
 Имена топиков (опционально):
