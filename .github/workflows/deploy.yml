@@ -335,10 +335,12 @@ jobs:
           RUSER="${{ env.SSH_USER }}"
           RHOST="${{ env.SSH_HOST }}"
           RPORT="${{ env.SSH_PORT }}"
-          echo "## Pre-deploy: helios — только API (Kafka на VPS, не трогаем старые kafka-ctl на helios)"
+          echo "## Pre-deploy: helios — API + legacy Kafka/ZK cleanup (Kafka запускается на VPS, но старый 9092 на helios мешает -R)"
           ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
             "env bash -c 'set +e; \
             if [ -f \"\$HOME/apps/blps/appctl.sh\" ]; then echo \"Stopping API on helios...\"; bash \"\$HOME/apps/blps/appctl.sh\" stop; else echo \"No appctl — skip API\"; fi; \
+            if [ -f \"\$HOME/hh-process/stack/kafka-ctl.sh\" ]; then echo \"Stopping legacy Kafka on helios (free 9092 for reverse tunnel)...\"; bash \"\$HOME/hh-process/stack/kafka-ctl.sh\" stop; fi; \
+            if [ -f \"\$HOME/hh-process/stack/zookeeper-ctl.sh\" ]; then echo \"Stopping legacy Zookeeper on helios...\"; bash \"\$HOME/hh-process/stack/zookeeper-ctl.sh\" stop; fi; \
             echo \"helios pre-stop done.\"'"
           if [ -f ~/.ssh/id_vps ] && [ -n "${{ env.VPS_DEPLOY_HOST }}" ]; then
             VUSER="${{ env.VPS_DEPLOY_USER }}"
@@ -567,14 +569,29 @@ jobs:
           VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
           VUSER="${{ env.VPS_DEPLOY_USER }}"
           VHOST="${{ env.VPS_DEPLOY_HOST }}"
+          if [ "${{ vars.POSTGRES_HOST }}" = "127.0.0.1" ] || [ "${{ vars.POSTGRES_HOST }}" = "localhost" ]; then
+            ssh -p "$HELIOS_TP" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_TU@$HELIOS_TH" \
+              "if nc -z 127.0.0.1 $DB_PORT 2>/dev/null; then echo '::warning::helios:$DB_PORT already listens before tunnel'; fi" || true
+          fi
+          if [ "${{ vars.SKIP_NATIVE_STACK }}" != "true" ] && [ "${{ vars.SKIP_NATIVE_STACK }}" != "1" ]; then
+            ssh -p "$HELIOS_TP" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_TU@$HELIOS_TH" \
+              "if nc -z 127.0.0.1 $KTP 2>/dev/null; then echo '::warning::helios:$KTP already listens before tunnel (old Kafka or old ssh -R)'; fi" || true
+          fi
           scp -P "$VPS_PORT" -i ~/.ssh/id_vps helios_tunnel_key "${VUSER}@${VHOST}:/tmp/helios_tunnel_key_ci"
           echo "VPS: ssh -f -N … ${HELIOS_TU}@${HELIOS_TH} -p ${HELIOS_TP} $REV_ARGS"
           REMOTE_STEPS="set -e; \
             install -d -m 700 ~/.ssh; \
+            mkdir -p ~/hh-process; \
             mv -f /tmp/helios_tunnel_key_ci ~/.ssh/helios_tunnel_key; chmod 600 ~/.ssh/helios_tunnel_key; \
             ssh-keyscan -p $HELIOS_TP -H $HELIOS_TH >> ~/.ssh/known_hosts 2>/dev/null || true; \
             pkill -f 'helios_tunnel_key' 2>/dev/null || true; \
-            ssh -f -N -i ~/.ssh/helios_tunnel_key -p $HELIOS_TP -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 $REV_ARGS $HELIOS_TU@$HELIOS_TH"
+            ssh -i ~/.ssh/helios_tunnel_key -p $HELIOS_TP -o BatchMode=yes -o ConnectTimeout=10 $HELIOS_TU@$HELIOS_TH true; \
+            rm -f ~/hh-process/reverse-ssh.log; \
+            if ! ssh -f -N -v -i ~/.ssh/helios_tunnel_key -p $HELIOS_TP -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 $REV_ARGS $HELIOS_TU@$HELIOS_TH > ~/hh-process/reverse-ssh.log 2>&1; then \
+              echo 'reverse ssh failed; log:'; \
+              sed -n '1,180p' ~/hh-process/reverse-ssh.log; \
+              exit 1; \
+            fi"
           # shellcheck disable=SC2029
           ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes "$VUSER@$VHOST" "$REMOTE_STEPS"
           echo "Check listeners on helios (runner has id_key)…"
