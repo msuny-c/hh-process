@@ -524,8 +524,10 @@ jobs:
           HELIOS_TH="${{ vars.HELIOS_TUNNEL_SSH_HOST }}"
           HELIOS_TP="${{ vars.HELIOS_TUNNEL_SSH_PORT }}"
           HELIOS_TU="${{ vars.HELIOS_TUNNEL_SSH_USER }}"
-          if [ -z "$HELIOS_TH" ]; then HELIOS_TH="${{ env.SSH_HOST }}"; fi
-          if [ -z "$HELIOS_TP" ]; then HELIOS_TP="${{ env.SSH_PORT }}"; fi
+          # Default is exactly the manual command:
+          # ssh -f -N -i ~/.ssh/id_ed25519_helios -p 2222 ... s368748@helios.se.ifmo.ru
+          if [ -z "$HELIOS_TH" ]; then HELIOS_TH="helios.se.ifmo.ru"; fi
+          if [ -z "$HELIOS_TP" ]; then HELIOS_TP="2222"; fi
           if [ -z "$HELIOS_TU" ]; then HELIOS_TU="${{ env.SSH_USER }}"; fi
           KTP="${{ vars.HELIOS_KAFKA_TUNNEL_PORT }}"
           if [ -z "$KTP" ]; then KTP=9092; fi
