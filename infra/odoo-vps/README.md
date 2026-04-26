@@ -4,9 +4,11 @@
 
 ## CI (`.github/workflows/deploy.yml`)
 
-Один и тот же **VPS** и **те же** credentials, что и для обратного SSH-туннеля к Postgres: `VPS_SSH_HOST`, `VPS_SSH_USER`, `VPS_SSH_PORT`, `VPS_SSH_KEY` (secret). Шаг *Prepare VPS SSH* пишет `~/.ssh/id_vps` на раннере; далее *Sync Odoo EIS add-on to VPS* делает `rsync` в `~/VPS_ODOO_ADDONS_RPATH/hh_process_eis/` (по умолчанию `~/hh-process/odoo-addons/hh_process_eis`). Отключение: `SKIP_ODOO_VPS_ADDONS_SYNC=true`.
+Тот же **VPS** и `VPS_SSH_*` + `VPS_SSH_KEY`, что и для туннеля к Postgres. Шаг *Deploy Odoo on VPS* вызывает [deploy-odoo-vps.sh](deploy-odoo-vps.sh): заливает [install-odoo-ubuntu.sh](install-odoo-ubuntu.sh), выполняет `sudo` установку (apt, пакет Odoo), пишет `ODOO_EIS_API_KEY` в `/etc/odoo/hhprocess-eis.env` (тот же ключ, что `EIS_KEY_FOR_ODOO` / `APP_EIS_API_KEY` / `EIS_API_KEY` в repository secrets или variables), копирует `hh_process_eis` в `/var/lib/odoo/hh-process-addons`, при первом деплое — `-i` модулей в БД (имя: `ODOO_DATABASE_NAME`, по умолчанию `hh_process`), `systemctl restart odoo`, проверка порта 8069.
 
-Если не заданы `APP_EIS_REMOTE_BASE_URL` и `ODOO_VPS_PUBLIC_BASE_URL`, в `APP_EIS_REMOTE_BASE_URL` подставляется `http://<VPS_SSH_HOST>:8069` (тот же хост).
+**На VPS** пользователю из `VPS_SSH_USER` нужен **passwordless sudo** (`/etc/sudoers.d/...` с `NOPASSWD:ALL` или точечно под команды) — иначе CI упадёт на `sudo -n`. Отключить весь шаг: repository variable `SKIP_ODOO_VPS=true` или `1`.
+
+Если не заданы `APP_EIS_REMOTE_BASE_URL` и `ODOO_VPS_PUBLIC_BASE_URL`, в `APP_EIS_REMOTE_BASE_URL` на helios подставляется `http://<VPS_SSH_HOST>:8069`.
 
 ## Установка (Ubuntu/Debian, root)
 

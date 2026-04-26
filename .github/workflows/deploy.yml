@@ -27,7 +27,7 @@ env:
 
 # Repository variable CI_SKIP_TESTS: set to "true" or "1" to skip the test job and deployed API tests in deploy (build and later jobs still run).
 # On stack host (helios): native Zookeeper (2181) + Kafka (9092) via install-zookeeper + install-kafka-broker-zookeeper. Set vars.SKIP_NATIVE_STACK=true to skip.
-# EIS (Odoo): same VPS and credentials as туннель БД — repository secrets/vars VPS_SSH_HOST, VPS_SSH_USER, VPS_SSH_PORT, VPS_SSH_KEY. Deploy rsync'ит `odoo-addons/hh_process_eis` в ~/VPS_ODOO_ADDONS_RPATH (по умолчанию `hh-process/odoo-addons`). EIS URL по умолчанию `http://<VPS_SSH_HOST>:8069` если нет APP_EIS_REMOTE_BASE_URL/ODOO_VPS_PUBLIC_BASE_URL.
+# EIS (Odoo) на VPS: те же VPS_SSH_*; шаг *Deploy Odoo on VPS* гоняет `deploy-odoo-vps.sh` (apt Odoo, модуль, init БД, systemctl) — на VPS нужен `sudo` NOPASSWD. Отключение: `SKIP_ODOO_VPS=true`. Ключ: `EIS_KEY_FOR_ODOO` = secrets/vars EIS_API_KEY или APP_EIS_API_KEY (как в Spring).
 # When POSTGRES_HOST is 127.0.0.1/localhost, also set HELIOS_TUNNEL_PRIVATE_KEY so the deploy job can (re)open the Postgres reverse tunnel from the VPS to helios.
 jobs:
   test:
@@ -265,6 +265,8 @@ jobs:
           sparse-checkout: |
             infra/appctl.sh
             infra/ci/render_worker_env.py
+            infra/odoo-vps/deploy-odoo-vps.sh
+            infra/odoo-vps/install-odoo-ubuntu.sh
             infra/stack/install-zookeeper.sh
             infra/stack/zookeeper-ctl.sh
             infra/stack/install-kafka-broker-zookeeper.sh
@@ -464,27 +466,19 @@ jobs:
           echo "APP_EIS_REMOTE_BASE_URL=$FALLBACK_URL" >> app.env
           echo "APP_EIS_REMOTE_BASE_URL=$FALLBACK_URL"
 
-      - name: Sync Odoo EIS add-on to VPS
-        if: ${{ env.VPS_DEPLOY_HOST && vars.SKIP_ODOO_VPS_ADDONS_SYNC != 'true' && vars.SKIP_ODOO_VPS_ADDONS_SYNC != '1' }}
+      - name: Deploy Odoo on VPS
+        if: ${{ env.VPS_DEPLOY_HOST && vars.SKIP_ODOO_VPS != 'true' && vars.SKIP_ODOO_VPS != '1' }}
+        env:
+          EIS_KEY_FOR_ODOO: ${{ secrets.EIS_API_KEY || secrets.APP_EIS_API_KEY || vars.EIS_API_KEY || vars.APP_EIS_API_KEY || 'dev-eis-key' }}
         run: |
           set -eu
           if [ ! -f ~/.ssh/id_vps ]; then
-            echo "::error::Нет ~/.ssh/id_vps — задайте secret VPS_SSH_KEY (те же креды, что для туннеля БД)"
+            echo "::error::Нет ~/.ssh/id_vps — задайте secret VPS_SSH_KEY (то же, что туннель к БД)"
             exit 1
           fi
-          VPSP="${VPS_DEPLOY_PORT:-22}"
-          RPATH="hh-process/odoo-addons"
-          if [ -n "${{ vars.VPS_ODOO_ADDONS_RPATH }}" ]; then
-            RPATH="${{ vars.VPS_ODOO_ADDONS_RPATH }}"
-          fi
-          REM="${VPS_DEPLOY_USER}@${VPS_DEPLOY_HOST}"
-          test -d odoo-addons/hh_process_eis
-          echo "## rsync -> ${REM}:~/${RPATH}/hh_process_eis/ (VPS_ODOO_ADDONS_RPATH, те же VPS_SSH_*)"
-          ssh -p "$VPSP" -i ~/.ssh/id_vps -o BatchMode=yes -o ConnectTimeout=30 "$REM" "mkdir -p ~/${RPATH}/hh_process_eis"
-          rsync -az --delete -e "ssh -p $VPSP -i $HOME/.ssh/id_vps -o BatchMode=yes" \
-            odoo-addons/hh_process_eis/ \
-            "${REM}:~/${RPATH}/hh_process_eis/"
-          echo "OK. Пропиши ~/${RPATH} в addons_path Odoo (или скопируй в /var/lib/odoo/hh-process-addons) — infra/odoo-vps/README.md"
+          export ODOO_DATABASE_NAME="${{ vars.ODOO_DATABASE_NAME }}"
+          chmod +x infra/odoo-vps/deploy-odoo-vps.sh
+          ./infra/odoo-vps/deploy-odoo-vps.sh
 
       - name: Upload bundle to server
         run: |
