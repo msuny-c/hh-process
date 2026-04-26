@@ -569,12 +569,21 @@ jobs:
           VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
           VUSER="${{ env.VPS_DEPLOY_USER }}"
           VHOST="${{ env.VPS_DEPLOY_HOST }}"
-          scp -P "$VPS_PORT" -i ~/.ssh/id_vps helios_tunnel_key "${VUSER}@${VHOST}:/tmp/helios_tunnel_key_ci"
+          echo "Upload helios tunnel key to VPS via ssh stream (no scp/SFTP)"
+          if ! ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes -o ConnectTimeout=30 "$VUSER@$VHOST" \
+            "umask 077; cat > /tmp/helios_tunnel_key_ci" < helios_tunnel_key; then
+            echo "::error::Cannot upload helios_tunnel_key to VPS over SSH (check VPS_SSH_HOST/USER/PORT/KEY)."
+            exit 1
+          fi
           # Старый reverse-туннель держит порты на helios; убиваем его с VPS ДО проверки занятости портов.
-          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes "$VUSER@$VHOST" "set -e; \
+          echo "Kill old reverse tunnel on VPS (if any)"
+          if ! ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes -o ConnectTimeout=30 "$VUSER@$VHOST" "set -e; \
             install -d -m 700 ~/.ssh; \
             mv -f /tmp/helios_tunnel_key_ci ~/.ssh/helios_tunnel_key; chmod 600 ~/.ssh/helios_tunnel_key; \
-            pkill -f 'helios_tunnel_key' 2>/dev/null || true"
+            pkill -f '[s]sh .*helios_tunnel_key' 2>/dev/null || true"; then
+            echo "::error::Cannot prepare ~/.ssh/helios_tunnel_key on VPS."
+            exit 1
+          fi
           sleep 2
           if [ "${{ vars.POSTGRES_HOST }}" = "127.0.0.1" ] || [ "${{ vars.POSTGRES_HOST }}" = "localhost" ]; then
             ssh -p "$HELIOS_TP" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_TU@$HELIOS_TH" \
