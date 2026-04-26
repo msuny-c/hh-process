@@ -26,9 +26,9 @@ env:
   TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS: 1
 
 # Repository variable CI_SKIP_TESTS: set to "true" or "1" to skip the test job and deployed API tests in deploy (build and later jobs still run).
-# On stack host (helios): native Zookeeper (2181) + Kafka (9092) via install-zookeeper + install-kafka-broker-zookeeper. Set vars.SKIP_NATIVE_STACK=true to skip.
-# EIS (Odoo) на VPS: те же VPS_SSH_*; шаг *Deploy Odoo on VPS* гоняет `deploy-odoo-vps.sh` (apt Odoo, модуль, init БД, systemctl) — на VPS нужен `sudo` NOPASSWD. Отключение: `SKIP_ODOO_VPS=true`. Ключ: `EIS_KEY_FOR_ODOO` = secrets/vars EIS_API_KEY или APP_EIS_API_KEY (как в Spring).
-# When POSTGRES_HOST is 127.0.0.1/localhost, also set HELIOS_TUNNEL_PRIVATE_KEY so the deploy job can (re)open the Postgres reverse tunnel from the VPS to helios.
+# Zookeeper + Kafka: на **VPS** (не helios). На helios API: `KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:<HELIOS_KAFKA_TUNNEL_PORT>` (по умолчанию 9092) через reverse SSH. `SKIP_NATIVE_STACK=true` — не ставить ZK+Kafka на VPS.
+# Reverse SSH с VPS → helios: `HELIOS_TUNNEL_PRIVATE_KEY`, `VPS_SSH_*`; на helios подключение: `HELIOS_TUNNEL_SSH_HOST/PORT/USER` (по умолчанию = SSH_*) + все `-R` в одной сессии: БД (если POSTGRES с туннелем), Kafka, и `VPS_HELIOS_TUNNEL_EXTRA_R` (например `8090:127.0.0.1:8090;…`).
+# EIS (Odoo) на VPS: `deploy-odoo-vps.sh` … `SKIP_ODOO_VPS=true` отключает.
 jobs:
   test:
     if: ${{ vars.CI_SKIP_TESTS != 'true' && vars.CI_SKIP_TESTS != '1' }}
@@ -318,90 +318,93 @@ jobs:
           echo "VPS id_vps готов (тот же key для туннеля БД и для rsync модуля Odoo)."
 
       - name: Write helios tunnel private key to workspace
-        if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
+        if: ${{ env.VPS_DEPLOY_HOST }}
         run: |
           set -eu
           if [ -n "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
             printf '%s\n' "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" > helios_tunnel_key
             chmod 600 helios_tunnel_key
-            echo "helios_tunnel_key в workspace (для reverse SSH: VPS_SSH_*)"
+            echo "helios_tunnel_key в workspace (VPS → helios reverse SSH)"
           else
-            echo "HELIOS_TUNNEL_PRIVATE_KEY не задан (если туннель уже поднят вручную — ок)"
+            echo "HELIOS_TUNNEL_PRIVATE_KEY not set (tunnel step will skip or fail if needed)"
           fi
 
-      - name: Stop stack services on host before deploy
+      - name: Stop stack on helios and Kafka on VPS before deploy
         run: |
           set -eu
           RUSER="${{ env.SSH_USER }}"
           RHOST="${{ env.SSH_HOST }}"
           RPORT="${{ env.SSH_PORT }}"
-          echo "## Pre-deploy: stop API, Kafka, Zookeeper (frees RAM/ports; missing scripts are OK)"
+          echo "## Pre-deploy: helios — только API (Kafka на VPS, не трогаем старые kafka-ctl на helios)"
           ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
             "env bash -c 'set +e; \
-            if [ -f \"\$HOME/apps/blps/appctl.sh\" ]; then echo \"Stopping API...\"; bash \"\$HOME/apps/blps/appctl.sh\" stop; else echo \"No appctl — skip API\"; fi; \
-            if [ -f \"\$HOME/hh-process/stack/kafka-ctl.sh\" ]; then echo \"Stopping Kafka...\"; bash \"\$HOME/hh-process/stack/kafka-ctl.sh\" stop; fi; \
-            if [ -f \"\$HOME/hh-process/stack/zookeeper-ctl.sh\" ]; then echo \"Stopping Zookeeper...\"; bash \"\$HOME/hh-process/stack/zookeeper-ctl.sh\" stop; fi; \
-            echo \"Pre-deploy stop done.\"'"
+            if [ -f \"\$HOME/apps/blps/appctl.sh\" ]; then echo \"Stopping API on helios...\"; bash \"\$HOME/apps/blps/appctl.sh\" stop; else echo \"No appctl — skip API\"; fi; \
+            echo \"helios pre-stop done.\"'"
+          if [ -f ~/.ssh/id_vps ] && [ -n "${{ env.VPS_DEPLOY_HOST }}" ]; then
+            VUSER="${{ env.VPS_DEPLOY_USER }}"
+            VHOST="${{ env.VPS_DEPLOY_HOST }}"
+            VPOR="${{ env.VPS_DEPLOY_PORT }}"
+            echo "## Pre-deploy: VPS — ZK+Kafka (если скрипты есть)"
+            ssh -p "$VPOR" -i ~/.ssh/id_vps -o BatchMode=yes "${VUSER}@${VHOST}" \
+              "env bash -c 'set +e; \
+              if [ -f \"\$HOME/hh-process/stack/kafka-ctl.sh\" ]; then echo \"Stopping Kafka on VPS...\"; bash \"\$HOME/hh-process/stack/kafka-ctl.sh\" stop; fi; \
+              if [ -f \"\$HOME/hh-process/stack/zookeeper-ctl.sh\" ]; then echo \"Stopping Zookeeper on VPS...\"; bash \"\$HOME/hh-process/stack/zookeeper-ctl.sh\" stop; fi; \
+              echo \"VPS pre-stop done.\"'" || true
+          fi
           sleep 2
 
-      # Native Zookeeper + Kafka (в ~/hh-process), без Docker. Set vars.SKIP_NATIVE_STACK=true to skip.
-      - name: Install and start Zookeeper + Kafka on stack host
+      # ZK+Kafka в ~/hh-process **на VPS**; advertised 127.0.0.1 (metadata для клиента на helios через -R). SKIP_NATIVE_STACK — не ставить.
+      - name: Install and start Zookeeper and Kafka on VPS
         if: ${{ vars.SKIP_NATIVE_STACK != 'true' && vars.SKIP_NATIVE_STACK != '1' }}
         run: |
           set -eu
-          echo "## Zookeeper + Kafka — install, start, health"
-          STACK_HOST="${{ vars.STACK_HOST }}"
-          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
-          RUSER="${{ env.SSH_USER }}"
-          RHOST="${{ env.SSH_HOST }}"
-          RPORT="${{ env.SSH_PORT }}"
-          echo "STACK_HOST=${STACK_HOST} (Kafka advertised); ZK: 127.0.0.1:2181 on stack"
-          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
-            "env bash -c 'mkdir -p \"\$HOME/hh-process/stack\"'"
-          scp -P "$RPORT" -i ~/.ssh/id_key \
+          if [ ! -f ~/.ssh/id_vps ]; then
+            echo "::error::VPS_SSH_KEY / id_vps required to install Kafka on VPS"
+            exit 1
+          fi
+          echo "## Zookeeper + Kafka on **VPS** (не helios); туннель на helios: HELIOS_KAFKA_TUNNEL_PORT → 127.0.0.1:9092"
+          VUSER="${{ env.VPS_DEPLOY_USER }}"
+          VHOST="${{ env.VPS_DEPLOY_HOST }}"
+          VPOR="${{ env.VPS_DEPLOY_PORT }}"
+          VREM="${VUSER}@${VHOST}"
+          ADV="${{ vars.VPS_KAFKA_ADVERTISED_HOST }}"
+          if [ -z "$ADV" ]; then ADV=127.0.0.1; fi
+          echo "KAFKA_ADVERTISED_HOST=$ADV (для брокера; клиент helios смотрит 127.0.0.1:<туннель-порт>)"
+          ssh -p "$VPOR" -i ~/.ssh/id_vps -o BatchMode=yes -o ConnectTimeout=30 "$VREM" "mkdir -p \"\$HOME/hh-process/stack\""
+          scp -P "$VPOR" -i ~/.ssh/id_vps \
             infra/stack/install-zookeeper.sh \
             infra/stack/zookeeper-ctl.sh \
             infra/stack/install-kafka-broker-zookeeper.sh \
             infra/stack/kafka-ctl.sh \
-            "${RUSER}@${RHOST}:~/hh-process/stack/"
-          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
+            "${VREM}:~/hh-process/stack/"
+          ssh -p "$VPOR" -i ~/.ssh/id_vps -o BatchMode=yes "$VREM" \
             "env bash -c 'chmod +x \
               \"\$HOME/hh-process/stack/install-zookeeper.sh\" \
               \"\$HOME/hh-process/stack/zookeeper-ctl.sh\" \
               \"\$HOME/hh-process/stack/install-kafka-broker-zookeeper.sh\" \
               \"\$HOME/hh-process/stack/kafka-ctl.sh\"'"
-          echo "install-zookeeper.sh..."
-          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
-            "env bash -c '\$HOME/hh-process/stack/install-zookeeper.sh'"
-          echo "install-kafka-broker-zookeeper.sh (KAFKA_ADVERTISED_HOST)..."
-          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
-            "env bash -c 'export KAFKA_ADVERTISED_HOST=\"${STACK_HOST}\" && \"\$HOME/hh-process/stack/install-kafka-broker-zookeeper.sh\"'"
-          echo "Starting Zookeeper (2181)..."
-          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
+          ssh -p "$VPOR" -i ~/.ssh/id_vps -o BatchMode=yes "$VREM" "env bash -c '\$HOME/hh-process/stack/install-zookeeper.sh'"
+          ssh -p "$VPOR" -i ~/.ssh/id_vps -o BatchMode=yes "$VREM" \
+            "env bash -c 'export KAFKA_ADVERTISED_HOST=\"${ADV}\" && \"\$HOME/hh-process/stack/install-kafka-broker-zookeeper.sh\"'"
+          ssh -p "$VPOR" -i ~/.ssh/id_vps -o BatchMode=yes "$VREM" \
             "env bash -c '\$HOME/hh-process/stack/zookeeper-ctl.sh start || \$HOME/hh-process/stack/zookeeper-ctl.sh restart'"
-          echo "Healthcheck: Zookeeper TCP 127.0.0.1:2181 (max ~40s)..."
-          if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "${RUSER}@${RHOST}" \
+          if ! ssh -p "$VPOR" -i ~/.ssh/id_vps -o ConnectTimeout=5 -o BatchMode=yes "$VREM" \
             "env bash -c 'i=0; while [ \$i -lt 20 ]; do nc -z 127.0.0.1 2181 && exit 0; sleep 2; i=\$((i+1)); done; exit 1'"; then
-            echo "::error::Zookeeper: port 2181 did not open — see ~/hh-process/zookeeper.log"
+            echo "::error::VPS ZK 2181 — см. ~/hh-process/zookeeper.log"
             exit 1
           fi
-          echo "Zookeeper port OK."
-          echo "Starting Kafka (broker uses server-zk.properties)..."
-          ssh -p "$RPORT" -i ~/.ssh/id_key -o BatchMode=yes "${RUSER}@${RHOST}" \
-            "env bash -c '\$HOME/hh-process/stack/kafka-ctl.sh restart'"
-          echo "Healthcheck: broker TCP 127.0.0.1:9092 (max ~80s)..."
-          if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "${RUSER}@${RHOST}" \
+          ssh -p "$VPOR" -i ~/.ssh/id_vps -o BatchMode=yes "$VREM" "env bash -c '\$HOME/hh-process/stack/kafka-ctl.sh restart'"
+          if ! ssh -p "$VPOR" -i ~/.ssh/id_vps -o ConnectTimeout=5 -o BatchMode=yes "$VREM" \
             "env bash -c 'i=0; while [ \$i -lt 40 ]; do nc -z 127.0.0.1 9092 && exit 0; sleep 2; i=\$((i+1)); done; exit 1'"; then
-            echo "::error::Kafka: port 9092 did not open — check ~/hh-process/kafka.log on the host"
+            echo "::error::VPS Kafka 9092 — ~/hh-process/kafka.log"
             exit 1
           fi
-          echo "Healthcheck: kafka-broker-api-versions..."
-          if ! ssh -p "$RPORT" -i ~/.ssh/id_key -o ConnectTimeout=10 -o BatchMode=yes "${RUSER}@${RHOST}" \
+          if ! ssh -p "$VPOR" -i ~/.ssh/id_vps -o ConnectTimeout=10 -o BatchMode=yes "$VREM" \
             "env bash -c 'bash \"\$HOME/hh-process/kafka/bin/kafka-broker-api-versions.sh\" --bootstrap-server 127.0.0.1:9092 >/dev/null'"; then
-            echo "::error::Kafka broker API check failed"
+            echo "::error::Kafka API check on VPS"
             exit 1
           fi
-          echo "Broker API OK."
+          echo "Broker OK on VPS (forward to helios в шаге туннеля)"
 
       - name: Create app.env from secrets/vars
         env:
@@ -432,17 +435,17 @@ jobs:
 
           echo "app.env: $(wc -l < app.env | tr -d ' ') variables"
 
-      - name: Pin Kafka bootstrap for API (native broker on stack host)
+      - name: Pin Kafka bootstrap for API (туннель helios → брокер на VPS)
         if: ${{ vars.SKIP_NATIVE_STACK != 'true' && vars.SKIP_NATIVE_STACK != '1' }}
         run: |
           set -eu
-          echo "## Set KAFKA_BOOTSTRAP_SERVERS to stack broker"
-          STACK_HOST="${{ vars.STACK_HOST }}"
-          if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
+          echo "## KAFKA_BOOTSTRAP_SERVERS: localhost на helios, порт = HELIOS_KAFKA_TUNNEL_PORT (→ VPS:9092)"
+          KTP="${{ vars.HELIOS_KAFKA_TUNNEL_PORT }}"
+          if [ -z "$KTP" ]; then KTP=9092; fi
           grep -v '^KAFKA_BOOTSTRAP_SERVERS=' app.env > app.env.tmp || cp app.env app.env.tmp
           mv app.env.tmp app.env
-          echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092" >> app.env
-          echo "KAFKA_BOOTSTRAP_SERVERS=${STACK_HOST}:9092"
+          echo "KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:${KTP}" >> app.env
+          echo "KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:${KTP}"
 
       - name: Pin EIS URL for API
         run: |
@@ -507,57 +510,90 @@ jobs:
             "chmod +x ${APP_DIR}/appctl.sh"
           echo "Upload main app done."
 
-      - name: Ensure reverse SSH tunnel on helios (Postgres from VPS)
-        if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
+      - name: Ensure reverse SSH tunnels from VPS to helios
+        if: ${{ env.VPS_DEPLOY_HOST }}
         run: |
           set -eu
-          echo "## Reverse SSH from VPS → helios: Postgres"
-          DB_PORT="${{ vars.POSTGRES_PORT }}"
-          [ -z "$DB_PORT" ] && DB_PORT=15432
+          echo "## Reverse SSH: на VPS: ssh -f -N -i key -p <helios ssh> -R … user@helios (см. HELIOS_TUNNEL_SSH_*, HELIOS_KAFKA_TUNNEL_PORT, VPS_HELIOS_TUNNEL_EXTRA_R)"
+          if [ ! -f helios_tunnel_key ] || [ ! -s helios_tunnel_key ] || [ ! -f ~/.ssh/id_vps ]; then
+            echo "Skip: положи secret HELIOS_TUNNEL_PRIVATE_KEY и VPS_SSH_KEY, перезапусти prepare id_vps (или вручную: ssh -f -N …)"
+            exit 0
+          fi
+          HELIOS_TH="${{ vars.HELIOS_TUNNEL_SSH_HOST }}"
+          HELIOS_TP="${{ vars.HELIOS_TUNNEL_SSH_PORT }}"
+          HELIOS_TU="${{ vars.HELIOS_TUNNEL_SSH_USER }}"
+          if [ -z "$HELIOS_TH" ]; then HELIOS_TH="${{ env.SSH_HOST }}"; fi
+          if [ -z "$HELIOS_TP" ]; then HELIOS_TP="${{ env.SSH_PORT }}"; fi
+          if [ -z "$HELIOS_TU" ]; then HELIOS_TU="${{ env.SSH_USER }}"; fi
+          KTP="${{ vars.HELIOS_KAFKA_TUNNEL_PORT }}"
+          if [ -z "$KTP" ]; then KTP=9092; fi
           REMOTE_DB_HOST="${{ vars.DB_TUNNEL_REMOTE_HOST }}"
           [ -z "$REMOTE_DB_HOST" ] && REMOTE_DB_HOST=127.0.0.1
           REMOTE_DB_PORT="${{ vars.DB_TUNNEL_REMOTE_PORT }}"
           [ -z "$REMOTE_DB_PORT" ] && REMOTE_DB_PORT=5432
-          HELIOS_HOST="${{ env.SSH_HOST }}"
-          HELIOS_PORT="${{ env.SSH_PORT }}"
-          HELIOS_USER="${{ env.SSH_USER }}"
-          echo "Map: helios:127.0.0.1:${DB_PORT} ← reverse SSH ← ${REMOTE_DB_HOST}:${REMOTE_DB_PORT} (Postgres на VPS)"
-
-          if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $DB_PORT" 2>/dev/null; then
-            echo "Tunnel already up on helios:127.0.0.1:${DB_PORT}"
+          DB_PORT="${{ vars.POSTGRES_PORT }}"
+          [ -z "$DB_PORT" ] && DB_PORT=15432
+          REV_ARGS=""
+          if [ "${{ vars.POSTGRES_HOST }}" = "127.0.0.1" ] || [ "${{ vars.POSTGRES_HOST }}" = "localhost" ]; then
+            REV_ARGS="${REV_ARGS} -R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}"
+            echo "  -R (Postgres) helios:${DB_PORT} -> VPS ${REMOTE_DB_HOST}:${REMOTE_DB_PORT}"
+          fi
+          if [ "${{ vars.SKIP_NATIVE_STACK }}" != "true" ] && [ "${{ vars.SKIP_NATIVE_STACK }}" != "1" ]; then
+            REV_ARGS="${REV_ARGS} -R ${KTP}:127.0.0.1:9092"
+            echo "  -R (Kafka) helios:${KTP} -> VPS 127.0.0.1:9092"
+          fi
+          EXTRA="${{ vars.VPS_HELIOS_TUNNEL_EXTRA_R }}"
+          if [ -n "$EXTRA" ]; then
+            OLDIFS=$IFS
+            IFS=';'
+            for spec in $EXTRA; do
+              spec="${spec#"${spec%%[![:space:]]*}"}"
+              spec="${spec%"${spec##*[![:space:]]}"}"
+              if [ -n "$spec" ]; then
+                REV_ARGS="${REV_ARGS} -R ${spec}"
+                echo "  -R (extra) $spec"
+              fi
+            done
+            IFS=$OLDIFS
+          fi
+          if [ -z "$REV_ARGS" ]; then
+            echo "Нет -R: настройте POSTGRES_HOST, выключите SKIP_NATIVE_STACK, или задайте VPS_HELIOS_TUNNEL_EXTRA_R"
             exit 0
           fi
-          echo "No listener on helios:${DB_PORT} — opening tunnel from VPS..."
-
-          if [ -z "${{ env.VPS_DEPLOY_HOST }}" ] || [ -z "${{ env.VPS_DEPLOY_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
-            echo "::error::Tunnel down and secrets missing: set VPS_SSH_HOST, VPS_SSH_USER, VPS_SSH_KEY, HELIOS_TUNNEL_PRIVATE_KEY (or start tunnel manually on helios)."
+          if [ -z "$HELIOS_TH" ] || [ -z "${{ env.VPS_DEPLOY_USER }}" ] || [ -z "${{ env.VPS_DEPLOY_HOST }}" ]; then
+            echo "::error::VPS_*, SSH/HELIOS host пусто"
             exit 1
           fi
-
           VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
-
-          scp -P "$VPS_PORT" -i ~/.ssh/id_vps helios_tunnel_key "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}:~/.ssh/helios_tunnel_key"
-
-          REV_ARGS="-R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}"
-
-          echo "Starting reverse SSH from VPS to helios..."
-          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps "${{ env.VPS_DEPLOY_USER }}@${{ env.VPS_DEPLOY_HOST }}" \
-            "set -eu; \
-            mkdir -p ~/.ssh; chmod 700 ~/.ssh; chmod 600 ~/.ssh/helios_tunnel_key; \
-            ssh-keyscan -p ${HELIOS_PORT} -H ${HELIOS_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true; \
-            pkill -f helios_tunnel_key 2>/dev/null || true; \
-            ssh -f -N -i ~/.ssh/helios_tunnel_key -p ${HELIOS_PORT} \
-              -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
-              ${REV_ARGS} \
-              ${HELIOS_USER}@${HELIOS_HOST}"
-
-          echo "Waiting for helios:127.0.0.1:${DB_PORT} (max ~40s, single SSH)..."
-          if ! ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_USER@$HELIOS_HOST" \
-            "env bash -c 'i=0; while [ \$i -lt 20 ]; do nc -z 127.0.0.1 ${DB_PORT} && exit 0; sleep 2; i=\$((i+1)); done; exit 1'"; then
-            echo "::error::Tunnel did not open helios:127.0.0.1:${DB_PORT} — check VPS→helios SSH and Postgres on ${REMOTE_DB_HOST}:${REMOTE_DB_PORT}"
-            exit 1
+          VUSER="${{ env.VPS_DEPLOY_USER }}"
+          VHOST="${{ env.VPS_DEPLOY_HOST }}"
+          scp -P "$VPS_PORT" -i ~/.ssh/id_vps helios_tunnel_key "${VUSER}@${VHOST}:/tmp/helios_tunnel_key_ci"
+          echo "VPS: ssh -f -N … ${HELIOS_TU}@${HELIOS_TH} -p ${HELIOS_TP} $REV_ARGS"
+          REMOTE_STEPS="set -e; \
+            install -d -m 700 ~/.ssh; \
+            mv -f /tmp/helios_tunnel_key_ci ~/.ssh/helios_tunnel_key; chmod 600 ~/.ssh/helios_tunnel_key; \
+            ssh-keyscan -p $HELIOS_TP -H $HELIOS_TH >> ~/.ssh/known_hosts 2>/dev/null || true; \
+            pkill -f 'helios_tunnel_key' 2>/dev/null || true; \
+            ssh -f -N -i ~/.ssh/helios_tunnel_key -p $HELIOS_TP -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 $REV_ARGS $HELIOS_TU@$HELIOS_TH"
+          # shellcheck disable=SC2029
+          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes "$VUSER@$VHOST" "$REMOTE_STEPS"
+          echo "Check listeners on helios (runner has id_key)…"
+          sleep 2
+          if [ "${{ vars.POSTGRES_HOST }}" = "127.0.0.1" ] || [ "${{ vars.POSTGRES_HOST }}" = "localhost" ]; then
+            if ssh -p "$HELIOS_TP" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_TU@$HELIOS_TH" "nc -z 127.0.0.1 $DB_PORT" 2>/dev/null; then
+              echo "OK tunnel Postgres on helios: $DB_PORT"
+            else
+              echo "::warning::helios:127.0.0.1:$DB_PORT not open (Postgres?)"
+            fi
           fi
-          echo "Tunnel OK."
+          if [ "${{ vars.SKIP_NATIVE_STACK }}" != "true" ] && [ "${{ vars.SKIP_NATIVE_STACK }}" != "1" ]; then
+            if ssh -p "$HELIOS_TP" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_TU@$HELIOS_TH" "nc -z 127.0.0.1 $KTP" 2>/dev/null; then
+              echo "OK tunnel Kafka on helios: $KTP"
+            else
+              echo "::warning::helios:127.0.0.1:$KTP not open (Kafka?)"
+            fi
+          fi
+          echo "Reverse SSH done."
 
       - name: Restart service on server
         run: |
@@ -684,6 +720,8 @@ jobs:
       JAR_NAME: ${{ needs.build.outputs.jar_name }}
       SSH_KEY: ${{ secrets.SSH_KEY || vars.SSH_KEY }}
       SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
+      # Kafka на VPS: fallback для STACK_HOST в worker (если нет vars.STACK_HOST)
+      VPS_SSH_HOST: ${{ secrets.VPS_SSH_HOST || vars.VPS_SSH_HOST }}
       WORKER_SSH_HOST: ${{ secrets.WORKER_SSH_HOST || vars.WORKER_SSH_HOST }}
       WORKER_SSH_USER: ${{ secrets.WORKER_SSH_USER || vars.WORKER_SSH_USER }}
       WORKER_SSH_PORT: ${{ secrets.WORKER_SSH_PORT || vars.WORKER_SSH_PORT }}
@@ -716,6 +754,7 @@ jobs:
           WORKER_SERVER_PORT: ${{ vars.WORKER_SERVER_PORT || '8082' }}
         run: |
           STACK_HOST="${{ vars.STACK_HOST }}"
+          if [ -z "${STACK_HOST}" ] && [ -n "${{ env.VPS_SSH_HOST }}" ]; then STACK_HOST="${{ env.VPS_SSH_HOST }}"; fi
           if [ -z "${STACK_HOST}" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
           export STACK_HOST
           export STACK_KAFKA_PORT="${{ vars.STACK_KAFKA_PORT }}"
@@ -820,6 +859,7 @@ jobs:
           set -eu
           echo "## Kafka UI (kafbat) on worker — JAR from GitHub; default version 1.4.2 (override: KAFKA_UI_VERSION); skip: SKIP_KAFKA_UI"
           STACK_HOST="${{ vars.STACK_HOST }}"
+          if [ -z "$STACK_HOST" ] && [ -n "${{ env.VPS_SSH_HOST }}" ]; then STACK_HOST="${{ env.VPS_SSH_HOST }}"; fi
           if [ -z "$STACK_HOST" ]; then STACK_HOST="${{ env.SSH_HOST }}"; fi
           KPORT="${{ vars.STACK_KAFKA_PORT }}"
           [ -z "$KPORT" ] && KPORT=9092
