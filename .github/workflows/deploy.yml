@@ -455,7 +455,9 @@ jobs:
           grep -v '^APP_EIS_REMOTE_BASE_URL=' app.env > app.env.tmp || cp app.env app.env.tmp
           mv app.env.tmp app.env
           VPSH="${VPS_DEPLOY_HOST:-}"
-          # 1) ODOO_VPS_PUBLIC_BASE_URL  2) APP_EIS_REMOTE_BASE_URL  3) same VPS: http://<VPS_SSH_HOST>:8069
+          ODOO_TP="${{ vars.HELIOS_ODOO_TUNNEL_PORT }}"
+          if [ -z "$ODOO_TP" ]; then ODOO_TP=8069; fi
+          # 1) ODOO_VPS_PUBLIC_BASE_URL  2) APP_EIS_REMOTE_BASE_URL  3) reverse tunnel on helios: http://127.0.0.1:<port>
           if [ -n "${{ vars.ODOO_VPS_PUBLIC_BASE_URL }}" ]; then
             FALLBACK_URL="${{ vars.ODOO_VPS_PUBLIC_BASE_URL }}"
             echo "EIS: ODOO_VPS_PUBLIC_BASE_URL"
@@ -463,8 +465,8 @@ jobs:
             FALLBACK_URL="${{ vars.APP_EIS_REMOTE_BASE_URL }}"
             echo "EIS: APP_EIS_REMOTE_BASE_URL"
           elif [ -n "$VPSH" ]; then
-            FALLBACK_URL="http://${VPSH}:8069"
-            echo "EIS: default to same VPS (VPS_SSH_HOST) — $FALLBACK_URL"
+            FALLBACK_URL="http://127.0.0.1:${ODOO_TP}"
+            echo "EIS: default to Odoo reverse tunnel on helios — $FALLBACK_URL"
           else
             echo "::error::Задайте APP_EIS_REMOTE_BASE_URL, ODOO_VPS_PUBLIC_BASE_URL или VPS_SSH_HOST (будет http://host:8069)."
             exit 1
@@ -532,6 +534,8 @@ jobs:
           ssh-keyscan -p "$HELIOS_TP" -H "$HELIOS_TH" >> ~/.ssh/known_hosts 2>/dev/null || true
           KTP="${{ vars.HELIOS_KAFKA_TUNNEL_PORT }}"
           if [ -z "$KTP" ]; then KTP=9092; fi
+          OTP="${{ vars.HELIOS_ODOO_TUNNEL_PORT }}"
+          if [ -z "$OTP" ]; then OTP=8069; fi
           REMOTE_DB_HOST="${{ vars.DB_TUNNEL_REMOTE_HOST }}"
           [ -z "$REMOTE_DB_HOST" ] && REMOTE_DB_HOST=127.0.0.1
           REMOTE_DB_PORT="${{ vars.DB_TUNNEL_REMOTE_PORT }}"
@@ -546,6 +550,10 @@ jobs:
           if [ "${{ vars.SKIP_NATIVE_STACK }}" != "true" ] && [ "${{ vars.SKIP_NATIVE_STACK }}" != "1" ]; then
             REV_ARGS="${REV_ARGS} -R ${KTP}:127.0.0.1:9092"
             echo "  -R (Kafka) helios:${KTP} -> VPS 127.0.0.1:9092"
+          fi
+          if [ "${{ vars.SKIP_ODOO_VPS }}" != "true" ] && [ "${{ vars.SKIP_ODOO_VPS }}" != "1" ]; then
+            REV_ARGS="${REV_ARGS} -R ${OTP}:127.0.0.1:8069"
+            echo "  -R (Odoo) helios:${OTP} -> VPS 127.0.0.1:8069"
           fi
           EXTRA="${{ vars.VPS_HELIOS_TUNNEL_EXTRA_R }}"
           if [ -n "$EXTRA" ]; then
@@ -610,6 +618,10 @@ jobs:
             ssh -p "$HELIOS_TP" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_TU@$HELIOS_TH" \
               "if nc -z 127.0.0.1 $KTP 2>/dev/null; then echo '::warning::helios:$KTP already listens before tunnel (old Kafka or old ssh -R)'; fi" || true
           fi
+          if [ "${{ vars.SKIP_ODOO_VPS }}" != "true" ] && [ "${{ vars.SKIP_ODOO_VPS }}" != "1" ]; then
+            ssh -p "$HELIOS_TP" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_TU@$HELIOS_TH" \
+              "if nc -z 127.0.0.1 $OTP 2>/dev/null; then echo '::warning::helios:$OTP already listens before tunnel (old Odoo tunnel)'; fi" || true
+          fi
           echo "VPS: ssh -f -N … ${HELIOS_TU}@${HELIOS_TH} -p ${HELIOS_TP} $REV_ARGS"
           REMOTE_STEPS="set -e; \
             install -d -m 700 ~/.ssh; \
@@ -638,6 +650,13 @@ jobs:
               echo "OK tunnel Kafka on helios: $KTP"
             else
               echo "::warning::helios:127.0.0.1:$KTP not open (Kafka?)"
+            fi
+          fi
+          if [ "${{ vars.SKIP_ODOO_VPS }}" != "true" ] && [ "${{ vars.SKIP_ODOO_VPS }}" != "1" ]; then
+            if ssh -p "$HELIOS_TP" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes "$HELIOS_TU@$HELIOS_TH" "nc -z 127.0.0.1 $OTP" 2>/dev/null; then
+              echo "OK tunnel Odoo on helios: $OTP"
+            else
+              echo "::warning::helios:127.0.0.1:$OTP not open (Odoo?)"
             fi
           fi
           echo "Reverse SSH done."
