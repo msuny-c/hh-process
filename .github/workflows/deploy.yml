@@ -517,8 +517,8 @@ jobs:
         run: |
           set -eu
           echo "## Reverse SSH: на VPS: ssh -f -N -i key -p <helios ssh> -R … user@helios (см. HELIOS_TUNNEL_SSH_*, HELIOS_KAFKA_TUNNEL_PORT, VPS_HELIOS_TUNNEL_EXTRA_R)"
-          if [ ! -f helios_tunnel_key ] || [ ! -s helios_tunnel_key ] || [ ! -f ~/.ssh/id_vps ]; then
-            echo "Skip: положи secret HELIOS_TUNNEL_PRIVATE_KEY и VPS_SSH_KEY, перезапусти prepare id_vps (или вручную: ssh -f -N …)"
+          if [ ! -f ~/.ssh/id_vps ]; then
+            echo "Skip: нет VPS_SSH_KEY / ~/.ssh/id_vps"
             exit 0
           fi
           HELIOS_TH="${{ vars.HELIOS_TUNNEL_SSH_HOST }}"
@@ -569,19 +569,33 @@ jobs:
           VPS_PORT="${{ env.VPS_DEPLOY_PORT }}"
           VUSER="${{ env.VPS_DEPLOY_USER }}"
           VHOST="${{ env.VPS_DEPLOY_HOST }}"
-          echo "Upload helios tunnel key to VPS via ssh stream (no scp/SFTP)"
-          if ! ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes -o ConnectTimeout=30 "$VUSER@$VHOST" \
-            "umask 077; cat > /tmp/helios_tunnel_key_ci" < helios_tunnel_key; then
-            echo "::error::Cannot upload helios_tunnel_key to VPS over SSH (check VPS_SSH_HOST/USER/PORT/KEY)."
-            exit 1
+          HELIOS_KEY_ON_VPS="${{ vars.VPS_HELIOS_SSH_IDENTITY_FILE }}"
+          if [ -z "$HELIOS_KEY_ON_VPS" ]; then HELIOS_KEY_ON_VPS=".ssh/id_ed25519_helios"; fi
+          case "$HELIOS_KEY_ON_VPS" in
+            "~/"*) HELIOS_KEY_ON_VPS=".${HELIOS_KEY_ON_VPS#~}" ;;
+          esac
+
+          UPLOAD_HELIOS_KEY="${{ vars.VPS_HELIOS_UPLOAD_PRIVATE_KEY }}"
+          if [ -f helios_tunnel_key ] && [ -s helios_tunnel_key ] && { [ "$UPLOAD_HELIOS_KEY" = "true" ] || [ "$UPLOAD_HELIOS_KEY" = "1" ]; }; then
+            echo "Upload HELIOS_TUNNEL_PRIVATE_KEY to VPS as $HELIOS_KEY_ON_VPS"
+            if ! ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes -o ConnectTimeout=30 "$VUSER@$VHOST" \
+              "umask 077; mkdir -p ~/.ssh; cat > '$HELIOS_KEY_ON_VPS'" < helios_tunnel_key; then
+              echo "::error::Cannot upload helios key to VPS over SSH (check VPS_SSH_HOST/USER/PORT/KEY)."
+              exit 1
+            fi
+          else
+            echo "Use existing helios key on VPS: $HELIOS_KEY_ON_VPS (set VPS_HELIOS_UPLOAD_PRIVATE_KEY=true to overwrite from HELIOS_TUNNEL_PRIVATE_KEY)"
           fi
+
           # Старый reverse-туннель держит порты на helios; убиваем его с VPS ДО проверки занятости портов.
           echo "Kill old reverse tunnel on VPS (if any)"
           if ! ssh -p "$VPS_PORT" -i ~/.ssh/id_vps -o BatchMode=yes -o ConnectTimeout=30 "$VUSER@$VHOST" "set -e; \
             install -d -m 700 ~/.ssh; \
-            mv -f /tmp/helios_tunnel_key_ci ~/.ssh/helios_tunnel_key; chmod 600 ~/.ssh/helios_tunnel_key; \
-            pkill -f '[s]sh .*helios_tunnel_key' 2>/dev/null || true"; then
-            echo "::error::Cannot prepare ~/.ssh/helios_tunnel_key on VPS."
+            test -f '$HELIOS_KEY_ON_VPS' || { echo 'missing helios identity: $HELIOS_KEY_ON_VPS'; exit 2; }; \
+            chmod 600 '$HELIOS_KEY_ON_VPS'; \
+            pkill -f '[s]sh .*-i .*id_ed25519_helios' 2>/dev/null || true; \
+            pkill -f '[s]sh .*-i .*helios_tunnel_key' 2>/dev/null || true"; then
+            echo "::error::Cannot prepare helios identity on VPS ($HELIOS_KEY_ON_VPS)."
             exit 1
           fi
           sleep 2
@@ -598,9 +612,9 @@ jobs:
             install -d -m 700 ~/.ssh; \
             mkdir -p ~/hh-process; \
             ssh-keyscan -p $HELIOS_TP -H $HELIOS_TH >> ~/.ssh/known_hosts 2>/dev/null || true; \
-            ssh -i ~/.ssh/helios_tunnel_key -p $HELIOS_TP -o BatchMode=yes -o ConnectTimeout=10 $HELIOS_TU@$HELIOS_TH true; \
+            ssh -i '$HELIOS_KEY_ON_VPS' -p $HELIOS_TP -o BatchMode=yes -o ConnectTimeout=10 $HELIOS_TU@$HELIOS_TH true; \
             rm -f ~/hh-process/reverse-ssh.log; \
-            if ! ssh -f -N -v -i ~/.ssh/helios_tunnel_key -p $HELIOS_TP -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 $REV_ARGS $HELIOS_TU@$HELIOS_TH > ~/hh-process/reverse-ssh.log 2>&1; then \
+            if ! ssh -f -N -v -i '$HELIOS_KEY_ON_VPS' -p $HELIOS_TP -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 $REV_ARGS $HELIOS_TU@$HELIOS_TH > ~/hh-process/reverse-ssh.log 2>&1; then \
               echo 'reverse ssh failed; log:'; \
               sed -n '1,180p' ~/hh-process/reverse-ssh.log; \
               exit 1; \
