@@ -1,6 +1,7 @@
 package ru.itmo.hhprocess.service;
 
 import java.util.EnumSet;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,11 @@ public class InterviewExportLogService {
                 interviewId,
                 EnumSet.of(InterviewExportStatus.PENDING, InterviewExportStatus.EXPORTED)
         );
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<InterviewExportLogEntity> findNextPending() {
+        return repository.findFirstByExportStatusOrderByCreatedAtAsc(InterviewExportStatus.PENDING);
     }
 
     @Transactional

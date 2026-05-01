@@ -10,14 +10,14 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 - Асинхронный screening через Kafka: worker считает результат по `application.submitted` и публикует `application.screened`; запись в БД (`screening_results`, смена статуса заявки, уведомления) делает consumer на **`api`**.
 - Идемпотентность Kafka consumers через таблицу `processed_kafka_events`.
 - Уведомления: запись в БД и WebSocket push после commit транзакции (без отдельного Kafka-топика).
-- `@Scheduled` только для timeout-закрытия приглашений; экспорт в EIS — **синхронно** при ответе кандидата (ACCEPT), без фоновых job по расписанию.
+- `@Scheduled` для timeout-закрытия приглашений и фонового экспорта интервью в EIS каждые 5 секунд после ACCEPT кандидата.
 - **Odoo Community 17** с модулем **`odoo-addons/hh_process_eis`**: JSON REST (см. `controllers/main.py` в модуле), записи в `calendar.event`. **`api`** зовёт EIS по HTTP через JCA (`CalendarManagedConnectionFactory`), без Kafka; `APP_EIS_REMOTE_BASE_URL` обязателен (in-memory EIS в JVM отключён).
 
 ## Архитектура
 
 Один и тот же `jar` запускается в разных ролях через `APP_ROLE`:
 
-- `api`: REST, WebSocket, Swagger UI, `TimeoutService` (scheduled), **синхронный** экспорт в EIS через JCA при ACCEPT, Kafka consumer на `application.screened`.
+- `api`: REST, WebSocket, Swagger UI, `TimeoutService` (scheduled), scheduled-экспорт интервью в EIS через JCA, Kafka consumer на `application.screened`.
 - `worker`: Kafka listener на `application.submitted` (только расчёт screening и публикация `application.screened`, без записи результата в БД); `APP_SCREENING_ENABLED=true`.
 
 В `docker-compose.yml` поднимается:
@@ -58,7 +58,7 @@ Spring Boot 3.4.3 сервис обработки откликов на вака
 ### Плановые задачи и экспорт в EIS
 
 - `TimeoutService` (@Scheduled) закрывает просроченные приглашения на роли `api`.
-- Экспорт в EIS: при `response_type: ACCEPT` в **том же** HTTP-запросе, в одной транзакции: `InvitationResponseService` → `InterviewExportRequestService` → `InterviewExportService` → JCA → HTTP.
+- Экспорт в EIS: при `response_type: ACCEPT` в HTTP-запросе только ставится `PENDING` в `interview_export_log`; `InterviewExportSchedulerService` на роли `api` каждые 5 секунд забирает pending-записи и вызывает `InterviewExportService` → JCA → HTTP.
 
 ### JCA EIS
 
@@ -109,6 +109,8 @@ APP_SCREENING_ENABLED=true
 ```text
 APP_EIS_REMOTE_BASE_URL=http://odoo:8069
 APP_EIS_API_KEY=dev-eis-key
+APP_EIS_EXPORT_INTERVAL_MS=5000
+APP_EIS_EXPORT_INITIAL_DELAY_MS=5000
 ```
 
 `APP_EIS_REMOTE_BASE_URL` **нельзя** оставлять пустым на **api** (приложение не стартует). Ключ: как в Odoo `ODOO_EIS_API_KEY`; `APP_EIS_API_KEY` можно не задавать, если EIS не требует `X-API-Key`.

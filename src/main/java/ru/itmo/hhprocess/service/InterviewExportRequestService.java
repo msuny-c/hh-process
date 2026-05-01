@@ -14,7 +14,6 @@ public class InterviewExportRequestService {
 
     private final InterviewService interviewService;
     private final InterviewExportLogService interviewExportLogService;
-    private final InterviewExportService interviewExportService;
 
     @Transactional
     public boolean export(UUID interviewId) {
@@ -23,7 +22,6 @@ public class InterviewExportRequestService {
         }
         InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
         interviewExportLogService.markPending(interview);
-        interviewExportService.export(interview);
         return true;
     }
 }
