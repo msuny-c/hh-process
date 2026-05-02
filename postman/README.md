@@ -23,7 +23,7 @@
 
 1. сохранить `application_id` в переменную окружения;
 2. вызывать `GET /api/v1/candidates/applications/{{application_id}}`;
-3. повторять, пока `status` не станет `ON_RECRUITER_REVIEW` или `SCREENING_FAILED` (пока идёт скрининг, для кандидата отображается `APPLICATION_SUBMITTED`).
+3. повторять, пока `status` не станет `ON_RECRUITER_REVIEW`, `SCREENING_FAILED` или `SCREENING_ERROR` (пока идёт скрининг, для кандидата отображается `APPLICATION_SUBMITTED`). `SCREENING_ERROR` означает техническую ошибку: кандидат получает уведомление и может подать отклик повторно.
 
 ### 2. Для distributed transaction появился debug trigger
 
@@ -35,7 +35,7 @@
 
 ### 3. EIS export
 
-При **`response_type: ACCEPT`** на `POST /api/v1/candidates/.../invitation-response` выгрузка в EIS выполняется **синхронно** в том же запросе (JCA-HTTP к Odoo/модулю).
+При **`response_type: ACCEPT`** на `POST /api/v1/candidates/.../invitation-response` выгрузка в EIS ставится в очередь и выполняется scheduled job на роли `api`.
 
 ## Рекомендуемые сценарии коллекции
 

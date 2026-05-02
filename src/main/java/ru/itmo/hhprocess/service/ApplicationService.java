@@ -44,7 +44,11 @@ public class ApplicationService {
                                         "Vacancy is not active");
                 }
 
-                if (applicationRepository.existsByCandidateUserIdAndVacancyId(candidateUser.getId(), vacancyId)) {
+                if (applicationRepository.existsByCandidateUserIdAndVacancyIdAndStatusNotIn(
+                                candidateUser.getId(),
+                                vacancyId,
+                                List.of(ApplicationStatus.SCREENING_ERROR)
+                )) {
                         throw new ApiException(HttpStatus.CONFLICT, ErrorCode.APPLICATION_ALREADY_EXISTS,
                                         "You already have an application for this vacancy");
                 }

@@ -172,7 +172,7 @@ APP_TIMEOUT_INITIAL_DELAY_MS=30000
 }
 ```
 
-Далее клиент опрашивает `GET /api/v1/candidates/applications/{applicationId}`, пока статус не станет `ON_RECRUITER_REVIEW` либо `SCREENING_FAILED` (пока идёт скрининг, в ответе кандидату по-прежнему `APPLICATION_SUBMITTED`).
+Далее клиент опрашивает `GET /api/v1/candidates/applications/{applicationId}`, пока статус не станет `ON_RECRUITER_REVIEW`, `SCREENING_FAILED` либо `SCREENING_ERROR` (пока идёт скрининг, в ответе кандидату по-прежнему `APPLICATION_SUBMITTED`). `SCREENING_ERROR` означает техническую ошибку обработки; кандидат получает уведомление и может подать отклик повторно.
 
 ### Recruiter
 

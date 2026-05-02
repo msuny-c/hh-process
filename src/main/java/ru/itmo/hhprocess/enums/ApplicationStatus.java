@@ -4,6 +4,7 @@ public enum ApplicationStatus {
 
     SCREENING_IN_PROGRESS,
     SCREENING_FAILED,
+    SCREENING_ERROR,
     ON_RECRUITER_REVIEW,
     REJECTED_BY_RECRUITER,
     INVITED,
@@ -24,6 +25,7 @@ public enum ApplicationStatus {
 
     public boolean isTerminal() {
         return this == SCREENING_FAILED
+                || this == SCREENING_ERROR
                 || this == REJECTED_BY_RECRUITER
                 || this == CLOSED_BY_TIMEOUT
                 || this == CLOSED_BY_VACANCY;

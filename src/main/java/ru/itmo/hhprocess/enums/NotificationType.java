@@ -2,6 +2,7 @@ package ru.itmo.hhprocess.enums;
 
 public enum NotificationType {
     SCREENING_RESULT,
+    SCREENING_ERROR,
     NEW_APPLICATION,
     APPLICATION_REJECTED,
     INVITATION,

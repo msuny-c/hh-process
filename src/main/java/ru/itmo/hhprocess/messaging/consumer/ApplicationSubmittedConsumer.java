@@ -18,6 +18,7 @@ import ru.itmo.hhprocess.messaging.dto.ApplicationSubmittedEvent;
 import ru.itmo.hhprocess.messaging.producer.ApplicationScreenedPublisher;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 import ru.itmo.hhprocess.service.KafkaIdempotencyService;
+import ru.itmo.hhprocess.service.ScreeningFailureService;
 import ru.itmo.hhprocess.service.ScreeningComputation;
 import ru.itmo.hhprocess.service.ScreeningService;
 
@@ -31,6 +32,7 @@ public class ApplicationSubmittedConsumer {
     private final ObjectMapper objectMapper;
     private final ApplicationRepository applicationRepository;
     private final ScreeningService screeningService;
+    private final ScreeningFailureService screeningFailureService;
     private final ApplicationScreenedPublisher applicationScreenedPublisher;
     private final KafkaIdempotencyService kafkaIdempotencyService;
 
@@ -64,7 +66,19 @@ public class ApplicationSubmittedConsumer {
         }
 
         Instant screeningStartedAt = Instant.now();
-        ScreeningComputation computation = screeningService.computeScreening(application);
+        ScreeningComputation computation;
+        try {
+            computation = screeningService.computeScreening(application);
+        } catch (Exception e) {
+            log.error("Screening failed for application {}; marking as retryable screening error",
+                    application.getId(),
+                    e);
+            screeningFailureService.failScreening(application, screeningStartedAt, Instant.now(), e);
+            kafkaIdempotencyService.markProcessed(event.eventId(),
+                    "application.submitted",
+                    consumerName());
+            return;
+        }
         Instant processedAt = Instant.now();
 
         ApplicationScreenedEvent screenedEvent = new ApplicationScreenedEvent(
