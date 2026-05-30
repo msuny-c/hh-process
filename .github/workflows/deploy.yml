@@ -301,6 +301,27 @@ jobs:
           name: app
           path: artifact
 
+      - name: Patch WAR with jboss-deployment-structure.xml for WildFly
+        run: |
+          set -eu
+          WAR="artifact/${{ env.APP_ARTIFACT_NAME }}"
+          test -f "$WAR"
+          mkdir -p /tmp/wf-patch/WEB-INF
+          cat > /tmp/wf-patch/WEB-INF/jboss-deployment-structure.xml <<'JBOSS_DS'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <jboss-deployment-structure><deployment><exclusions>
+              <module name="org.hibernate" slot="main"/>
+              <module name="org.hibernate.commons.annotations" slot="main"/>
+              <module name="org.hibernate.validator" slot="main"/>
+              <module name="org.hibernate.validator.cdi" slot="main"/>
+              <module name="org.slf4j.impl"/>
+              <module name="org.slf4j.jboss-logmanager"/>
+          </exclusions></deployment></jboss-deployment-structure>
+          JBOSS_DS
+          cd /tmp/wf-patch
+          zip -u "$GITHUB_WORKSPACE/$WAR" WEB-INF/jboss-deployment-structure.xml
+          echo "WAR patched with jboss-deployment-structure.xml"
+
       - name: Prepare SSH
         run: |
           set -eu
