@@ -560,6 +560,7 @@ jobs:
           pkill -f '[w]ildfly.*standalone' 2>/dev/null || true
           pkill -f '[s]tandalone.sh' 2>/dev/null || true
           rm -rf "$OLD_CAMUNDA_HOME" "$HOME/wildfly" "$HOME/\$HOME" "$HOME/apps/camunda-old"
+          rm -f "$HOME/camunda-h2-dbs/process-engine.mv.db" 2>/dev/null || true
           rm -f "$APP_DIR/ROOT.war.new" "$CAMUNDA_BASE/ROOT.war.new" "$APP_DIR/app.jar" "$APP_DIR/app.war" "$APP_DIR/app.log" "$APP_DIR/wildfly.log" "$APP_DIR/camunda-resources.tgz"
           find "$APP_DIR" -maxdepth 1 -type f -name '*.log.*' -delete 2>/dev/null || true
           echo "Home disk usage after cleanup:"
