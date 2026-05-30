@@ -516,7 +516,7 @@ jobs:
           APP_DIR="\$HOME/apps/blps"
           CAMUNDA_BASE="\$HOME/apps/camunda"
           CAMUNDA_HOME="${CAMUNDA_BASE}/${{ env.CAMUNDA_DIST_NAME }}"
-          WF_HOME="${CAMUNDA_HOME}/server/wildfly-${{ env.CAMUNDA_WILDFLY_VERSION }}"
+          WF_HOME="${CAMUNDA_BASE}/server/wildfly-${{ env.CAMUNDA_WILDFLY_VERSION }}"
           CAMUNDA_ZIP="${CAMUNDA_BASE}/${{ env.CAMUNDA_DIST_NAME }}.zip"
           WAR_LOCAL="artifact/${{ env.APP_ARTIFACT_NAME }}"
           test -f "$WAR_LOCAL"
@@ -555,7 +555,7 @@ jobs:
           OLD_CAMUNDA_HOME="$HOME/camunda"
           mkdir -p "$APP_DIR" "$CAMUNDA_BASE"
           if [ -f "$APP_DIR/wildflyctl.sh" ]; then
-            CAMUNDA_HOME="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME"             WF_HOME="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME/server/wildfly-$CAMUNDA_WILDFLY_VERSION"             APP_DIR="$APP_DIR" bash "$APP_DIR/wildflyctl.sh" stop || true
+            CAMUNDA_HOME="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME"             WF_HOME="$CAMUNDA_BASE/server/wildfly-$CAMUNDA_WILDFLY_VERSION"             APP_DIR="$APP_DIR" bash "$APP_DIR/wildflyctl.sh" stop || true
           fi
           pkill -f '[w]ildfly.*standalone' 2>/dev/null || true
           pkill -f '[s]tandalone.sh' 2>/dev/null || true
@@ -596,19 +596,20 @@ jobs:
           APP_DIR="$HOME/apps/blps"
           CAMUNDA_BASE="$HOME/apps/camunda"
           CAMUNDA_HOME="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME"
-          WF_HOME="$CAMUNDA_HOME/server/wildfly-$CAMUNDA_WILDFLY_VERSION"
+          WF_HOME="$CAMUNDA_BASE/server/wildfly-$CAMUNDA_WILDFLY_VERSION"
           CAMUNDA_ZIP="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME.zip"
           chmod +x "$APP_DIR/wildflyctl.sh"
           if [ -x "$APP_DIR/wildflyctl.sh" ]; then
             CAMUNDA_HOME="$CAMUNDA_HOME" WF_HOME="$WF_HOME" "$APP_DIR/wildflyctl.sh" stop || true
           fi
           if [ ! -d "$WF_HOME" ]; then
-            rm -rf "$CAMUNDA_HOME" "$CAMUNDA_BASE/__MACOSX"
-            unzip "$CAMUNDA_ZIP" -d "$CAMUNDA_BASE" || { _ec=$?; if [ "$_ec" -gt 1 ]; then echo "unzip failed (exit $_ec)" >&2; exit "$_ec"; fi; echo "unzip: warnings only (exit $_ec), continuing"; }
+            rm -rf "$CAMUNDA_BASE/server" "$CAMUNDA_BASE/lib" "$CAMUNDA_BASE/sql" "$CAMUNDA_BASE/__MACOSX" "$CAMUNDA_HOME"
+            unzip -o "$CAMUNDA_ZIP" -d "$CAMUNDA_BASE" || { _ec=$?; if [ "$_ec" -gt 1 ]; then echo "unzip failed (exit $_ec)" >&2; exit "$_ec"; fi; echo "unzip: warnings only (exit $_ec), continuing"; }
             rm -f "$CAMUNDA_ZIP"
             rm -rf "$CAMUNDA_BASE/__MACOSX"
             if [ ! -d "$WF_HOME" ]; then
               echo "unzip finished but WF_HOME missing: $WF_HOME" >&2
+              ls -la "$CAMUNDA_BASE/" >&2 || true
               exit 1
             fi
           else
@@ -798,7 +799,7 @@ jobs:
           echo "## Restart WildFly"
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "env CAMUNDA_HOME=\$HOME/apps/camunda/${{ env.CAMUNDA_DIST_NAME }} WF_HOME=\$HOME/apps/camunda/${{ env.CAMUNDA_DIST_NAME }}/server/wildfly-${{ env.CAMUNDA_WILDFLY_VERSION }} APP_DIR=\$HOME/apps/blps bash \$HOME/apps/blps/wildflyctl.sh restart"
+            "env CAMUNDA_HOME=\$HOME/apps/camunda WF_HOME=\$HOME/apps/camunda/server/wildfly-${{ env.CAMUNDA_WILDFLY_VERSION }} APP_DIR=\$HOME/apps/blps bash \$HOME/apps/blps/wildflyctl.sh restart"
 
       - name: Healthcheck Camunda WildFly and deployed WAR
         run: |
@@ -810,8 +811,8 @@ jobs:
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "env PORT=${PORT} TIMEOUT_SEC=${TIMEOUT_SEC} CAMUNDA_DIST_NAME='${{ env.CAMUNDA_DIST_NAME }}' CAMUNDA_WILDFLY_VERSION='${{ env.CAMUNDA_WILDFLY_VERSION }}' bash -s" <<'REMOTE'
           set -eu
-          CAMUNDA_HOME="$HOME/apps/camunda/$CAMUNDA_DIST_NAME"
-          WF_HOME="$CAMUNDA_HOME/server/wildfly-$CAMUNDA_WILDFLY_VERSION"
+          CAMUNDA_HOME="$HOME/apps/camunda"
+          WF_HOME="$HOME/apps/camunda/server/wildfly-$CAMUNDA_WILDFLY_VERSION"
           DEPLOY_DIR="$WF_HOME/standalone/deployments"
           i=0
           while [ "$i" -lt "$TIMEOUT_SEC" ]; do
