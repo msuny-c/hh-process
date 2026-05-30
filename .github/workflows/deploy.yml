@@ -261,7 +261,7 @@ jobs:
       API_HEALTHCHECK_TIMEOUT_SEC: ${{ vars.API_HEALTHCHECK_TIMEOUT_SEC || '60' }}
       CAMUNDA_DIST_URL: 'https://downloads.camunda.cloud/release/camunda-bpm/wildfly/7.21/camunda-bpm-wildfly-7.21.0.zip'
       CAMUNDA_DIST_NAME: 'camunda-bpm-wildfly-7.21.0'
-      CAMUNDA_WILDFLY_VERSION: '27.0.1.Final'
+      CAMUNDA_WILDFLY_VERSION: '31.0.0.Final'
       WILDFLY_HTTP_PORT: ${{ secrets.WILDFLY_HTTP_PORT || vars.WILDFLY_HTTP_PORT || secrets.WILDFLY_PORTBASE || vars.WILDFLY_PORTBASE || secrets.SERVER_PORT || vars.SERVER_PORT || '32318' }}
       WILDFLY_AJP_PORT: ${{ secrets.WILDFLY_AJP_PORT || vars.WILDFLY_AJP_PORT || '' }}
       WILDFLY_HTTPS_PORT: ${{ secrets.WILDFLY_HTTPS_PORT || vars.WILDFLY_HTTPS_PORT || '' }}
