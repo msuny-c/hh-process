@@ -604,14 +604,26 @@ jobs:
           fi
           if [ ! -d "$WF_HOME" ]; then
             rm -rf "$CAMUNDA_HOME" "$CAMUNDA_BASE/__MACOSX"
-            unzip -q "$CAMUNDA_ZIP" -d "$CAMUNDA_BASE"
+            unzip "$CAMUNDA_ZIP" -d "$CAMUNDA_BASE" || { _ec=$?; if [ "$_ec" -gt 1 ]; then echo "unzip failed (exit $_ec)" >&2; exit "$_ec"; fi; echo "unzip: warnings only (exit $_ec), continuing"; }
             rm -f "$CAMUNDA_ZIP"
             rm -rf "$CAMUNDA_BASE/__MACOSX"
+            if [ ! -d "$WF_HOME" ]; then
+              echo "unzip finished but WF_HOME missing: $WF_HOME" >&2
+              exit 1
+            fi
           else
             rm -f "$CAMUNDA_ZIP" 2>/dev/null || true
           fi
           test -f "$WF_HOME/standalone/configuration/standalone.xml"
-          python3 "$APP_DIR/configure-wildfly.py" "$WF_HOME/standalone/configuration/standalone.xml"
+          PYTHON3=$(command -v python3 2>/dev/null \
+            || command -v python3.12 2>/dev/null \
+            || command -v python3.11 2>/dev/null \
+            || command -v python3.10 2>/dev/null \
+            || command -v python3.9 2>/dev/null \
+            || { ls /usr/local/bin/python3* 2>/dev/null | sort -rV | head -1; } \
+            || true)
+          if [ -z "$PYTHON3" ]; then echo "python3 not found on remote host" >&2; exit 1; fi
+          "$PYTHON3" "$APP_DIR/configure-wildfly.py" "$WF_HOME/standalone/configuration/standalone.xml"
           rm -f "$WF_HOME/standalone/deployments/ROOT.war" "$WF_HOME/standalone/deployments/ROOT.war.deployed" "$WF_HOME/standalone/deployments/ROOT.war.failed" "$WF_HOME/standalone/deployments/ROOT.war.isdeploying" "$WF_HOME/standalone/deployments/ROOT.war.undeployed" "$WF_HOME/standalone/deployments/ROOT.war.dodeploy"
           mv -f "$CAMUNDA_BASE/ROOT.war.new" "$WF_HOME/standalone/deployments/ROOT.war"
           touch "$WF_HOME/standalone/deployments/ROOT.war.dodeploy"
