@@ -514,7 +514,7 @@ jobs:
         run: |
           set -eu
           APP_DIR="\$HOME/apps/blps"
-          CAMUNDA_BASE="\$HOME/camunda"
+          CAMUNDA_BASE="\$HOME/apps/camunda"
           CAMUNDA_HOME="${CAMUNDA_BASE}/${{ env.CAMUNDA_DIST_NAME }}"
           WF_HOME="${CAMUNDA_HOME}/server/wildfly-${{ env.CAMUNDA_WILDFLY_VERSION }}"
           CAMUNDA_ZIP="${CAMUNDA_BASE}/${{ env.CAMUNDA_DIST_NAME }}.zip"
@@ -548,7 +548,26 @@ jobs:
           if ! grep -q '^APP_CAMUNDA_CANDIDATE_RESPONSE_TASK_KEY=' app.env; then
             echo "APP_CAMUNDA_CANDIDATE_RESPONSE_TASK_KEY=candidate-response" >> app.env
           fi
-          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "mkdir -p \$HOME/apps/blps \$HOME/camunda"
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}"             "env CAMUNDA_DIST_NAME='${{ env.CAMUNDA_DIST_NAME }}' CAMUNDA_WILDFLY_VERSION='${{ env.CAMUNDA_WILDFLY_VERSION }}' bash -s" <<'REMOTE_CLEANUP'
+          set +e
+          APP_DIR="$HOME/apps/blps"
+          CAMUNDA_BASE="$HOME/apps/camunda"
+          OLD_CAMUNDA_HOME="$HOME/camunda"
+          mkdir -p "$APP_DIR" "$CAMUNDA_BASE"
+          if [ -f "$APP_DIR/wildflyctl.sh" ]; then
+            CAMUNDA_HOME="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME"             WF_HOME="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME/server/wildfly-$CAMUNDA_WILDFLY_VERSION"             APP_DIR="$APP_DIR" bash "$APP_DIR/wildflyctl.sh" stop || true
+          fi
+          pkill -f '[w]ildfly.*standalone' 2>/dev/null || true
+          pkill -f '[s]tandalone.sh' 2>/dev/null || true
+          rm -rf "$OLD_CAMUNDA_HOME" "$HOME/wildfly" "$HOME/\$HOME" "$HOME/apps/camunda-old"
+          rm -f "$APP_DIR/ROOT.war.new" "$CAMUNDA_BASE/ROOT.war.new" "$APP_DIR/app.jar" "$APP_DIR/app.war" "$APP_DIR/app.log" "$APP_DIR/wildfly.log" "$APP_DIR/camunda-resources.tgz"
+          find "$APP_DIR" -maxdepth 1 -type f -name '*.log.*' -delete 2>/dev/null || true
+          echo "Home disk usage after cleanup:"
+          du -sh "$HOME" 2>/dev/null || true
+          du -sh "$HOME/apps" "$HOME/apps/blps" "$HOME/apps/camunda" 2>/dev/null || true
+          df -h "$HOME" 2>/dev/null || true
+          REMOTE_CLEANUP
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "mkdir -p \$HOME/apps/blps \$HOME/apps/camunda"
           if ! ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "test -d $WF_HOME"; then
             ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
               "env CAMUNDA_DIST_URL='${{ env.CAMUNDA_DIST_URL }}' CAMUNDA_ZIP='$CAMUNDA_ZIP' bash -s" <<'REMOTE_DOWNLOAD'
@@ -569,12 +588,12 @@ jobs:
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "cat > \$HOME/apps/blps/app.env" < app.env
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "cat > \$HOME/apps/blps/wildflyctl.sh" < infra/wildfly/wildflyctl.sh
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "cat > \$HOME/apps/blps/configure-wildfly.py" < infra/wildfly/configure-wildfly.py
-          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "cat > \$HOME/apps/blps/ROOT.war.new" < "$WAR_LOCAL"
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "mkdir -p \$HOME/apps/camunda && cat > \$HOME/apps/camunda/ROOT.war.new" < "$WAR_LOCAL"
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "env CAMUNDA_DIST_NAME='${{ env.CAMUNDA_DIST_NAME }}' CAMUNDA_WILDFLY_VERSION='${{ env.CAMUNDA_WILDFLY_VERSION }}' WILDFLY_HTTP_PORT='${{ env.WILDFLY_HTTP_PORT }}' WILDFLY_AJP_PORT='${{ env.WILDFLY_AJP_PORT }}' WILDFLY_HTTPS_PORT='${{ env.WILDFLY_HTTPS_PORT }}' WILDFLY_MANAGEMENT_HTTP_PORT='${{ env.WILDFLY_MANAGEMENT_HTTP_PORT }}' WILDFLY_MANAGEMENT_HTTPS_PORT='${{ env.WILDFLY_MANAGEMENT_HTTPS_PORT }}' bash -s" <<'REMOTE'
           set -eu
           APP_DIR="$HOME/apps/blps"
-          CAMUNDA_BASE="$HOME/camunda"
+          CAMUNDA_BASE="$HOME/apps/camunda"
           CAMUNDA_HOME="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME"
           WF_HOME="$CAMUNDA_HOME/server/wildfly-$CAMUNDA_WILDFLY_VERSION"
           CAMUNDA_ZIP="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME.zip"
@@ -585,12 +604,15 @@ jobs:
           if [ ! -d "$WF_HOME" ]; then
             rm -rf "$CAMUNDA_HOME" "$CAMUNDA_BASE/__MACOSX"
             unzip -q "$CAMUNDA_ZIP" -d "$CAMUNDA_BASE"
+            rm -f "$CAMUNDA_ZIP"
             rm -rf "$CAMUNDA_BASE/__MACOSX"
+          else
+            rm -f "$CAMUNDA_ZIP" 2>/dev/null || true
           fi
           test -f "$WF_HOME/standalone/configuration/standalone.xml"
           python3 "$APP_DIR/configure-wildfly.py" "$WF_HOME/standalone/configuration/standalone.xml"
           rm -f "$WF_HOME/standalone/deployments/ROOT.war" "$WF_HOME/standalone/deployments/ROOT.war.deployed" "$WF_HOME/standalone/deployments/ROOT.war.failed" "$WF_HOME/standalone/deployments/ROOT.war.isdeploying" "$WF_HOME/standalone/deployments/ROOT.war.undeployed" "$WF_HOME/standalone/deployments/ROOT.war.dodeploy"
-          mv -f "$APP_DIR/ROOT.war.new" "$WF_HOME/standalone/deployments/ROOT.war"
+          mv -f "$CAMUNDA_BASE/ROOT.war.new" "$WF_HOME/standalone/deployments/ROOT.war"
           touch "$WF_HOME/standalone/deployments/ROOT.war.dodeploy"
           mkdir -p "$APP_DIR/data" "$APP_DIR/transaction-logs"
           REMOTE
@@ -763,7 +785,7 @@ jobs:
           echo "## Restart WildFly"
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "env CAMUNDA_HOME=\$HOME/camunda/${{ env.CAMUNDA_DIST_NAME }} WF_HOME=\$HOME/camunda/${{ env.CAMUNDA_DIST_NAME }}/server/wildfly-${{ env.CAMUNDA_WILDFLY_VERSION }} APP_DIR=\$HOME/apps/blps bash \$HOME/apps/blps/wildflyctl.sh restart"
+            "env CAMUNDA_HOME=\$HOME/apps/camunda/${{ env.CAMUNDA_DIST_NAME }} WF_HOME=\$HOME/apps/camunda/${{ env.CAMUNDA_DIST_NAME }}/server/wildfly-${{ env.CAMUNDA_WILDFLY_VERSION }} APP_DIR=\$HOME/apps/blps bash \$HOME/apps/blps/wildflyctl.sh restart"
 
       - name: Healthcheck Camunda WildFly and deployed WAR
         run: |
@@ -775,7 +797,7 @@ jobs:
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
             "env PORT=${PORT} TIMEOUT_SEC=${TIMEOUT_SEC} CAMUNDA_DIST_NAME='${{ env.CAMUNDA_DIST_NAME }}' CAMUNDA_WILDFLY_VERSION='${{ env.CAMUNDA_WILDFLY_VERSION }}' bash -s" <<'REMOTE'
           set -eu
-          CAMUNDA_HOME="$HOME/camunda/$CAMUNDA_DIST_NAME"
+          CAMUNDA_HOME="$HOME/apps/camunda/$CAMUNDA_DIST_NAME"
           WF_HOME="$CAMUNDA_HOME/server/wildfly-$CAMUNDA_WILDFLY_VERSION"
           DEPLOY_DIR="$WF_HOME/standalone/deployments"
           i=0
@@ -856,8 +878,8 @@ jobs:
             name="$(basename "$f")"
             args+=( -F "$name=@$f;type=application/json" )
           done
-          curl -fsS -X POST "${args[@]}" "http://127.0.0.1:$PORT/engine-rest/deployment/create" >/tmp/hh-process-camunda-deployment.json
-          cat /tmp/hh-process-camunda-deployment.json
+          curl -fsS -X POST "${args[@]}" "http://127.0.0.1:$PORT/engine-rest/deployment/create" >$HOME/apps/blps/camunda-deployment.json
+          cat $HOME/apps/blps/camunda-deployment.json
           for key in candidate-application-process vacancy-management-process cancel-interview-process; do
             curl -fsS "http://127.0.0.1:$PORT/engine-rest/process-definition/key/$key" >/dev/null
             echo "BPMN process is deployed: $key"
