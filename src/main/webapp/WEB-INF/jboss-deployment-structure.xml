@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jboss-deployment-structure>
+    <deployment>
+        <exclusions>
+            <!-- WAR содержит Hibernate 6.x, WildFly 27 поставляется с Hibernate 5.x — исключаем серверный -->
+            <module name="org.hibernate" slot="main"/>
+            <module name="org.hibernate.commons.annotations" slot="main"/>
+            <module name="org.hibernate.validator" slot="main"/>
+            <module name="org.hibernate.validator.cdi" slot="main"/>
+            <!-- Используем Bean Validation из WAR (Hibernate Validator 8.x) -->
+            <module name="javax.validation.api" slot="main"/>
+        </exclusions>
+    </deployment>
+</jboss-deployment-structure>
