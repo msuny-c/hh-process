@@ -43,6 +43,16 @@ public class VacancyLifecycleService {
     @Transactional
     public VacancyResponse closeVacancy(UUID vacancyId, CloseVacancyRequest request) {
         UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
+        return closeVacancyInternal(vacancyId, request, recruiterUser);
+    }
+
+    @Transactional
+    public VacancyResponse closeVacancyFromProcess(UUID vacancyId, String recruiterUserId, CloseVacancyRequest request) {
+        UserEntity recruiterUser = vacancyService.findRecruiterByEmail(recruiterUserId);
+        return closeVacancyInternal(vacancyId, request, recruiterUser);
+    }
+
+    private VacancyResponse closeVacancyInternal(UUID vacancyId, CloseVacancyRequest request, UserEntity recruiterUser) {
         VacancyEntity vacancy = vacancyService.findByIdForUpdate(vacancyId);
         vacancyService.ensureOwnership(vacancy, recruiterUser);
         VacancyStatus oldStatus = vacancy.getStatus();

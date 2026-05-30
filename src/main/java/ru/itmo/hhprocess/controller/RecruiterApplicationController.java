@@ -7,6 +7,7 @@ import ru.itmo.hhprocess.config.ApiRoleOnly;
 import ru.itmo.hhprocess.dto.recruiter.*;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.service.InterviewProcessService;
+import ru.itmo.hhprocess.camunda.CamundaUserTaskService;
 import ru.itmo.hhprocess.service.RecruiterDecisionService;
 
 import org.springframework.validation.annotation.Validated;
@@ -26,6 +27,7 @@ public class RecruiterApplicationController {
 
     private final RecruiterDecisionService recruiterDecisionService;
     private final InterviewProcessService interviewProcessService;
+    private final CamundaUserTaskService camundaUserTaskService;
 
     @Operation(summary = "Получить заявки по своим вакансиям")
     @GetMapping
@@ -47,6 +49,9 @@ public class RecruiterApplicationController {
     @PostMapping("/{applicationId}/reject")
     @PreAuthorize("hasAuthority('APPLICATION_REJECT_ASSIGNED')")
     public RejectResponse reject(@PathVariable @NotNull UUID applicationId, @Valid @RequestBody RejectRequest request) {
+        if (camundaUserTaskService.enabled()) {
+            return camundaUserTaskService.reject(applicationId, request);
+        }
         return interviewProcessService.reject(applicationId, request);
     }
 
@@ -54,6 +59,9 @@ public class RecruiterApplicationController {
     @PostMapping("/{applicationId}/invite")
     @PreAuthorize("hasAuthority('APPLICATION_INVITE_ASSIGNED')")
     public InviteResponse invite(@PathVariable @NotNull UUID applicationId, @Valid @RequestBody InviteRequest request) {
+        if (camundaUserTaskService.enabled()) {
+            return camundaUserTaskService.invite(applicationId, request);
+        }
         return interviewProcessService.invite(applicationId, request);
     }
 }

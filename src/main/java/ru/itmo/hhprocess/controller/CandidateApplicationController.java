@@ -9,6 +9,7 @@ import ru.itmo.hhprocess.dto.candidate.InvitationResponseRequest;
 import ru.itmo.hhprocess.dto.candidate.InvitationResponseResponse;
 import ru.itmo.hhprocess.service.ApplicationService;
 import ru.itmo.hhprocess.service.InvitationResponseService;
+import ru.itmo.hhprocess.camunda.CamundaUserTaskService;
 
 import org.springframework.validation.annotation.Validated;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,6 +28,7 @@ public class CandidateApplicationController {
 
     private final ApplicationService applicationService;
     private final InvitationResponseService invitationResponseService;
+    private final CamundaUserTaskService camundaUserTaskService;
 
     @Operation(summary = "Получить свои заявки")
     @GetMapping
@@ -48,6 +50,9 @@ public class CandidateApplicationController {
     public InvitationResponseResponse respondToInvitation(
             @PathVariable @NotNull UUID applicationId,
             @Valid @RequestBody InvitationResponseRequest request) {
+        if (camundaUserTaskService.enabled()) {
+            return camundaUserTaskService.respond(applicationId, request);
+        }
         return invitationResponseService.respond(applicationId, request);
     }
 }

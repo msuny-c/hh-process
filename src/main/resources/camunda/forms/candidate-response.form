@@ -1,0 +1,38 @@
+{
+  "components": [
+    {
+      "label": "Response",
+      "type": "select",
+      "id": "Field_candidateResponse",
+      "key": "candidateResponse",
+      "values": [
+        {
+          "label": "Accept",
+          "value": "ACCEPT"
+        },
+        {
+          "label": "Decline",
+          "value": "DECLINE"
+        },
+        {
+          "label": "Other",
+          "value": "OTHER"
+        }
+      ],
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "label": "Message",
+      "type": "textarea",
+      "id": "Field_candidateMessage",
+      "key": "candidateMessage"
+    }
+  ],
+  "type": "default",
+  "id": "candidate-response",
+  "executionPlatform": "Camunda Platform",
+  "executionPlatformVersion": "7.20.0",
+  "schemaVersion": 16
+}

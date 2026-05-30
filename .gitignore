@@ -49,3 +49,4 @@ transaction-logs/
 __pycache__/
 *.py[cod]
 *.pyo
+infra/camunda/*.zip

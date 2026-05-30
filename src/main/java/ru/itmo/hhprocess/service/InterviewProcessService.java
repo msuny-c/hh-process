@@ -13,6 +13,7 @@ import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.enums.NotificationType;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
+import ru.itmo.hhprocess.repository.UserRepository;
 import ru.itmo.hhprocess.entity.RecruiterScheduleSlotEntity;
 
 import java.time.Instant;
@@ -32,10 +33,34 @@ public class InterviewProcessService {
     private final ScheduleService scheduleService;
     private final HistoryService historyService;
     private final NotificationAfterCommitService notificationAfterCommitService;
+    private final UserRepository userRepository;
+
+
+    @Transactional
+    public InviteResponse inviteFromProcess(UUID applicationId, String recruiterUserId, String message, Instant scheduledAt, Integer durationMinutes) {
+        UserEntity recruiterUser = findUserByEmail(recruiterUserId);
+        InviteRequest request = new InviteRequest();
+        request.setMessage(message);
+        request.setScheduledAt(scheduledAt);
+        request.setDurationMinutes(durationMinutes);
+        return inviteInternal(applicationId, request, recruiterUser);
+    }
+
+    @Transactional
+    public RejectResponse rejectFromProcess(UUID applicationId, String recruiterUserId, String comment) {
+        UserEntity recruiterUser = findUserByEmail(recruiterUserId);
+        RejectRequest request = new RejectRequest();
+        request.setComment(comment);
+        return rejectInternal(applicationId, request, recruiterUser);
+    }
 
     @Transactional
     public InviteResponse invite(UUID applicationId, InviteRequest request) {
         UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
+        return inviteInternal(applicationId, request, recruiterUser);
+    }
+
+    private InviteResponse inviteInternal(UUID applicationId, InviteRequest request, UserEntity recruiterUser) {
         ApplicationEntity application = findAndCheckOwnership(applicationId, recruiterUser);
         if (application.getStatus() == ApplicationStatus.INVITED || application.getStatus() == ApplicationStatus.INVITATION_RESPONDED) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE, "Invitation already sent for this application");
@@ -80,6 +105,10 @@ public class InterviewProcessService {
     @Transactional
     public RejectResponse reject(UUID applicationId, RejectRequest request) {
         UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
+        return rejectInternal(applicationId, request, recruiterUser);
+    }
+
+    private RejectResponse rejectInternal(UUID applicationId, RejectRequest request, UserEntity recruiterUser) {
         ApplicationEntity application = findAndCheckOwnership(applicationId, recruiterUser);
         ApplicationStatus oldStatus = application.getStatus();
         if (oldStatus.isTerminal()) {
@@ -106,6 +135,18 @@ public class InterviewProcessService {
     @Transactional
     public InterviewActionResponse cancelInterview(UUID interviewId, CancelInterviewRequest request) {
         UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
+        return cancelInterviewInternal(interviewId, request, recruiterUser);
+    }
+
+    @Transactional
+    public InterviewActionResponse cancelInterviewFromProcess(UUID interviewId, String recruiterUserId, String reason) {
+        UserEntity recruiterUser = findUserByEmail(recruiterUserId);
+        CancelInterviewRequest request = new CancelInterviewRequest();
+        request.setReason(reason);
+        return cancelInterviewInternal(interviewId, request, recruiterUser);
+    }
+
+    private InterviewActionResponse cancelInterviewInternal(UUID interviewId, CancelInterviewRequest request, UserEntity recruiterUser) {
         InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
         if (!interview.getRecruiterUser().getId().equals(recruiterUser.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED, "Interview does not belong to your vacancy");
@@ -157,5 +198,10 @@ public class InterviewProcessService {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
                     "Application is not in " + expected + " status");
         }
+    }
+
+    private UserEntity findUserByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, "User not found"));
     }
 }

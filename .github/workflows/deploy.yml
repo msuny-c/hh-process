@@ -154,7 +154,7 @@ jobs:
           APP_EIS_REMOTE_BASE_URL: http://127.0.0.1:65530
         run: |
           mkdir -p "$NARAYANA_LOG_DIR" "$(dirname "$APP_SECURITY_USERS_XML")"
-          nohup java -Dnarayana.log-dir="$NARAYANA_LOG_DIR" -Dapp.security.users-xml-path="$APP_SECURITY_USERS_XML" -jar target/*.jar > app-ci.log 2>&1 &
+          nohup java -Dnarayana.log-dir="$NARAYANA_LOG_DIR" -Dapp.security.users-xml-path="$APP_SECURITY_USERS_XML" -jar target/*.war > app-ci.log 2>&1 &
           echo $! > app.pid
 
       - name: Wait for healthcheck
@@ -211,7 +211,7 @@ jobs:
     if: ${{ !cancelled() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     runs-on: ubuntu-latest
     outputs:
-      jar_name: ${{ steps.vars.outputs.jar_name }}
+      app_name: ${{ steps.vars.outputs.app_name }}
     steps:
       - uses: actions/checkout@v6.0.2
 
@@ -222,23 +222,23 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: Build JAR
+      - name: Build WAR
         run: |
           echo "## Maven package (skip unit tests)"
           mvn -B clean package -DskipTests
 
-      - name: Detect JAR name
+      - name: Detect WAR name
         id: vars
         run: |
-          JAR=$(ls -1 target/*-SNAPSHOT.jar target/*.jar 2>/dev/null | head -n1)
-          test -n "$JAR"
-          echo "jar_name=$(basename "$JAR")" >> "$GITHUB_OUTPUT"
+          APP=$(ls -1 target/*.war 2>/dev/null | head -n1)
+          test -n "$APP"
+          echo "app_name=$(basename "$APP")" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: jar
-          path: target/${{ steps.vars.outputs.jar_name }}
+          name: app
+          path: target/${{ steps.vars.outputs.app_name }}
 
   deploy:
     needs: build
@@ -247,7 +247,7 @@ jobs:
     if: ${{ always() && !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     env:
-      JAR_NAME: ${{ needs.build.outputs.jar_name }}
+      APP_ARTIFACT_NAME: ${{ needs.build.outputs.app_name }}
       # Prefer repository secrets; fall back to Actions variables (same names: SSH_KEY, SSH_HOST, …).
       SSH_KEY: ${{ secrets.SSH_KEY || vars.SSH_KEY }}
       SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
@@ -259,6 +259,13 @@ jobs:
       VPS_DEPLOY_PORT: ${{ secrets.VPS_SSH_PORT || vars.VPS_SSH_PORT || '22' }}
       # Seconds: TCP wait on stack + actuator poll via SSH tunnel (vars.API_HEALTHCHECK_TIMEOUT_SEC, default 60).
       API_HEALTHCHECK_TIMEOUT_SEC: ${{ vars.API_HEALTHCHECK_TIMEOUT_SEC || '60' }}
+      CAMUNDA_DIST_NAME: 'camunda-bpm-wildfly-7'
+      CAMUNDA_WILDFLY_VERSION: '18.0.0.Final'
+      WILDFLY_HTTP_PORT: ${{ secrets.WILDFLY_HTTP_PORT || vars.WILDFLY_HTTP_PORT || secrets.WILDFLY_PORTBASE || vars.WILDFLY_PORTBASE || secrets.SERVER_PORT || vars.SERVER_PORT || '32318' }}
+      WILDFLY_AJP_PORT: ${{ secrets.WILDFLY_AJP_PORT || vars.WILDFLY_AJP_PORT || '' }}
+      WILDFLY_HTTPS_PORT: ${{ secrets.WILDFLY_HTTPS_PORT || vars.WILDFLY_HTTPS_PORT || '' }}
+      WILDFLY_MANAGEMENT_HTTP_PORT: ${{ secrets.WILDFLY_MANAGEMENT_HTTP_PORT || vars.WILDFLY_MANAGEMENT_HTTP_PORT || '' }}
+      WILDFLY_MANAGEMENT_HTTPS_PORT: ${{ secrets.WILDFLY_MANAGEMENT_HTTPS_PORT || vars.WILDFLY_MANAGEMENT_HTTPS_PORT || '' }}
     steps:
       - uses: actions/checkout@v6.0.2
         with:
@@ -272,6 +279,9 @@ jobs:
             infra/stack/zookeeper-ctl.sh
             infra/stack/install-kafka-broker-zookeeper.sh
             infra/stack/kafka-ctl.sh
+            infra/wildfly
+            infra/camunda
+            src/main/resources/camunda/**
             odoo-addons
             test
           sparse-checkout-cone-mode: false
@@ -288,7 +298,7 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v8.0.1
         with:
-          name: jar
+          name: app
           path: artifact
 
       - name: Prepare SSH
@@ -500,31 +510,91 @@ jobs:
           chmod +x infra/odoo-vps/deploy-odoo-vps.sh
           ./infra/odoo-vps/deploy-odoo-vps.sh
 
-      - name: Upload bundle to server
+      - name: Install Camunda WildFly and deploy WAR to server
         run: |
           set -eu
-          echo "## Upload JAR, app.env, appctl.sh → ~/apps/blps"
-          APP_DIR="~/apps/blps"
-          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "mkdir -p ${APP_DIR}"
+          APP_DIR="\$HOME/apps/blps"
+          CAMUNDA_BASE="\$HOME/camunda"
+          CAMUNDA_HOME="${CAMUNDA_BASE}/${{ env.CAMUNDA_DIST_NAME }}"
+          WF_HOME="${CAMUNDA_HOME}/server/wildfly-${{ env.CAMUNDA_WILDFLY_VERSION }}"
+          CAMUNDA_ZIP="${CAMUNDA_BASE}/${{ env.CAMUNDA_DIST_NAME }}.zip"
+          WAR_LOCAL="artifact/${{ env.APP_ARTIFACT_NAME }}"
+          test -f "$WAR_LOCAL"
+          echo "APP_ROLE=api" >> app.env
+          echo "APP_INSTANCE_NAME=hh-api-camunda-wildfly" >> app.env
+          echo "NARAYANA_LOG_DIR=\$HOME/apps/blps/transaction-logs" >> app.env
+          echo "APP_SECURITY_USERS_XML=\$HOME/apps/blps/data/users.xml" >> app.env
+          if ! grep -q '^APP_CAMUNDA_ENABLED=' app.env; then
+            echo "APP_CAMUNDA_ENABLED=true" >> app.env
+          fi
+          if ! grep -q '^APP_CAMUNDA_BASE_URL=' app.env; then
+            echo "APP_CAMUNDA_BASE_URL=http://127.0.0.1:${{ env.WILDFLY_HTTP_PORT }}/engine-rest" >> app.env
+          fi
+          if ! grep -q '^APP_CAMUNDA_PROCESS_KEY=' app.env; then
+            echo "APP_CAMUNDA_PROCESS_KEY=candidate-application-process" >> app.env
+          fi
+          if ! grep -q '^APP_CAMUNDA_VACANCY_PROCESS_KEY=' app.env; then
+            echo "APP_CAMUNDA_VACANCY_PROCESS_KEY=vacancy-management-process" >> app.env
+          fi
+          if ! grep -q '^APP_CAMUNDA_CANCEL_INTERVIEW_PROCESS_KEY=' app.env; then
+            echo "APP_CAMUNDA_CANCEL_INTERVIEW_PROCESS_KEY=cancel-interview-process" >> app.env
+          fi
+          if ! grep -q '^APP_CAMUNDA_SCREENING_MESSAGE_NAME=' app.env; then
+            echo "APP_CAMUNDA_SCREENING_MESSAGE_NAME=ScreeningCompleted" >> app.env
+          fi
+          if ! grep -q '^APP_CAMUNDA_RECRUITER_REVIEW_TASK_KEY=' app.env; then
+            echo "APP_CAMUNDA_RECRUITER_REVIEW_TASK_KEY=recruiter-review" >> app.env
+          fi
+          if ! grep -q '^APP_CAMUNDA_CANDIDATE_RESPONSE_TASK_KEY=' app.env; then
+            echo "APP_CAMUNDA_CANDIDATE_RESPONSE_TASK_KEY=candidate-response" >> app.env
+          fi
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "mkdir -p \$HOME/apps/blps \$HOME/camunda"
+          if ! ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "test -d $WF_HOME"; then
+            ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "cat > $CAMUNDA_ZIP" < "infra/camunda/${{ env.CAMUNDA_DIST_NAME }}.zip"
+          fi
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "cat > \$HOME/apps/blps/app.env" < app.env
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "cat > \$HOME/apps/blps/wildflyctl.sh" < infra/wildfly/wildflyctl.sh
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "cat > \$HOME/apps/blps/configure-wildfly.py" < infra/wildfly/configure-wildfly.py
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "cat > \$HOME/apps/blps/ROOT.war.new" < "$WAR_LOCAL"
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
+            "env CAMUNDA_DIST_NAME='${{ env.CAMUNDA_DIST_NAME }}' CAMUNDA_WILDFLY_VERSION='${{ env.CAMUNDA_WILDFLY_VERSION }}' WILDFLY_HTTP_PORT='${{ env.WILDFLY_HTTP_PORT }}' WILDFLY_AJP_PORT='${{ env.WILDFLY_AJP_PORT }}' WILDFLY_HTTPS_PORT='${{ env.WILDFLY_HTTPS_PORT }}' WILDFLY_MANAGEMENT_HTTP_PORT='${{ env.WILDFLY_MANAGEMENT_HTTP_PORT }}' WILDFLY_MANAGEMENT_HTTPS_PORT='${{ env.WILDFLY_MANAGEMENT_HTTPS_PORT }}' bash -s" <<'REMOTE'
+          set -eu
+          APP_DIR="$HOME/apps/blps"
+          CAMUNDA_BASE="$HOME/camunda"
+          CAMUNDA_HOME="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME"
+          WF_HOME="$CAMUNDA_HOME/server/wildfly-$CAMUNDA_WILDFLY_VERSION"
+          CAMUNDA_ZIP="$CAMUNDA_BASE/$CAMUNDA_DIST_NAME.zip"
+          chmod +x "$APP_DIR/wildflyctl.sh"
+          if [ -x "$APP_DIR/wildflyctl.sh" ]; then
+            CAMUNDA_HOME="$CAMUNDA_HOME" WF_HOME="$WF_HOME" "$APP_DIR/wildflyctl.sh" stop || true
+          fi
+          if [ ! -d "$WF_HOME" ]; then
+            rm -rf "$CAMUNDA_HOME" "$CAMUNDA_BASE/__MACOSX"
+            unzip -q "$CAMUNDA_ZIP" -d "$CAMUNDA_BASE"
+            rm -rf "$CAMUNDA_BASE/__MACOSX"
+          fi
+          test -f "$WF_HOME/standalone/configuration/standalone.xml"
+          python3 "$APP_DIR/configure-wildfly.py" "$WF_HOME/standalone/configuration/standalone.xml"
+          rm -f "$WF_HOME/standalone/deployments/ROOT.war" "$WF_HOME/standalone/deployments/ROOT.war.deployed" "$WF_HOME/standalone/deployments/ROOT.war.failed" "$WF_HOME/standalone/deployments/ROOT.war.isdeploying" "$WF_HOME/standalone/deployments/ROOT.war.undeployed" "$WF_HOME/standalone/deployments/ROOT.war.dodeploy"
+          mv -f "$APP_DIR/ROOT.war.new" "$WF_HOME/standalone/deployments/ROOT.war"
+          touch "$WF_HOME/standalone/deployments/ROOT.war.dodeploy"
+          mkdir -p "$APP_DIR/data" "$APP_DIR/transaction-logs"
+          REMOTE
+          echo "Camunda WildFly prepared on port ${{ env.WILDFLY_HTTP_PORT }}"
 
-          scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-            "artifact/${{ env.JAR_NAME }}" \
-            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${APP_DIR}/app.jar"
-
-          scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-            app.env \
-            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${APP_DIR}/app.env"
-
-          scp -P "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-            infra/appctl.sh \
-            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${APP_DIR}/appctl.sh"
-
-          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
-            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "chmod +x ${APP_DIR}/appctl.sh"
-          echo "Upload main app done."
+      - name: Upload BPMN and Camunda forms to server
+        run: |
+          set -eu
+          for f in candidate-application-process.bpmn vacancy-management-process.bpmn cancel-interview-process.bpmn; do
+            if [ ! -f "src/main/resources/camunda/$f" ]; then
+              echo "::error::BPMN file is missing: src/main/resources/camunda/$f"
+              exit 1
+            fi
+          done
+          tar -C src/main/resources/camunda -czf camunda-resources.tgz .
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "mkdir -p \$HOME/apps/blps/camunda"
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "cat > \$HOME/apps/blps/camunda-resources.tgz" < camunda-resources.tgz
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "rm -rf \$HOME/apps/blps/camunda/* && tar -xzf \$HOME/apps/blps/camunda-resources.tgz -C \$HOME/apps/blps/camunda"
 
       - name: Ensure reverse SSH tunnels from VPS to helios
         if: ${{ env.VPS_DEPLOY_HOST }}
@@ -673,29 +743,112 @@ jobs:
           fi
           echo "Reverse SSH done."
 
-      - name: Restart service on server
+      - name: Restart WildFly on server
         run: |
           set -eu
-          echo "## Restart Spring Boot (API)"
+          echo "## Restart WildFly"
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "cd \$HOME/apps/blps && ./appctl.sh restart"
+            "env CAMUNDA_HOME=\$HOME/camunda/${{ env.CAMUNDA_DIST_NAME }} WF_HOME=\$HOME/camunda/${{ env.CAMUNDA_DIST_NAME }}/server/wildfly-${{ env.CAMUNDA_WILDFLY_VERSION }} APP_DIR=\$HOME/apps/blps bash \$HOME/apps/blps/wildflyctl.sh restart"
 
-      - name: Healthcheck
+      - name: Healthcheck Camunda WildFly and deployed WAR
         run: |
           set -eu
           TIMEOUT_SEC="${API_HEALTHCHECK_TIMEOUT_SEC}"
-          echo "## API TCP on stack (localhost, SERVER_PORT) — timeout ${TIMEOUT_SEC}s (vars.API_HEALTHCHECK_TIMEOUT_SEC)"
-          PORT="${{ vars.SERVER_PORT }}"
-          [ -z "$PORT" ] && PORT=8080
-          echo "Waiting for 127.0.0.1:${PORT} (max ~${TIMEOUT_SEC}s)..."
-          if ! ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes \
+          PORT="${{ env.WILDFLY_HTTP_PORT }}"
+          echo "## Camunda WildFly healthcheck — timeout ${TIMEOUT_SEC}s"
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "env bash -c 'i=0; while [ \$i -lt ${TIMEOUT_SEC} ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; exit 1'"; then
-            echo "::error::Nothing listening on stack host 127.0.0.1:${PORT} — check app.log on server"
+            "env PORT=${PORT} TIMEOUT_SEC=${TIMEOUT_SEC} CAMUNDA_DIST_NAME='${{ env.CAMUNDA_DIST_NAME }}' CAMUNDA_WILDFLY_VERSION='${{ env.CAMUNDA_WILDFLY_VERSION }}' bash -s" <<'REMOTE'
+          set -eu
+          CAMUNDA_HOME="$HOME/camunda/$CAMUNDA_DIST_NAME"
+          WF_HOME="$CAMUNDA_HOME/server/wildfly-$CAMUNDA_WILDFLY_VERSION"
+          DEPLOY_DIR="$WF_HOME/standalone/deployments"
+          i=0
+          while [ "$i" -lt "$TIMEOUT_SEC" ]; do
+            nc -z 127.0.0.1 "$PORT" && break
+            sleep 1
+            i=$((i+1))
+          done
+          nc -z 127.0.0.1 "$PORT" || { echo "WildFly HTTP port is not open: $PORT"; exit 1; }
+          echo "TCP OK on 127.0.0.1:$PORT"
+
+          i=0
+          while [ "$i" -lt "$TIMEOUT_SEC" ]; do
+            if curl -fsS "http://127.0.0.1:$PORT/engine-rest/engine" >/dev/null 2>&1 || wget -qO - "http://127.0.0.1:$PORT/engine-rest/engine" >/dev/null 2>&1; then
+              echo "Camunda REST OK: /engine-rest/engine"
+              break
+            fi
+            sleep 1
+            i=$((i+1))
+          done
+          if ! curl -fsS "http://127.0.0.1:$PORT/engine-rest/engine" >/dev/null 2>&1 && ! wget -qO - "http://127.0.0.1:$PORT/engine-rest/engine" >/dev/null 2>&1; then
+            echo "Camunda REST is not available"
+            tail -n 120 "$HOME/apps/blps/wildfly.log" 2>/dev/null || true
             exit 1
           fi
-          echo "TCP OK on port ${PORT}"
+
+          i=0
+          while [ "$i" -lt "$TIMEOUT_SEC" ]; do
+            if [ -f "$DEPLOY_DIR/ROOT.war.deployed" ]; then
+              echo "ROOT.war deployed"
+              break
+            fi
+            if [ -f "$DEPLOY_DIR/ROOT.war.failed" ]; then
+              echo "ROOT.war failed to deploy"
+              cat "$DEPLOY_DIR/ROOT.war.failed" 2>/dev/null || true
+              tail -n 160 "$HOME/apps/blps/wildfly.log" 2>/dev/null || true
+              exit 1
+            fi
+            sleep 1
+            i=$((i+1))
+          done
+          [ -f "$DEPLOY_DIR/ROOT.war.deployed" ] || { echo "ROOT.war deployment marker not found"; ls -la "$DEPLOY_DIR"; exit 1; }
+
+          i=0
+          while [ "$i" -lt "$TIMEOUT_SEC" ]; do
+            if curl -fsS "http://127.0.0.1:$PORT/actuator/health" >/dev/null 2>&1 || wget -qO - "http://127.0.0.1:$PORT/actuator/health" >/dev/null 2>&1; then
+              echo "Application actuator OK: /actuator/health"
+              exit 0
+            fi
+            sleep 1
+            i=$((i+1))
+          done
+          echo "Application /actuator/health is not available"
+          tail -n 160 "$HOME/apps/blps/wildfly.log" 2>/dev/null || true
+          exit 1
+          REMOTE
+
+      - name: Deploy BPMN and Camunda forms
+        run: |
+          set -eu
+          PORT="${{ env.WILDFLY_HTTP_PORT }}"
+          ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=5 -o BatchMode=yes             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}"             "env PORT=${PORT} bash -s" <<'REMOTE'
+          set -eu
+          cd "$HOME/apps/blps/camunda"
+          test -f candidate-application-process.bpmn
+          test -f vacancy-management-process.bpmn
+          test -f cancel-interview-process.bpmn
+          test -f forms/apply-for-vacancy.form
+          test -f forms/recruiter-review.form
+          test -f forms/candidate-response.form
+          test -f forms/vacancy-management.form
+          test -f forms/cancel-interview.form
+          args=(-F "deployment-name=hh-process-camunda" -F "enable-duplicate-filtering=true" -F "deploy-changed-only=true")
+          for f in *.bpmn; do
+            args+=( -F "$f=@$f;type=text/xml" )
+          done
+          for f in forms/*.form; do
+            name="$(basename "$f")"
+            args+=( -F "$name=@$f;type=application/json" )
+          done
+          curl -fsS -X POST "${args[@]}" "http://127.0.0.1:$PORT/engine-rest/deployment/create" >/tmp/hh-process-camunda-deployment.json
+          cat /tmp/hh-process-camunda-deployment.json
+          for key in candidate-application-process vacancy-management-process cancel-interview-process; do
+            curl -fsS "http://127.0.0.1:$PORT/engine-rest/process-definition/key/$key" >/dev/null
+            echo "BPMN process is deployed: $key"
+          done
+          REMOTE
 
       - name: Run deployed API tests via SSH tunnel
         if: ${{ vars.CI_SKIP_TESTS != 'true' && vars.CI_SKIP_TESTS != '1' }}
@@ -703,8 +856,7 @@ jobs:
           set -eu
           TIMEOUT_SEC="${API_HEALTHCHECK_TIMEOUT_SEC}"
           echo "## Deployed API tests (SSH -L to actuator, then test/test.py) — health wait ${TIMEOUT_SEC}s"
-          PORT="${{ vars.SERVER_PORT }}"
-          [ -z "$PORT" ] && PORT=8080
+          PORT="${{ env.WILDFLY_HTTP_PORT }}"
           LOCAL_PORT=18080
 
           ssh -N \
@@ -769,25 +921,25 @@ jobs:
           echo "API tests finished."
 
 
-      - name: Fetch app.log from server
+      - name: Fetch WildFly log from server
         if: always()
         run: |
-          echo "## Fetch ~/apps/blps/app.log (for artifact)"
+          echo "## Fetch ~/apps/blps/wildfly.log (for artifact)"
           mkdir -p ~/.ssh
           echo "${{ env.SSH_KEY }}" > ~/.ssh/id_key
           chmod 600 ~/.ssh/id_key
           ssh-keyscan -p "${{ env.SSH_PORT }}" -H "${{ env.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=10 \
             "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-            "cat ~/apps/blps/app.log 2>/dev/null || echo '(app.log not found or empty)'" > app.log 2>/dev/null || true
-          test -f app.log || echo "app.log not available" > app.log
+            "cat ~/apps/blps/wildfly.log 2>/dev/null || echo '(wildfly.log not found or empty)'" > wildfly.log 2>/dev/null || true
+          test -f wildfly.log || echo "wildfly.log not available" > wildfly.log
 
-      - name: Upload app.log artifact
+      - name: Upload WildFly log artifact
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: app-log-${{ github.run_id }}
-          path: app.log
+          name: wildfly-log-${{ github.run_id }}
+          path: wildfly.log
 
   # Screening worker: single JAR on a separate node from API/Kafka (WORKER_SSH_* in env: secrets, else vars).
   deploy-worker:
@@ -795,7 +947,7 @@ jobs:
     if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.deploy.result == 'success' }}
     runs-on: ubuntu-latest
     env:
-      JAR_NAME: ${{ needs.build.outputs.jar_name }}
+      APP_ARTIFACT_NAME: ${{ needs.build.outputs.app_name }}
       SSH_KEY: ${{ secrets.SSH_KEY || vars.SSH_KEY }}
       SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
       # Kafka на VPS: fallback для STACK_HOST в worker (если нет vars.STACK_HOST)
@@ -822,7 +974,7 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v8.0.1
         with:
-          name: jar
+          name: app
           path: artifact
 
       - name: Render worker.env
@@ -881,9 +1033,9 @@ jobs:
           set -eu
           echo "## Worker — upload JAR + env + appctl"
           test -n "${{ env.WORKER_SSH_TARGET }}"
-          test -n "${{ env.JAR_NAME }}"
-          RJAR="artifact/${{ env.JAR_NAME }}"
-          test -f "$RJAR" || { echo "::error::Missing $RJAR (artifact download / JAR_NAME)"; exit 1; }
+          test -n "${{ env.APP_ARTIFACT_NAME }}"
+          RJAR="artifact/${{ env.APP_ARTIFACT_NAME }}"
+          test -f "$RJAR" || { echo "::error::Missing $RJAR (artifact download / APP_ARTIFACT_NAME)"; exit 1; }
           WPORT="${{ env.WORKER_SSH_PORT }}"
           REM="${{ env.WORKER_SSH_TARGET }}"
           REMOTE_HOME="$(ssh -p "$WPORT" -i ~/.ssh/id_worker -o BatchMode=yes -o ConnectTimeout=30 "$REM" 'printf %s "$HOME"')"

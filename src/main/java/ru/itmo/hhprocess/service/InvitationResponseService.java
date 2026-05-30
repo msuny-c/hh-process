@@ -9,6 +9,7 @@ import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 import ru.itmo.hhprocess.repository.InvitationResponseRepository;
+import ru.itmo.hhprocess.repository.UserRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,18 @@ public class InvitationResponseService {
     private final AuthService authService;
     private final InterviewService interviewService;
     private final InterviewExportRequestService interviewExportRequestService;
+    private final UserRepository userRepository;
+
+
+    @Transactional
+    public InvitationResponseResponse respondFromProcess(UUID applicationId, String candidateUserId, ResponseType responseType, String message) {
+        UserEntity candidateUser = userRepository.findByEmail(candidateUserId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, "Candidate not found"));
+        InvitationResponseRequest request = new InvitationResponseRequest();
+        request.setResponseType(responseType);
+        request.setMessage(message);
+        return respondInternal(applicationId, candidateUser, request, false);
+    }
 
     @Transactional
     public InvitationResponseResponse respond(UUID applicationId, InvitationResponseRequest request) {
@@ -38,7 +51,10 @@ public class InvitationResponseService {
         if (!candidate) {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED, "Candidate access required");
         }
+        return respondInternal(applicationId, candidateUser, request, true);
+    }
 
+    private InvitationResponseResponse respondInternal(UUID applicationId, UserEntity candidateUser, InvitationResponseRequest request, boolean requestExport) {
         ApplicationEntity application = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                         ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
@@ -80,7 +96,7 @@ public class InvitationResponseService {
                 ru.itmo.hhprocess.enums.NotificationType.INVITATION_RESPONSE,
                 "Candidate responded to interview invitation");
 
-        if (request.getResponseType() == ResponseType.ACCEPT) {
+        if (requestExport && request.getResponseType() == ResponseType.ACCEPT) {
             interviewService.findActiveByApplicationId(application.getId())
                     .ifPresent(
                             i -> interviewExportRequestService.export(i.getId())

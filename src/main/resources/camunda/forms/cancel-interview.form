@@ -1,0 +1,36 @@
+{
+  "components": [
+    {
+      "label": "Interview ID",
+      "type": "textfield",
+      "id": "Field_interviewId",
+      "key": "interviewId",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "label": "Recruiter email",
+      "type": "textfield",
+      "id": "Field_recruiterUserId",
+      "key": "recruiterUserId",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "label": "Cancel reason",
+      "type": "textarea",
+      "id": "Field_interviewCancelReason",
+      "key": "interviewCancelReason",
+      "validate": {
+        "required": true
+      }
+    }
+  ],
+  "type": "default",
+  "id": "cancel-interview",
+  "executionPlatform": "Camunda Platform",
+  "executionPlatformVersion": "7.20.0",
+  "schemaVersion": 16
+}

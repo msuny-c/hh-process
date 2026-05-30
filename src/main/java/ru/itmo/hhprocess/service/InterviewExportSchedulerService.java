@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import ru.itmo.hhprocess.config.ApiRoleOnly;
+import ru.itmo.hhprocess.camunda.CamundaProperties;
 
 @Slf4j
 @Service
@@ -15,11 +16,16 @@ public class InterviewExportSchedulerService {
 
     private final InterviewExportLogService interviewExportLogService;
     private final InterviewExportService interviewExportService;
+    private final CamundaProperties camundaProperties;
     private final AtomicBoolean runInProgress = new AtomicBoolean(false);
 
     @Scheduled(fixedDelayString = "${app.eis.export-interval-ms:5000}",
             initialDelayString = "${app.eis.export-initial-delay-ms:5000}")
     public void exportPendingInterviews() {
+        if (camundaProperties.isEnabled()) {
+            log.info("Skipping scheduled interview export because Camunda process controls EIS export");
+            return;
+        }
         if (!runInProgress.compareAndSet(false, true)) {
             log.info("Skipping interview export run because another run is already in progress");
             return;

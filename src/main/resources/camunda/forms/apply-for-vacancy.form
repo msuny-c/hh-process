@@ -1,0 +1,48 @@
+{
+  "components": [
+    {
+      "label": "Vacancy ID",
+      "type": "textfield",
+      "id": "Field_vacancyId",
+      "key": "vacancyId",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "label": "Candidate email",
+      "type": "textfield",
+      "id": "Field_candidateUserId",
+      "key": "candidateUserId",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "label": "Candidate email duplicate",
+      "type": "textfield",
+      "id": "Field_candidateEmail",
+      "key": "candidateEmail"
+    },
+    {
+      "label": "Resume text",
+      "type": "textarea",
+      "id": "Field_resumeText",
+      "key": "resumeText",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "label": "Cover letter",
+      "type": "textarea",
+      "id": "Field_coverLetter",
+      "key": "coverLetter"
+    }
+  ],
+  "type": "default",
+  "id": "apply-for-vacancy",
+  "executionPlatform": "Camunda Platform",
+  "executionPlatformVersion": "7.20.0",
+  "schemaVersion": 16
+}

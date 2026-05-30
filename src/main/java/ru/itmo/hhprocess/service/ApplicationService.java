@@ -14,6 +14,7 @@ import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.mapper.ApplicationMapper;
 import ru.itmo.hhprocess.messaging.producer.ApplicationSubmittedPublisher;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
+import ru.itmo.hhprocess.repository.UserRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class ApplicationService {
         private final ApplicationMapper applicationMapper;
         private final InterviewService interviewService;
         private final ApplicationSubmittedPublisher applicationSubmittedPublisher;
+        private final UserRepository userRepository;
 
         @Transactional
         public CreateApplicationResponse create(UUID vacancyId, CreateApplicationRequest request) {
@@ -60,6 +62,43 @@ public class ApplicationService {
                                 .status(ApplicationStatus.SCREENING_IN_PROGRESS.toCandidateExternalStatus())
                                 .message("Application submitted")
                                 .build();
+        }
+
+
+        @Transactional
+        public ApplicationProcessResult createFromProcess(UUID vacancyId, String candidateUserId, String resumeText, String coverLetter) {
+                UserEntity candidateUser = userRepository.findByEmail(candidateUserId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                                ErrorCode.NOT_FOUND, "Candidate not found"));
+                VacancyEntity vacancy = vacancyService.findByIdForUpdate(vacancyId);
+
+                if (vacancy.getStatus() != VacancyStatus.ACTIVE) {
+                        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.VACANCY_NOT_ACTIVE,
+                                        "Vacancy is not active");
+                }
+
+                if (applicationRepository.existsByCandidateUserIdAndVacancyIdAndStatusNotIn(
+                                candidateUser.getId(),
+                                vacancyId,
+                                List.of(ApplicationStatus.SCREENING_ERROR)
+                )) {
+                        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.APPLICATION_ALREADY_EXISTS,
+                                        "You already have an application for this vacancy");
+                }
+
+                CreateApplicationRequest request = new CreateApplicationRequest();
+                request.setResumeText(resumeText);
+                request.setCoverLetter(coverLetter);
+                ApplicationEntity application = saveNewApplication(vacancy, candidateUser, request);
+                return new ApplicationProcessResult(application.getId(), candidateUser.getEmail(), vacancy.getRecruiterUser().getEmail());
+        }
+
+        @Transactional(readOnly = true)
+        public void publishScreeningRequestFromProcess(UUID applicationId) {
+                ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                                ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
+                applicationSubmittedPublisher.publish(application);
         }
 
         @Transactional(readOnly = true)
@@ -106,5 +145,7 @@ public class ApplicationService {
                                 null);
 
                 return application;
+        }
+        public record ApplicationProcessResult(UUID applicationId, String candidateUserId, String recruiterUserId) {
         }
 }

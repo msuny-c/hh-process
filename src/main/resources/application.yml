@@ -84,6 +84,25 @@ app:
   schedule:
     debug:
       fail-on-reserve: ${APP_SCHEDULE_DEBUG_FAIL_ON_RESERVE:false}
+
+  camunda:
+    enabled: ${APP_CAMUNDA_ENABLED:false}
+    base-url: ${APP_CAMUNDA_BASE_URL:http://localhost:8080/engine-rest}
+    username: ${APP_CAMUNDA_USERNAME:}
+    password: ${APP_CAMUNDA_PASSWORD:}
+    worker-id: ${APP_CAMUNDA_WORKER_ID:${APP_INSTANCE_NAME:hh-process-api}}
+    process-key: ${APP_CAMUNDA_PROCESS_KEY:candidate-application-process}
+    vacancy-process-key: ${APP_CAMUNDA_VACANCY_PROCESS_KEY:vacancy-management-process}
+    cancel-interview-process-key: ${APP_CAMUNDA_CANCEL_INTERVIEW_PROCESS_KEY:cancel-interview-process}
+    screening-message-name: ${APP_CAMUNDA_SCREENING_MESSAGE_NAME:ScreeningCompleted}
+    recruiter-review-task-key: ${APP_CAMUNDA_RECRUITER_REVIEW_TASK_KEY:recruiter-review}
+    candidate-response-task-key: ${APP_CAMUNDA_CANDIDATE_RESPONSE_TASK_KEY:candidate-response}
+    max-tasks: ${APP_CAMUNDA_MAX_TASKS:8}
+    lock-duration-ms: ${APP_CAMUNDA_LOCK_DURATION_MS:30000}
+    fetch-interval-ms: ${APP_CAMUNDA_FETCH_INTERVAL_MS:5000}
+    initial-delay-ms: ${APP_CAMUNDA_INITIAL_DELAY_MS:5000}
+    failure-retries: ${APP_CAMUNDA_FAILURE_RETRIES:3}
+    failure-retry-timeout-ms: ${APP_CAMUNDA_FAILURE_RETRY_TIMEOUT_MS:15000}
   timeout:
     check-interval-ms: ${APP_TIMEOUT_CHECK_INTERVAL_MS:60000}
     initial-delay-ms: ${APP_TIMEOUT_INITIAL_DELAY_MS:30000}

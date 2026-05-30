@@ -31,6 +31,35 @@ public class TimeoutBatchProcessor {
     @Value("${app.timeout.debug.disable-notifications:false}")
     private boolean disableNotifications;
 
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int processApplicationTimeout(UUID applicationId) {
+        Instant now = Instant.now();
+        ApplicationEntity application = applicationRepository.findDetailedById(applicationId).orElse(null);
+        if (application == null) {
+            return 0;
+        }
+        if (application.getStatus() != ApplicationStatus.INVITED || application.getResponseReceivedAt() != null) {
+            return 0;
+        }
+        InterviewEntity interview = interviewService.findActiveByApplicationId(application.getId()).orElse(null);
+        if (interview != null) {
+            interviewService.cancel(interview, "Invitation expired");
+            scheduleService.releaseForInterview(interview);
+        }
+        application.setStatus(ApplicationStatus.CLOSED_BY_TIMEOUT);
+        application.setClosedAt(now);
+        applicationRepository.saveAndFlush(application);
+        historyService.record(application, ApplicationStatus.INVITED, ApplicationStatus.CLOSED_BY_TIMEOUT, null);
+        if (!disableNotifications) {
+            notificationAfterCommitService.publishAfterCommit(application.getVacancy().getRecruiterUser(), application, NotificationType.INVITATION_TIMEOUT,
+                    "Invitation expired for vacancy: " + application.getVacancy().getTitle());
+            notificationAfterCommitService.publishAfterCommit(application.getCandidateUser(), application, NotificationType.INVITATION_TIMEOUT,
+                    "Interview invitation expired for vacancy: " + application.getVacancy().getTitle());
+        }
+        return 1;
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int processOneExpired() {
         Instant now = Instant.now();

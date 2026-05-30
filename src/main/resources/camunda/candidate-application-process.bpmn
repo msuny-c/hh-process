@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_HHProcess" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.0.0">
+  <bpmn:message id="Message_ScreeningCompleted" name="ScreeningCompleted" />
+  <bpmn:process id="candidate-application-process" name="Candidate Application Process" isExecutable="true">
+    <bpmn:laneSet id="LaneSet_HHProcess">
+      <bpmn:lane id="Lane_Candidate" name="Candidate">
+        <bpmn:flowNodeRef>Start_CandidateApplies</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>candidate-response</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_HHProcess" name="HH Process / Camunda">
+        <bpmn:flowNodeRef>Task_CreateApplication</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_PublishScreeningRequest</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_WaitScreeningCompleted</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SaveScreeningResult</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ScreeningPassed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_RecruiterDecision</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RejectApplication</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ReserveInterviewSlot</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>BoundaryEvent_InvitationTimeout</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CloseByTimeout</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RecordCandidateResponse</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_CandidateAccepted</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_ScreeningFailed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Rejected</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Timeout</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Declined</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Recruiter" name="Recruiter">
+        <bpmn:flowNodeRef>recruiter-review</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_EIS" name="EIS / Odoo">
+        <bpmn:flowNodeRef>Task_ExportInterviewToEis</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Exported</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <bpmn:startEvent id="Start_CandidateApplies" name="Candidate applies">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="vacancyId" label="Vacancy ID" type="string">
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="candidateUserId" label="Candidate email" type="string">
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="candidateEmail" label="Candidate email duplicate" type="string" />
+          <camunda:formField id="resumeText" label="Resume text" type="string">
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="coverLetter" label="Cover letter" type="string" />
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:outgoing>Flow_Start_CreateApplication</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="Task_CreateApplication" name="Create application" camunda:type="external" camunda:topic="create-application">
+      <bpmn:incoming>Flow_Start_CreateApplication</bpmn:incoming>
+      <bpmn:outgoing>Flow_CreateApplication_PublishScreening</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Task_PublishScreeningRequest" name="Publish screening request" camunda:type="external" camunda:topic="publish-screening-request">
+      <bpmn:incoming>Flow_CreateApplication_PublishScreening</bpmn:incoming>
+      <bpmn:outgoing>Flow_PublishScreening_WaitResult</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:intermediateCatchEvent id="Event_WaitScreeningCompleted" name="Wait screening result">
+      <bpmn:incoming>Flow_PublishScreening_WaitResult</bpmn:incoming>
+      <bpmn:outgoing>Flow_WaitResult_SaveScreening</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MessageEventDefinition_ScreeningCompleted" messageRef="Message_ScreeningCompleted" />
+    </bpmn:intermediateCatchEvent>
+
+    <bpmn:serviceTask id="Task_SaveScreeningResult" name="Save screening result" camunda:type="external" camunda:topic="save-screening-result">
+      <bpmn:incoming>Flow_WaitResult_SaveScreening</bpmn:incoming>
+      <bpmn:outgoing>Flow_SaveScreening_Gateway</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="Gateway_ScreeningPassed" name="Screening passed?">
+      <bpmn:incoming>Flow_SaveScreening_Gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_ScreeningPassed_RecruiterReview</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ScreeningFailed_End</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="recruiter-review" name="Recruiter review" camunda:assignee="${recruiterUserId}">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="recruiterDecision" label="Decision" type="enum">
+            <camunda:value id="INVITE" name="Invite" />
+            <camunda:value id="REJECT" name="Reject" />
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="recruiterMessage" label="Message" type="string" />
+          <camunda:formField id="scheduledAt" label="Scheduled at ISO-8601" type="string" />
+          <camunda:formField id="durationMinutes" label="Duration minutes" type="long" />
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ScreeningPassed_RecruiterReview</bpmn:incoming>
+      <bpmn:outgoing>Flow_RecruiterReview_Decision</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_RecruiterDecision" name="Recruiter decision">
+      <bpmn:incoming>Flow_RecruiterReview_Decision</bpmn:incoming>
+      <bpmn:outgoing>Flow_RecruiterReject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_RecruiterInvite</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="Task_RejectApplication" name="Reject application" camunda:type="external" camunda:topic="reject-application">
+      <bpmn:incoming>Flow_RecruiterReject</bpmn:incoming>
+      <bpmn:outgoing>Flow_Reject_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Task_ReserveInterviewSlot" name="Reserve interview slot" camunda:type="external" camunda:topic="reserve-interview-slot">
+      <bpmn:incoming>Flow_RecruiterInvite</bpmn:incoming>
+      <bpmn:outgoing>Flow_Reserve_CandidateResponse</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:userTask id="candidate-response" name="Candidate response" camunda:assignee="${candidateUserId}">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="candidateResponse" label="Response" type="enum">
+            <camunda:value id="ACCEPT" name="Accept" />
+            <camunda:value id="DECLINE" name="Decline" />
+            <camunda:value id="OTHER" name="Other" />
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="candidateMessage" label="Message" type="string" />
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Reserve_CandidateResponse</bpmn:incoming>
+      <bpmn:outgoing>Flow_CandidateResponse_Record</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:boundaryEvent id="BoundaryEvent_InvitationTimeout" name="Invitation timeout" attachedToRef="candidate-response" cancelActivity="true">
+      <bpmn:outgoing>Flow_Timeout_Close</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_InvitationTimeout">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT48H</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+
+    <bpmn:serviceTask id="Task_CloseByTimeout" name="Close by timeout" camunda:type="external" camunda:topic="close-by-timeout">
+      <bpmn:incoming>Flow_Timeout_Close</bpmn:incoming>
+      <bpmn:outgoing>Flow_Close_EndTimeout</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Task_RecordCandidateResponse" name="Record candidate response" camunda:type="external" camunda:topic="record-candidate-response">
+      <bpmn:incoming>Flow_CandidateResponse_Record</bpmn:incoming>
+      <bpmn:outgoing>Flow_Record_CandidateAccepted</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="Gateway_CandidateAccepted" name="Candidate accepted?">
+      <bpmn:incoming>Flow_Record_CandidateAccepted</bpmn:incoming>
+      <bpmn:outgoing>Flow_CandidateAccepted_Export</bpmn:outgoing>
+      <bpmn:outgoing>Flow_CandidateDeclined_End</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="Task_ExportInterviewToEis" name="Export interview to EIS" camunda:type="external" camunda:topic="export-interview-to-eis">
+      <bpmn:incoming>Flow_CandidateAccepted_Export</bpmn:incoming>
+      <bpmn:outgoing>Flow_Export_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="End_ScreeningFailed" name="Screening failed"><bpmn:incoming>Flow_ScreeningFailed_End</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="End_Rejected" name="Rejected by recruiter"><bpmn:incoming>Flow_Reject_End</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="End_Timeout" name="Closed by timeout"><bpmn:incoming>Flow_Close_EndTimeout</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="End_Declined" name="Invitation not accepted"><bpmn:incoming>Flow_CandidateDeclined_End</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="End_Exported" name="Interview exported"><bpmn:incoming>Flow_Export_End</bpmn:incoming></bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_CreateApplication" sourceRef="Start_CandidateApplies" targetRef="Task_CreateApplication" />
+    <bpmn:sequenceFlow id="Flow_CreateApplication_PublishScreening" sourceRef="Task_CreateApplication" targetRef="Task_PublishScreeningRequest" />
+    <bpmn:sequenceFlow id="Flow_PublishScreening_WaitResult" sourceRef="Task_PublishScreeningRequest" targetRef="Event_WaitScreeningCompleted" />
+    <bpmn:sequenceFlow id="Flow_WaitResult_SaveScreening" sourceRef="Event_WaitScreeningCompleted" targetRef="Task_SaveScreeningResult" />
+    <bpmn:sequenceFlow id="Flow_SaveScreening_Gateway" sourceRef="Task_SaveScreeningResult" targetRef="Gateway_ScreeningPassed" />
+    <bpmn:sequenceFlow id="Flow_ScreeningPassed_RecruiterReview" name="passed" sourceRef="Gateway_ScreeningPassed" targetRef="recruiter-review">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${screeningPassed == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ScreeningFailed_End" name="failed" sourceRef="Gateway_ScreeningPassed" targetRef="End_ScreeningFailed">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${screeningPassed == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_RecruiterReview_Decision" sourceRef="recruiter-review" targetRef="Gateway_RecruiterDecision" />
+    <bpmn:sequenceFlow id="Flow_RecruiterReject" name="reject" sourceRef="Gateway_RecruiterDecision" targetRef="Task_RejectApplication">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${recruiterDecision == "REJECT"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_RecruiterInvite" name="invite" sourceRef="Gateway_RecruiterDecision" targetRef="Task_ReserveInterviewSlot">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${recruiterDecision == "INVITE"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Reject_End" sourceRef="Task_RejectApplication" targetRef="End_Rejected" />
+    <bpmn:sequenceFlow id="Flow_Reserve_CandidateResponse" sourceRef="Task_ReserveInterviewSlot" targetRef="candidate-response" />
+    <bpmn:sequenceFlow id="Flow_Timeout_Close" sourceRef="BoundaryEvent_InvitationTimeout" targetRef="Task_CloseByTimeout" />
+    <bpmn:sequenceFlow id="Flow_Close_EndTimeout" sourceRef="Task_CloseByTimeout" targetRef="End_Timeout" />
+    <bpmn:sequenceFlow id="Flow_CandidateResponse_Record" sourceRef="candidate-response" targetRef="Task_RecordCandidateResponse" />
+    <bpmn:sequenceFlow id="Flow_Record_CandidateAccepted" sourceRef="Task_RecordCandidateResponse" targetRef="Gateway_CandidateAccepted" />
+    <bpmn:sequenceFlow id="Flow_CandidateAccepted_Export" name="accept" sourceRef="Gateway_CandidateAccepted" targetRef="Task_ExportInterviewToEis">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${candidateResponse == "ACCEPT"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_CandidateDeclined_End" name="decline or other" sourceRef="Gateway_CandidateAccepted" targetRef="End_Declined">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${candidateResponse != "ACCEPT"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Export_End" sourceRef="Task_ExportInterviewToEis" targetRef="End_Exported" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_HHProcess">
+    <bpmndi:BPMNPlane id="BPMNPlane_HHProcess" bpmnElement="candidate-application-process">
+      <bpmndi:BPMNShape id="Lane_Candidate_di" bpmnElement="Lane_Candidate" isHorizontal="true"><dc:Bounds x="120" y="80" width="2250" height="150" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_HHProcess_di" bpmnElement="Lane_HHProcess" isHorizontal="true"><dc:Bounds x="120" y="230" width="2250" height="220" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Recruiter_di" bpmnElement="Lane_Recruiter" isHorizontal="true"><dc:Bounds x="120" y="450" width="2250" height="150" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_EIS_di" bpmnElement="Lane_EIS" isHorizontal="true"><dc:Bounds x="120" y="600" width="2250" height="140" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_CandidateApplies_di" bpmnElement="Start_CandidateApplies"><dc:Bounds x="190" y="136" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CreateApplication_di" bpmnElement="Task_CreateApplication"><dc:Bounds x="280" y="290" width="130" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_PublishScreeningRequest_di" bpmnElement="Task_PublishScreeningRequest"><dc:Bounds x="460" y="290" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_WaitScreeningCompleted_di" bpmnElement="Event_WaitScreeningCompleted"><dc:Bounds x="680" y="312" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SaveScreeningResult_di" bpmnElement="Task_SaveScreeningResult"><dc:Bounds x="780" y="290" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_ScreeningPassed_di" bpmnElement="Gateway_ScreeningPassed" isMarkerVisible="true"><dc:Bounds x="980" y="305" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_ScreeningFailed_di" bpmnElement="End_ScreeningFailed"><dc:Bounds x="1046" y="378" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="recruiter-review_di" bpmnElement="recruiter-review"><dc:Bounds x="1090" y="485" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_RecruiterDecision_di" bpmnElement="Gateway_RecruiterDecision" isMarkerVisible="true"><dc:Bounds x="1280" y="500" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RejectApplication_di" bpmnElement="Task_RejectApplication"><dc:Bounds x="1380" y="290" width="130" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Rejected_di" bpmnElement="End_Rejected"><dc:Bounds x="1560" y="312" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReserveInterviewSlot_di" bpmnElement="Task_ReserveInterviewSlot"><dc:Bounds x="1380" y="485" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="candidate-response_di" bpmnElement="candidate-response"><dc:Bounds x="1580" y="115" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BoundaryEvent_InvitationTimeout_di" bpmnElement="BoundaryEvent_InvitationTimeout"><dc:Bounds x="1642" y="177" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CloseByTimeout_di" bpmnElement="Task_CloseByTimeout"><dc:Bounds x="1740" y="290" width="130" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Timeout_di" bpmnElement="End_Timeout"><dc:Bounds x="1910" y="312" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RecordCandidateResponse_di" bpmnElement="Task_RecordCandidateResponse"><dc:Bounds x="1770" y="115" width="160" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_CandidateAccepted_di" bpmnElement="Gateway_CandidateAccepted" isMarkerVisible="true"><dc:Bounds x="1980" y="130" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Declined_di" bpmnElement="End_Declined"><dc:Bounds x="2072" y="220" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ExportInterviewToEis_di" bpmnElement="Task_ExportInterviewToEis"><dc:Bounds x="2070" y="630" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Exported_di" bpmnElement="End_Exported"><dc:Bounds x="2280" y="652" width="36" height="36" /></bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Flow_Start_CreateApplication_di" bpmnElement="Flow_Start_CreateApplication"><di:waypoint x="226" y="154" /><di:waypoint x="255" y="154" /><di:waypoint x="255" y="330" /><di:waypoint x="280" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CreateApplication_PublishScreening_di" bpmnElement="Flow_CreateApplication_PublishScreening"><di:waypoint x="410" y="330" /><di:waypoint x="460" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PublishScreening_WaitResult_di" bpmnElement="Flow_PublishScreening_WaitResult"><di:waypoint x="610" y="330" /><di:waypoint x="680" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_WaitResult_SaveScreening_di" bpmnElement="Flow_WaitResult_SaveScreening"><di:waypoint x="716" y="330" /><di:waypoint x="780" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SaveScreening_Gateway_di" bpmnElement="Flow_SaveScreening_Gateway"><di:waypoint x="920" y="330" /><di:waypoint x="980" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ScreeningPassed_RecruiterReview_di" bpmnElement="Flow_ScreeningPassed_RecruiterReview"><di:waypoint x="1005" y="355" /><di:waypoint x="1005" y="525" /><di:waypoint x="1090" y="525" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ScreeningFailed_End_di" bpmnElement="Flow_ScreeningFailed_End"><di:waypoint x="1005" y="355" /><di:waypoint x="1005" y="396" /><di:waypoint x="1046" y="396" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RecruiterReview_Decision_di" bpmnElement="Flow_RecruiterReview_Decision"><di:waypoint x="1230" y="525" /><di:waypoint x="1280" y="525" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RecruiterReject_di" bpmnElement="Flow_RecruiterReject"><di:waypoint x="1305" y="500" /><di:waypoint x="1305" y="330" /><di:waypoint x="1380" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RecruiterInvite_di" bpmnElement="Flow_RecruiterInvite"><di:waypoint x="1330" y="525" /><di:waypoint x="1380" y="525" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Reject_End_di" bpmnElement="Flow_Reject_End"><di:waypoint x="1510" y="330" /><di:waypoint x="1560" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Reserve_CandidateResponse_di" bpmnElement="Flow_Reserve_CandidateResponse"><di:waypoint x="1520" y="525" /><di:waypoint x="1545" y="525" /><di:waypoint x="1545" y="155" /><di:waypoint x="1580" y="155" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Timeout_Close_di" bpmnElement="Flow_Timeout_Close"><di:waypoint x="1660" y="213" /><di:waypoint x="1660" y="330" /><di:waypoint x="1740" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Close_EndTimeout_di" bpmnElement="Flow_Close_EndTimeout"><di:waypoint x="1870" y="330" /><di:waypoint x="1910" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CandidateResponse_Record_di" bpmnElement="Flow_CandidateResponse_Record"><di:waypoint x="1720" y="155" /><di:waypoint x="1770" y="155" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Record_CandidateAccepted_di" bpmnElement="Flow_Record_CandidateAccepted"><di:waypoint x="1930" y="155" /><di:waypoint x="1980" y="155" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CandidateAccepted_Export_di" bpmnElement="Flow_CandidateAccepted_Export"><di:waypoint x="2005" y="180" /><di:waypoint x="2005" y="670" /><di:waypoint x="2070" y="670" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CandidateDeclined_End_di" bpmnElement="Flow_CandidateDeclined_End"><di:waypoint x="2005" y="180" /><di:waypoint x="2005" y="238" /><di:waypoint x="2072" y="238" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Export_End_di" bpmnElement="Flow_Export_End"><di:waypoint x="2220" y="670" /><di:waypoint x="2280" y="670" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

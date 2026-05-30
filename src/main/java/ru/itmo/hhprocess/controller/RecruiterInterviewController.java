@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import ru.itmo.hhprocess.camunda.CamundaInterviewProcessService;
 import ru.itmo.hhprocess.config.ApiRoleOnly;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,12 +23,16 @@ import java.util.UUID;
 public class RecruiterInterviewController {
 
     private final InterviewProcessService interviewProcessService;
+    private final CamundaInterviewProcessService camundaInterviewProcessService;
 
     @Operation(summary = "Отменить интервью")
     @PostMapping("/{interviewId}/cancel")
     @PreAuthorize("hasAuthority('APPLICATION_REJECT_ASSIGNED')")
     public InterviewActionResponse cancel(@PathVariable @NotNull UUID interviewId,
                                           @Valid @RequestBody CancelInterviewRequest request) {
+        if (camundaInterviewProcessService.enabled()) {
+            return camundaInterviewProcessService.cancel(interviewId, request);
+        }
         return interviewProcessService.cancelInterview(interviewId, request);
     }
 }

@@ -18,17 +18,29 @@ public class ApplicationSubmittedPublisher {
     private final AfterCommitEventPublisher afterCommitEventPublisher;
 
     public void publishAfterCommit(ApplicationEntity application) {
-        ApplicationSubmittedEvent event = new ApplicationSubmittedEvent(
+        ApplicationSubmittedEvent event = createEvent(application);
+        afterCommitEventPublisher.publish(() -> send(application, event));
+    }
+
+    public void publish(ApplicationEntity application) {
+        send(application, createEvent(application));
+    }
+
+    private ApplicationSubmittedEvent createEvent(ApplicationEntity application) {
+        return new ApplicationSubmittedEvent(
                 UUID.randomUUID(),
                 application.getId(),
                 application.getVacancy().getId(),
                 application.getCandidateUser().getId(),
                 Instant.now()
         );
-        afterCommitEventPublisher.publish(() -> kafkaProducer.send(
+    }
+
+    private void send(ApplicationEntity application, ApplicationSubmittedEvent event) {
+        kafkaProducer.send(
                 properties.getTopics().getApplicationSubmitted(),
                 application.getId().toString(),
                 event
-        ));
+        );
     }
 }

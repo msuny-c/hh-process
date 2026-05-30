@@ -3,10 +3,13 @@ package ru.itmo.hhprocess.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import ru.itmo.hhprocess.camunda.CamundaProperties;
+import ru.itmo.hhprocess.camunda.CamundaRestClient;
 import ru.itmo.hhprocess.config.ApiRoleOnly;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.ScreeningResultEntity;
@@ -28,6 +31,8 @@ public class ApplicationScreenedConsumer {
     private final ScreeningResultRepository screeningResultRepository;
     private final AsyncScreeningResultService asyncScreeningResultService;
     private final KafkaIdempotencyService kafkaIdempotencyService;
+    private final CamundaProperties camundaProperties;
+    private final ObjectProvider<CamundaRestClient> camundaRestClientProvider;
 
     @Value("${app.instance-name}")
     private String instanceName;
@@ -51,6 +56,12 @@ public class ApplicationScreenedConsumer {
         if (application.getStatus() != ApplicationStatus.SCREENING_IN_PROGRESS) {
             log.info("Application {} is in status {}, skipping application-screened apply",
                     application.getId(), application.getStatus());
+            kafkaIdempotencyService.markProcessed(event.eventId(), "application.screened", consumerName());
+            return;
+        }
+
+        if (camundaProperties.isEnabled()) {
+            camundaRestClientProvider.getObject().correlateScreeningCompleted(event);
             kafkaIdempotencyService.markProcessed(event.eventId(), "application.screened", consumerName());
             return;
         }

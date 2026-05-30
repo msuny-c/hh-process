@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import ru.itmo.hhprocess.config.ApiRoleOnly;
 import ru.itmo.hhprocess.dto.candidate.CreateApplicationRequest;
 import ru.itmo.hhprocess.dto.candidate.CreateApplicationResponse;
+import ru.itmo.hhprocess.camunda.CamundaProcessService;
 import ru.itmo.hhprocess.service.ApplicationService;
 
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,7 @@ import java.util.UUID;
 public class CandidateVacancyController {
 
     private final ApplicationService applicationService;
+    private final CamundaProcessService camundaProcessService;
 
     @Operation(summary = "Подать заявку на вакансию")
     @PostMapping("/{vacancyId}")
@@ -32,6 +34,9 @@ public class CandidateVacancyController {
     public CreateApplicationResponse apply(
             @PathVariable @NotNull UUID vacancyId,
             @Valid @RequestBody CreateApplicationRequest request) {
+        if (camundaProcessService.enabled()) {
+            return camundaProcessService.startCandidateApplication(vacancyId, request);
+        }
         return applicationService.create(vacancyId, request);
     }
 }

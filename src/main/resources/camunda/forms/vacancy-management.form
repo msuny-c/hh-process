@@ -1,0 +1,93 @@
+{
+  "components": [
+    {
+      "label": "Operation",
+      "type": "select",
+      "id": "Field_vacancyOperation",
+      "key": "vacancyOperation",
+      "values": [
+        {
+          "label": "Create",
+          "value": "CREATE"
+        },
+        {
+          "label": "Update",
+          "value": "UPDATE"
+        },
+        {
+          "label": "Close",
+          "value": "CLOSE"
+        }
+      ],
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "label": "Recruiter email",
+      "type": "textfield",
+      "id": "Field_recruiterUserId",
+      "key": "recruiterUserId",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "label": "Vacancy ID",
+      "type": "textfield",
+      "id": "Field_vacancyId",
+      "key": "vacancyId"
+    },
+    {
+      "label": "Title",
+      "type": "textfield",
+      "id": "Field_vacancyTitle",
+      "key": "vacancyTitle"
+    },
+    {
+      "label": "Description",
+      "type": "textarea",
+      "id": "Field_vacancyDescription",
+      "key": "vacancyDescription"
+    },
+    {
+      "label": "Required skills CSV",
+      "type": "textfield",
+      "id": "Field_requiredSkillsCsv",
+      "key": "requiredSkillsCsv"
+    },
+    {
+      "label": "Screening threshold",
+      "type": "number",
+      "id": "Field_screeningThreshold",
+      "key": "screeningThreshold"
+    },
+    {
+      "label": "Status",
+      "type": "select",
+      "id": "Field_vacancyStatus",
+      "key": "vacancyStatus",
+      "values": [
+        {
+          "label": "Active",
+          "value": "ACTIVE"
+        },
+        {
+          "label": "Closed",
+          "value": "CLOSED"
+        }
+      ]
+    },
+    {
+      "label": "Close reason",
+      "type": "textarea",
+      "id": "Field_vacancyCloseReason",
+      "key": "vacancyCloseReason"
+    }
+  ],
+  "type": "default",
+  "id": "vacancy-management",
+  "executionPlatform": "Camunda Platform",
+  "executionPlatformVersion": "7.20.0",
+  "schemaVersion": 16
+}

@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import ru.itmo.hhprocess.config.ApiRoleOnly;
+import ru.itmo.hhprocess.camunda.CamundaProperties;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -15,11 +16,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class TimeoutService {
 
     private final TimeoutBatchProcessor batchProcessor;
+    private final CamundaProperties camundaProperties;
     private final AtomicBoolean runInProgress = new AtomicBoolean(false);
 
     @Scheduled(fixedDelayString = "${app.timeout.check-interval-ms:60000}",
               initialDelayString = "${app.timeout.initial-delay-ms:30000}")
     public void closeExpiredInvitations() {
+        if (camundaProperties.isEnabled()) {
+            log.info("Skipping scheduled timeout scan because Camunda timers are enabled");
+            return;
+        }
         log.info("Scheduled timeout scan triggered");
         runCloseExpired();
     }

@@ -1,0 +1,46 @@
+{
+  "components": [
+    {
+      "label": "Decision",
+      "type": "select",
+      "id": "Field_recruiterDecision",
+      "key": "recruiterDecision",
+      "values": [
+        {
+          "label": "Invite",
+          "value": "INVITE"
+        },
+        {
+          "label": "Reject",
+          "value": "REJECT"
+        }
+      ],
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "label": "Message",
+      "type": "textarea",
+      "id": "Field_recruiterMessage",
+      "key": "recruiterMessage"
+    },
+    {
+      "label": "Scheduled at ISO-8601",
+      "type": "textfield",
+      "id": "Field_scheduledAt",
+      "key": "scheduledAt"
+    },
+    {
+      "label": "Duration minutes",
+      "type": "number",
+      "id": "Field_durationMinutes",
+      "key": "durationMinutes"
+    }
+  ],
+  "type": "default",
+  "id": "recruiter-review",
+  "executionPlatform": "Camunda Platform",
+  "executionPlatformVersion": "7.20.0",
+  "schemaVersion": 16
+}
