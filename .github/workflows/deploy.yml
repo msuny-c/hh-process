@@ -545,6 +545,9 @@ jobs:
           echo "APP_INSTANCE_NAME=hh-api-camunda-wildfly" >> app.env
           echo "NARAYANA_LOG_DIR=\$HOME/apps/blps/transaction-logs" >> app.env
           echo "APP_SECURITY_USERS_XML=\$HOME/apps/blps/data/users.xml" >> app.env
+          if ! grep -q '^JAVA_OPTS=' app.env; then
+            echo 'JAVA_OPTS=-Xms256m -Xmx768m --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED -Dorg.springframework.boot.logging.LoggingSystem=none' >> app.env
+          fi
           if ! grep -q '^APP_CAMUNDA_ENABLED=' app.env; then
             echo "APP_CAMUNDA_ENABLED=true" >> app.env
           fi
