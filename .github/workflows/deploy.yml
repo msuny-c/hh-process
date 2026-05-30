@@ -259,8 +259,8 @@ jobs:
       VPS_DEPLOY_PORT: ${{ secrets.VPS_SSH_PORT || vars.VPS_SSH_PORT || '22' }}
       # Seconds: TCP wait on stack + actuator poll via SSH tunnel (vars.API_HEALTHCHECK_TIMEOUT_SEC, default 60).
       API_HEALTHCHECK_TIMEOUT_SEC: ${{ vars.API_HEALTHCHECK_TIMEOUT_SEC || '60' }}
-      CAMUNDA_DIST_URL: 'https://downloads.camunda.cloud/release/camunda-bpm/wildfly27/7.21/camunda-bpm-wildfly27-7.21.0.zip'
-      CAMUNDA_DIST_NAME: 'camunda-bpm-wildfly27-7.21.0'
+      CAMUNDA_DIST_URL: 'https://downloads.camunda.cloud/release/camunda-bpm/wildfly/7.21/camunda-bpm-wildfly-7.21.0.zip'
+      CAMUNDA_DIST_NAME: 'camunda-bpm-wildfly-7.21.0'
       CAMUNDA_WILDFLY_VERSION: '27.0.1.Final'
       WILDFLY_HTTP_PORT: ${{ secrets.WILDFLY_HTTP_PORT || vars.WILDFLY_HTTP_PORT || secrets.WILDFLY_PORTBASE || vars.WILDFLY_PORTBASE || secrets.SERVER_PORT || vars.SERVER_PORT || '32318' }}
       WILDFLY_AJP_PORT: ${{ secrets.WILDFLY_AJP_PORT || vars.WILDFLY_AJP_PORT || '' }}
