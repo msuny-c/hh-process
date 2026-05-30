@@ -570,8 +570,9 @@ jobs:
           ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "mkdir -p \$HOME/apps/blps \$HOME/apps/camunda"
           if ! ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "test -d $WF_HOME"; then
             ssh -p "${{ env.SSH_PORT }}" -i ~/.ssh/id_key "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
-              "env CAMUNDA_DIST_URL='${{ env.CAMUNDA_DIST_URL }}' CAMUNDA_ZIP='$CAMUNDA_ZIP' bash -s" <<'REMOTE_DOWNLOAD'
+              "env CAMUNDA_DIST_URL='${{ env.CAMUNDA_DIST_URL }}' CAMUNDA_DIST_NAME='${{ env.CAMUNDA_DIST_NAME }}' bash -s" <<'REMOTE_DOWNLOAD'
           set -eu
+          CAMUNDA_ZIP="$HOME/apps/camunda/$CAMUNDA_DIST_NAME.zip"
           mkdir -p "$(dirname "$CAMUNDA_ZIP")"
           if [ ! -f "$CAMUNDA_ZIP" ]; then
             if command -v curl >/dev/null 2>&1; then
