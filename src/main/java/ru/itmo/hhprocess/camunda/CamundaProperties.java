@@ -9,22 +9,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.camunda")
 public class CamundaProperties {
 
-    
     private boolean enabled = true;
 
-    
-    private String baseUrl = "http:
+    private String baseUrl = "http://camunda:8080/engine-rest";
 
-    
     private String username = "";
 
-    
     private String password = "";
 
-    
     private boolean failOnError = false;
 
-    
     private String deploymentName = "hh-process-bpmn";
 
     private String applicationProcessKey = "hhApplicationProcess";

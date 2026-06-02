@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-BASE_URL = os.getenv('BASE_URL', 'http:
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:8080').rstrip('/')
 ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'admin@example.com')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'password123')
 RECRUITER_EMAIL = os.getenv('RECRUITER_EMAIL', 'recruiter@example.com')
@@ -103,7 +103,7 @@ def week_offset_for(dt: datetime) -> int:
     now = datetime.now(timezone.utc)
     current_week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     target_week_start = (dt - timedelta(days=dt.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-    return int((target_week_start - current_week_start).days
+    return int((target_week_start - current_week_start).days / 7)
 
 def invite_with_retry(api: API, recruiter: SessionCtx, app_id: str, start_at: datetime, attempts: int = 6) -> Dict[str, Any]:
     scheduled_at = start_at

@@ -32,6 +32,9 @@ Thumbs.db
 
 .env
 .env.local
+.env.*
+!.env.example
+!.env.*.example
 *.local
 
 logs/
@@ -63,6 +66,11 @@ yarn-error.log*
 venv/
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 .DS_Store
 Thumbs.db
@@ -76,7 +84,7 @@ docker-compose.override.yml
 tmp/
 temp/
 *.tmp
+.comment_backups_*/
 
 *.jks
 *.keystore
-

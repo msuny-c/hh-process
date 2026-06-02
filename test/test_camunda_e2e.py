@@ -92,7 +92,7 @@ def unique_future_slot():
     import uuid
 
     offset = int(uuid.uuid4().hex[:8], 16)
-    return future_slot(days=30 + offset % 365, hour_shift=(offset
+    return future_slot(days=30 + offset % 365, hour_shift=int(offset / 365) % 18)
 
 
 if __name__ == '__main__':

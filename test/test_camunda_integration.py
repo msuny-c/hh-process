@@ -4,7 +4,7 @@ import sys
 import time
 import requests
 
-CAMUNDA_URL = os.getenv('CAMUNDA_URL', 'http:
+CAMUNDA_URL = os.getenv('CAMUNDA_URL', 'http://localhost:8081/engine-rest').rstrip('/')
 
 
 def get(path):
