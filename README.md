@@ -196,3 +196,52 @@ python test/test_e2e_platform.py
 ```
 
 `test/test_e2e_platform.py` — сквозной e2e-сценарий: несколько кандидатов, несколько вакансий, приглашение на интервью, ответ на приглашение, отмена интервью, отклонение заявки, закрытие вакансии, проверка уведомлений, расписания рекрутера и атомарности составных транзакций.
+
+
+## Локальный запуск через WildFly в Docker
+
+Приложение теперь собирается в `WAR` и деплоится в WildFly-контейнер, а PostgreSQL поднимается отдельным сервисом в `docker-compose.yml`.
+
+```bash
+docker compose up --build
+```
+
+API остаётся доступным от корня:
+
+```text
+http://localhost:8080/api/v1/...
+```
+
+Для полностью чистого запуска:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+Подробности см. в `README_WILDFLY_DOCKER.md`.
+
+
+## WildFly / FreeBSD / Helios
+
+Docker Compose используется для локальной разработки. Для Helios / FreeBSD 14.4-STABLE добавлена бездокерная схема:
+
+```text
+README-HELIOS-FREEBSD.md
+infra/appctl.sh
+infra/helios/app.env.example
+scripts/release/make-helios-freebsd-bundle.sh
+```
+
+Сборка WAR:
+
+```bash
+mvn clean package -DskipTests
+```
+
+Сборка архива для Helios:
+
+```bash
+./scripts/release/make-helios-freebsd-bundle.sh
+```
+

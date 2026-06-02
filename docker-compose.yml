@@ -6,12 +6,15 @@ services:
       - postgres
       - -c
       - max_prepared_transactions=100
-    env_file:
-      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT_EXTERNAL:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -19,24 +22,76 @@ services:
       retries: 10
       start_period: 10s
 
-  app:
-    build: .
-    container_name: hh-process-app
+  camunda:
+    image: camunda/camunda-bpm-platform:run-7.23.0
+    container_name: hh-process-camunda
     depends_on:
       postgres:
         condition: service_healthy
-    env_file:
-      - .env
     environment:
-      NARAYANA_LOG_DIR: /app/transaction-logs
-      APP_SECURITY_USERS_XML: /app/data/users.xml
+      DB_DRIVER: org.postgresql.Driver
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-postgres}?currentSchema=camunda
+      DB_USERNAME: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      WAIT_FOR: postgres:5432
+      WAIT_FOR_TIMEOUT: 120
+      CAMUNDA_BPM_ADMIN_USER_ID: ${CAMUNDA_ADMIN_USER:-admin}
+      CAMUNDA_BPM_ADMIN_USER_PASSWORD: ${CAMUNDA_ADMIN_PASSWORD:-admin}
+      CAMUNDA_BPM_ADMIN_USER_FIRSTNAME: Admin
+      CAMUNDA_BPM_ADMIN_USER_LASTNAME: User
     ports:
-      - "8080:8080"
+      - "${CAMUNDA_PORT:-8081}:8080"
     volumes:
-      - narayana_logs:/app/transaction-logs
-      - app_data:/app/data
+      - camunda_data:/camunda
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hh-process-wildfly:local
+    container_name: hh-process-wildfly
+    depends_on:
+      postgres:
+        condition: service_healthy
+      camunda:
+        condition: service_started
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_SCHEMA: ${POSTGRES_SCHEMA:-public}
+      CAMUNDA_ENABLED: ${CAMUNDA_ENABLED:-true}
+      CAMUNDA_BASE_URL: http://camunda:8080/engine-rest
+      CAMUNDA_USERNAME: ${CAMUNDA_REST_USERNAME:-}
+      CAMUNDA_PASSWORD: ${CAMUNDA_REST_PASSWORD:-}
+      CAMUNDA_FAIL_ON_ERROR: ${CAMUNDA_FAIL_ON_ERROR:-false}
+      CAMUNDA_WORKER_ENABLED: ${CAMUNDA_WORKER_ENABLED:-true}
+      SPRING_JTA_ENABLED: ${SPRING_JTA_ENABLED:-true}
+      HIBERNATE_TRANSACTION_COORDINATOR_CLASS: ${HIBERNATE_TRANSACTION_COORDINATOR_CLASS:-jta}
+      SERVER_PORT: ${WILDFLY_HTTP_PORT:-8080}
+      NARAYANA_LOG_DIR: /opt/jboss/hh-process/transaction-logs
+      NARAYANA_NODE_IDENTIFIER: ${NARAYANA_NODE_IDENTIFIER:-hh-process-wildfly-local}
+      NARAYANA_DEFAULT_TIMEOUT: ${NARAYANA_DEFAULT_TIMEOUT:-60}
+      APP_SECURITY_USERS_XML: /opt/jboss/hh-process/data/users.xml
+      WS_ALLOWED_ORIGINS: ${WS_ALLOWED_ORIGINS:-http://localhost:3000}
+      WILDFLY_BIND_ADDRESS: 0.0.0.0
+      WILDFLY_MANAGEMENT_BIND_ADDRESS: 0.0.0.0
+      WILDFLY_HTTP_PORT: ${WILDFLY_HTTP_PORT:-8080}
+      WILDFLY_AJP_PORT: ${WILDFLY_AJP_PORT:-8009}
+      WILDFLY_HTTPS_PORT: ${WILDFLY_HTTPS_PORT:-8443}
+      WILDFLY_MANAGEMENT_HTTP_PORT: ${WILDFLY_MANAGEMENT_HTTP_PORT:-9990}
+      WILDFLY_MANAGEMENT_HTTPS_PORT: ${WILDFLY_MANAGEMENT_HTTPS_PORT:-9993}
+    ports:
+      - "${APP_PORT:-8080}:${WILDFLY_HTTP_PORT:-8080}"
+      - "${WILDFLY_MANAGEMENT_PORT:-9990}:${WILDFLY_MANAGEMENT_HTTP_PORT:-9990}"
+    volumes:
+      - narayana_logs:/opt/jboss/hh-process/transaction-logs
+      - app_data:/opt/jboss/hh-process/data
 
 volumes:
   postgres_data:
   narayana_logs:
   app_data:
+  camunda_data:

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_HH_Vacancy"
+                  targetNamespace="http://itmo.ru/hhprocess/camunda">
+  <bpmn:process id="hhVacancyProcess" name="HH.ru: жизненный цикл вакансии" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:laneSet id="LaneSet_Vacancy">
+      <bpmn:lane id="Lane_Recruiter_Vacancy" name="HR / рекрутер">
+        <bpmn:flowNodeRef>Start_VacancyCreated</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ManageVacancyTask</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_System_Vacancy" name="Система HH">
+        <bpmn:flowNodeRef>CloseActiveApplications</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_VacancyClosed</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <bpmn:startEvent id="Start_VacancyCreated" name="Вакансия создана">
+      <bpmn:outgoing>Flow_Start_Manage</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:userTask id="ManageVacancyTask" name="Управлять вакансией" camunda:candidateGroups="RECRUITER" camunda:formRef="close-vacancy-form" camunda:formRefBinding="latest">
+      <bpmn:incoming>Flow_Start_Manage</bpmn:incoming>
+      <bpmn:outgoing>Flow_Manage_Close</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:serviceTask id="CloseActiveApplications" name="Закрыть активные отклики и освободить расписание" camunda:type="external" camunda:topic="vacancy-close-applications">
+      <bpmn:incoming>Flow_Manage_Close</bpmn:incoming>
+      <bpmn:outgoing>Flow_Close_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="End_VacancyClosed" name="Вакансия закрыта">
+      <bpmn:incoming>Flow_Close_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_Manage" sourceRef="Start_VacancyCreated" targetRef="ManageVacancyTask" />
+    <bpmn:sequenceFlow id="Flow_Manage_Close" sourceRef="ManageVacancyTask" targetRef="CloseActiveApplications" />
+    <bpmn:sequenceFlow id="Flow_Close_End" sourceRef="CloseActiveApplications" targetRef="End_VacancyClosed" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_HH_Vacancy">
+    <bpmndi:BPMNPlane id="BPMNPlane_HH_Vacancy" bpmnElement="hhVacancyProcess">
+      <bpmndi:BPMNShape id="Start_VacancyCreated_di" bpmnElement="Start_VacancyCreated"><dc:Bounds x="120" y="180" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ManageVacancyTask_di" bpmnElement="ManageVacancyTask"><dc:Bounds x="230" y="158" width="180" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CloseActiveApplications_di" bpmnElement="CloseActiveApplications"><dc:Bounds x="500" y="158" width="220" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_VacancyClosed_di" bpmnElement="End_VacancyClosed"><dc:Bounds x="800" y="180" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

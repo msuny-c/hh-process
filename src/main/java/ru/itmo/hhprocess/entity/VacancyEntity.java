@@ -47,6 +47,9 @@ public class VacancyEntity {
     @Column(name = "screening_threshold", nullable = false)
     private int screeningThreshold;
 
+    @Column(name = "camunda_process_instance_id", length = 64)
+    private String camundaProcessInstanceId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

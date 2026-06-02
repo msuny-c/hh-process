@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 11,
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "type": "default",
+  "id": "invitation-response-form",
+  "components": [
+    {
+      "type": "select",
+      "id": "responseType",
+      "key": "responseType",
+      "label": "Ответ на приглашение",
+      "values": [
+        { "label": "Принять", "value": "ACCEPT" },
+        { "label": "Отклонить", "value": "DECLINE" },
+        { "label": "Другой ответ", "value": "OTHER" }
+      ],
+      "validate": { "required": true }
+    },
+    { "type": "textarea", "id": "responseMessage", "key": "responseMessage", "label": "Комментарий" }
+  ]
+}

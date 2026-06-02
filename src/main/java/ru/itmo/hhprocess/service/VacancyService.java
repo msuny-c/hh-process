@@ -27,6 +27,7 @@ public class VacancyService {
     private final UserRepository userRepository;
     private final AuthService authService;
     private final VacancyMapper vacancyMapper;
+    private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
 
     @Transactional
     public VacancyResponse create(CreateVacancyRequest request) {
@@ -39,6 +40,7 @@ public class VacancyService {
                 .requiredSkills(request.getRequiredSkills())
                 .screeningThreshold(request.getScreeningThreshold())
                 .build());
+        camundaWorkflowFacade.startVacancyProcess(vacancy).ifPresent(vacancy::setCamundaProcessInstanceId);
         return vacancyMapper.toResponse(vacancy);
     }
 

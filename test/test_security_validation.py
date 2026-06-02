@@ -5,7 +5,7 @@ import sys
 import uuid
 import requests
 
-BASE_URL = os.getenv('BASE_URL', 'http://localhost:8080').rstrip('/')
+BASE_URL = os.getenv('BASE_URL', 'http:
 RECRUITER = (os.getenv('RECRUITER_EMAIL', 'recruiter@example.com'), os.getenv('RECRUITER_PASSWORD', 'password123'))
 ADMIN = (os.getenv('ADMIN_EMAIL', 'admin@example.com'), os.getenv('ADMIN_PASSWORD', 'password123'))
 CANDIDATE_PASSWORD = os.getenv('CANDIDATE_PASSWORD', 'password123')

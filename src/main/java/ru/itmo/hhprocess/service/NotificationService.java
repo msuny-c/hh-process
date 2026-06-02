@@ -41,6 +41,15 @@ public class NotificationService {
         eventPublisher.publishEvent(new NotificationCreatedEvent(user.getEmail(), response));
     }
 
+    @Transactional
+    public void createIfAbsent(UserEntity user, ApplicationEntity application, NotificationType type, String message) {
+        if (application != null && notificationRepository.existsByUserIdAndApplicationIdAndType(
+                user.getId(), application.getId(), type)) {
+            return;
+        }
+        create(user, application, type, message);
+    }
+
     @Transactional(readOnly = true)
     public List<NotificationResponse> getNotificationsForUser(UUID userId) {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()

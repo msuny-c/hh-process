@@ -160,10 +160,6 @@ def main() -> int:
     expire_invitation(app['application_id'])
     print_db_debug_state('DB state before admin timeout job', app['application_id'])
 
-    # The application also has a background @Scheduled timeout processor. In CI,
-    # the scheduled job may close the expired invitation just before the manual
-    # admin endpoint is called, in which case closed_count can legitimately be 0.
-    # So here we assert the final state, not that this exact HTTP call did the work.
     job_result = run_timeout_job(api, admin)
     print_db_debug_state('DB state after admin timeout job', app['application_id'])
 

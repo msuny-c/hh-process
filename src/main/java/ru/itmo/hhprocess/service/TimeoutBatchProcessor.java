@@ -27,6 +27,7 @@ public class TimeoutBatchProcessor {
     private final NotificationService notificationService;
     private final InterviewService interviewService;
     private final ScheduleService scheduleService;
+    private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
 
     @Value("${app.timeout.debug.disable-notifications:false}")
     private boolean disableNotifications;
@@ -95,6 +96,8 @@ public class TimeoutBatchProcessor {
                     "Interview invitation expired for vacancy: " + application.getVacancy().getTitle());
             log.info("Created timeout notifications for application {}", application.getId());
         }
+
+        camundaWorkflowFacade.invitationTimedOut(application);
 
         log.info("Expired invitation application {} marked as CLOSED_BY_TIMEOUT", application.getId());
         return 1;

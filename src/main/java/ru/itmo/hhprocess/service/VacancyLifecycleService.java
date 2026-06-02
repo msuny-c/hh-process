@@ -2,23 +2,21 @@ package ru.itmo.hhprocess.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.dto.recruiter.CloseVacancyRequest;
 import ru.itmo.hhprocess.dto.recruiter.VacancyResponse;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
-import ru.itmo.hhprocess.entity.InterviewEntity;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.entity.VacancyEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
-import ru.itmo.hhprocess.enums.NotificationType;
+import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.enums.VacancyStatus;
+import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.mapper.VacancyMapper;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 
-import java.time.Instant;
+import org.springframework.http.HttpStatus;
+
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -39,42 +37,56 @@ public class VacancyLifecycleService {
     private final VacancyHistoryService vacancyHistoryService;
     private final NotificationService notificationService;
     private final VacancyMapper vacancyMapper;
+    private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
 
-    @Transactional
     public VacancyResponse closeVacancy(UUID vacancyId, CloseVacancyRequest request) {
         UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
         VacancyEntity vacancy = vacancyService.findByIdForUpdate(vacancyId);
         vacancyService.ensureOwnership(vacancy, recruiterUser);
-        VacancyStatus oldStatus = vacancy.getStatus();
-        vacancy.setStatus(VacancyStatus.CLOSED);
-        vacancyHistoryService.record(vacancy, oldStatus, VacancyStatus.CLOSED, recruiterUser);
-
-        List<ApplicationEntity> applications = applicationRepository.findByVacancyIdAndStatusIn(vacancyId, ACTIVE_APPLICATION_STATUSES);
-        Map<UUID, InterviewEntity> activeInterviews = interviewService.findActiveByApplicationIds(
-                applications.stream().map(ApplicationEntity::getId).toList())
-                .stream().collect(Collectors.toMap(i -> i.getApplication().getId(), Function.identity()));
-
-        Instant now = Instant.now();
-        for (ApplicationEntity application : applications) {
-            ApplicationStatus oldAppStatus = application.getStatus();
-            InterviewEntity interview = activeInterviews.get(application.getId());
-            if (interview != null) {
-                interview.setStatus(ru.itmo.hhprocess.enums.InterviewStatus.CANCELLED);
-                interview.setCancelReason(request.getReason());
-                interview.setCancelledAt(now);
-                scheduleService.releaseForInterview(interview);
-            }
-            application.setStatus(ApplicationStatus.CLOSED_BY_VACANCY);
-            application.setClosedAt(now);
-            application.setInvitationText(null);
-            application.setInvitationSentAt(null);
-            application.setInvitationExpiresAt(null);
-            application.setResponseReceivedAt(null);
-            application.setRecruiterComment(request.getReason());
-            historyService.record(application, oldAppStatus, ApplicationStatus.CLOSED_BY_VACANCY, recruiterUser);
-            notificationService.create(application.getCandidateUser(), application, NotificationType.VACANCY_CLOSED,
-                    "Vacancy was closed: " + vacancy.getTitle());
+        if (vacancy.getStatus() == VacancyStatus.CLOSED) {
+            return vacancyMapper.toResponse(vacancy);
         }
+
+        if (!camundaWorkflowFacade.closeVacancy(vacancy, request.getReason())) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_VACANCY_STATE,
+                    "Camunda vacancy management task is not active");
+        }
+
+        vacancy = waitForVacancyClosed(vacancyId);
+        waitForApplicationsClosed(vacancyId);
         return vacancyMapper.toResponse(vacancy);
+    }
+
+    private VacancyEntity waitForVacancyClosed(UUID vacancyId) {
+        for (int attempt = 0; attempt < 24; attempt++) {
+            VacancyEntity vacancy = vacancyService.findById(vacancyId);
+            if (vacancy.getStatus() == VacancyStatus.CLOSED) {
+                return vacancy;
+            }
+            sleep();
+        }
+        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_VACANCY_STATE,
+                "Camunda process did not close vacancy in time");
+    }
+
+    private void waitForApplicationsClosed(UUID vacancyId) {
+        for (int attempt = 0; attempt < 24; attempt++) {
+            if (applicationRepository.findByVacancyIdAndStatusIn(vacancyId, ACTIVE_APPLICATION_STATUSES).isEmpty()) {
+                return;
+            }
+            sleep();
+        }
+        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_VACANCY_STATE,
+                "Camunda process did not close active applications in time");
+    }
+
+    private static void sleep() {
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_VACANCY_STATE,
+                    "Interrupted while waiting for Camunda process");
+        }
     }
 }

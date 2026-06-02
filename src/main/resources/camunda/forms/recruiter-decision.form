@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 11,
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "type": "default",
+  "id": "recruiter-decision-form",
+  "components": [
+    {
+      "type": "select",
+      "id": "decision",
+      "key": "decision",
+      "label": "Решение по отклику",
+      "values": [
+        { "label": "Пригласить", "value": "INVITE" },
+        { "label": "Отказать", "value": "REJECT" },
+        { "label": "Вакансия закрыта", "value": "VACANCY_CLOSED" }
+      ],
+      "validate": { "required": true }
+    },
+    { "type": "textarea", "id": "recruiterComment", "key": "recruiterComment", "label": "Комментарий" }
+  ]
+}

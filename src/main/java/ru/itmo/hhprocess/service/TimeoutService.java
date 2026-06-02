@@ -2,6 +2,7 @@ package ru.itmo.hhprocess.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -15,9 +16,16 @@ public class TimeoutService {
     private final TimeoutBatchProcessor batchProcessor;
     private final AtomicBoolean runInProgress = new AtomicBoolean(false);
 
+    @Value("${app.timeout.local-scheduler-enabled:false}")
+    private boolean localSchedulerEnabled;
+
     @Scheduled(fixedDelayString = "${app.timeout.check-interval-ms:60000}",
               initialDelayString = "${app.timeout.initial-delay-ms:30000}")
     public void closeExpiredInvitations() {
+        if (!localSchedulerEnabled) {
+            log.debug("Local Spring timeout scheduler is disabled because Camunda timer process owns this job");
+            return;
+        }
         log.info("Scheduled timeout scan triggered");
         runCloseExpired();
     }

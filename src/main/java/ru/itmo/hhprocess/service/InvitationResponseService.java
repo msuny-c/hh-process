@@ -12,7 +12,6 @@ import ru.itmo.hhprocess.repository.InvitationResponseRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -26,16 +25,12 @@ public class InvitationResponseService {
     private final HistoryService historyService;
     private final NotificationService notificationService;
     private final AuthService authService;
+    private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
 
-    @Transactional
     public InvitationResponseResponse respond(UUID applicationId, InvitationResponseRequest request) {
         UserEntity candidateUser = authService.getCurrentUser();
-        boolean candidate = candidateUser.getRoles().stream().anyMatch(r -> "CANDIDATE".equals(r.getCode()));
-        if (!candidate) {
-            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED, "Candidate access required");
-        }
 
-        ApplicationEntity application = applicationRepository.findById(applicationId)
+        ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                         ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
 
@@ -56,30 +51,45 @@ public class InvitationResponseService {
                     "Invitation has expired");
         }
 
-        invitationResponseRepository.save(InvitationResponseEntity.builder()
-                .application(application)
-                .candidateUser(candidateUser)
-                .responseType(request.getResponseType())
-                .message(request.getMessage())
-                .build());
+        if (invitationResponseRepository.findByApplicationId(applicationId).isPresent()) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                    "Invitation response already exists");
+        }
 
-        application.setStatus(ApplicationStatus.INVITATION_RESPONDED);
-        application.setResponseReceivedAt(now);
-        applicationRepository.save(application);
+        if (!camundaWorkflowFacade.invitationResponded(application, request.getResponseType(), request.getMessage())) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                    "Camunda candidate response task is not active");
+        }
 
-        historyService.record(application,
-                ApplicationStatus.INVITED,
-                ApplicationStatus.INVITATION_RESPONDED,
-                candidateUser);
-
-        notificationService.create(application.getVacancy().getRecruiterUser(), application,
-                ru.itmo.hhprocess.enums.NotificationType.INVITATION_RESPONSE,
-                "Candidate responded to interview invitation");
-
+        application = waitForApplicationStatus(applicationId, ApplicationStatus.INVITATION_RESPONDED);
         return InvitationResponseResponse.builder()
                 .applicationId(application.getId())
                 .status(ApplicationStatus.INVITATION_RESPONDED.toExternalStatus())
                 .message("Response sent")
                 .build();
+    }
+
+    private ApplicationEntity waitForApplicationStatus(UUID applicationId, ApplicationStatus expected) {
+        for (int attempt = 0; attempt < 24; attempt++) {
+            ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                            ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
+            if (application.getStatus() == expected) {
+                return application;
+            }
+            sleep();
+        }
+        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                "Camunda process did not reach " + expected + " in time");
+    }
+
+    private static void sleep() {
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                    "Interrupted while waiting for Camunda process");
+        }
     }
 }

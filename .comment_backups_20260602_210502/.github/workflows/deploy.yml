@@ -1,0 +1,497 @@
+name: Build, Test & Deploy blps
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch: {}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  POSTGRES_HOST: localhost
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: postgres
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_SCHEMA: public
+  SERVER_PORT: 8080
+  NARAYANA_LOG_DIR: ./transaction-logs
+  NARAYANA_NODE_IDENTIFIER: hh-process-ci
+  APP_SECURITY_USERS_XML: ./data/users.xml
+  APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS: true
+  TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS: 1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies for API tests
+        run: python -m pip install --upgrade pip requests "psycopg[binary]"
+
+      - name: Start PostgreSQL with prepared transactions enabled
+        run: |
+          docker run -d \
+            --name hh-process-ci-postgres \
+            -e POSTGRES_DB=${POSTGRES_DB} \
+            -e POSTGRES_USER=${POSTGRES_USER} \
+            -e POSTGRES_PASSWORD=${POSTGRES_PASSWORD} \
+            -p ${POSTGRES_PORT}:5432 \
+            --health-cmd="pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" \
+            --health-interval=5s \
+            --health-timeout=5s \
+            --health-retries=20 \
+            postgres:16-alpine \
+            postgres -c max_prepared_transactions=100
+
+      - name: Wait for PostgreSQL healthcheck
+        run: |
+          for i in {1..60}; do
+            STATUS=$(docker inspect --format='{{json .State.Health.Status}}' hh-process-ci-postgres 2>/dev/null || echo '"starting"')
+            if [ "$STATUS" = '"healthy"' ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "PostgreSQL did not become healthy in time"
+          docker logs hh-process-ci-postgres || true
+          exit 1
+
+      - name: Build application
+        run: mvn -B clean package -DskipTests
+
+      - name: Start application
+        run: |
+          mkdir -p "$NARAYANA_LOG_DIR" "$(dirname "$APP_SECURITY_USERS_XML")"
+          nohup java -Dnarayana.log-dir="$NARAYANA_LOG_DIR" -Dapp.security.users-xml-path="$APP_SECURITY_USERS_XML" -jar target/*.jar > app-ci.log 2>&1 &
+          echo $! > app.pid
+
+      - name: Wait for healthcheck
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8080/actuator/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Application did not become healthy in time"
+          exit 1
+
+      - name: Run API tests from test/
+        run: |
+          echo "APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS}"
+          echo "TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS}"
+          python test/test.py
+          python test/test_composite_transactions.py
+          python test/test_security_validation.py
+          python test/test_access_matrix.py
+          python test/test_transaction_atomicity.py
+          python test/test_business_rules.py
+          python test/test_timeout_job_db_fixture.py
+
+
+      - name: Upload PostgreSQL CI log
+        if: always()
+        run: docker logs hh-process-ci-postgres > postgres-ci.log 2>&1 || true
+
+      - name: Upload CI app log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-app-log-${{ github.run_id }}
+          path: app-ci.log
+
+      - name: Upload PostgreSQL CI log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-postgres-log-${{ github.run_id }}
+          path: postgres-ci.log
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      jar_name: ${{ steps.vars.outputs.jar_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Build JAR
+        run: mvn -B clean package -DskipTests
+
+      - name: Detect JAR name
+        id: vars
+        run: |
+          JAR=$(ls -1 target/*-SNAPSHOT.jar target/*.jar 2>/dev/null | head -n1)
+          test -n "$JAR"
+          echo "jar_name=$(basename "$JAR")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar
+          path: target/${{ steps.vars.outputs.jar_name }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      JAR_NAME: ${{ needs.build.outputs.jar_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            infra/appctl.sh
+            test
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies for deployed API tests
+        run: python -m pip install --upgrade pip requests
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: jar
+          path: artifact
+
+      - name: Create app.env from secrets/vars
+        env:
+          ALL_SECRETS: ${{ toJSON(secrets) }}
+          ALL_VARS: ${{ toJSON(vars) }}
+        run: |
+          python << 'PYTHON'
+          import json
+          import os
+
+          secrets = json.loads(os.environ.get('ALL_SECRETS', '{}'))
+          vars = json.loads(os.environ.get('ALL_VARS', '{}'))
+
+          with open('app.env', 'w') as f:
+              for key, value in {**secrets, **vars}.items():
+                  if key not in [
+                      'SSH_KEY', 'SSH_HOST', 'SSH_PORT', 'SSH_USER',
+                      'VPS_SSH_KEY', 'VPS_SSH_HOST', 'VPS_SSH_PORT', 'VPS_SSH_USER',
+                      'HELIOS_TUNNEL_PRIVATE_KEY', 'DB_TUNNEL_REMOTE_HOST', 'DB_TUNNEL_REMOTE_PORT',
+                      'github_token'
+                  ]:
+                      if value is not None:
+                          value = str(value).strip()
+                      f.write(f'{key}={value}\n')
+          PYTHON
+
+          echo "Created app.env with $(wc -l < app.env) variables"
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_key
+          chmod 600 ~/.ssh/id_key
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Prepare VPS SSH for DB tunnel
+        if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
+        run: |
+          if [ -z "${{ secrets.VPS_SSH_HOST }}" ] || [ -z "${{ secrets.VPS_SSH_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
+            echo "VPS tunnel secrets are not fully configured; tunnel can only be reused if it already exists on helios"
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_vps
+          chmod 600 ~/.ssh/id_vps
+          VPS_PORT="${{ secrets.VPS_SSH_PORT }}"
+          [ -z "$VPS_PORT" ] && VPS_PORT=22
+          ssh-keyscan -p "$VPS_PORT" -H "${{ secrets.VPS_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          printf '%s\n' "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" > helios_tunnel_key
+          chmod 600 helios_tunnel_key
+
+      - name: Upload bundle to server
+        run: |
+          APP_DIR="~/apps/blps"
+          ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "mkdir -p ${APP_DIR}"
+
+          scp -P "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
+            "artifact/${{ env.JAR_NAME }}" \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${APP_DIR}/app.jar"
+
+          scp -P "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
+            app.env \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${APP_DIR}/app.env"
+
+          scp -P "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
+            infra/appctl.sh \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${APP_DIR}/appctl.sh"
+
+          ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "chmod +x ${APP_DIR}/appctl.sh"
+
+      - name: Ensure DB reverse tunnel on helios
+        if: ${{ vars.POSTGRES_HOST == '127.0.0.1' || vars.POSTGRES_HOST == 'localhost' }}
+        run: |
+          DB_PORT="${{ vars.POSTGRES_PORT }}"
+          [ -z "$DB_PORT" ] && DB_PORT=15432
+          REMOTE_DB_HOST="${{ vars.DB_TUNNEL_REMOTE_HOST }}"
+          [ -z "$REMOTE_DB_HOST" ] && REMOTE_DB_HOST=127.0.0.1
+          REMOTE_DB_PORT="${{ vars.DB_TUNNEL_REMOTE_PORT }}"
+          [ -z "$REMOTE_DB_PORT" ] && REMOTE_DB_PORT=5432
+          HELIOS_HOST="${{ secrets.SSH_HOST }}"
+          HELIOS_PORT="${{ secrets.SSH_PORT }}"
+          HELIOS_USER="${{ secrets.SSH_USER }}"
+
+          if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $DB_PORT"; then
+            echo "Reverse DB tunnel is already reachable on helios:127.0.0.1:$DB_PORT"
+            exit 0
+          fi
+
+          if [ -z "${{ secrets.VPS_SSH_HOST }}" ] || [ -z "${{ secrets.VPS_SSH_USER }}" ] || [ -z "${{ secrets.VPS_SSH_KEY }}" ] || [ -z "${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}" ]; then
+            echo "Reverse DB tunnel is down on helios, and VPS tunnel secrets are missing. Configure VPS_SSH_HOST, VPS_SSH_USER, VPS_SSH_KEY and HELIOS_TUNNEL_PRIVATE_KEY." >&2
+            exit 1
+          fi
+
+          VPS_PORT="${{ secrets.VPS_SSH_PORT }}"
+          [ -z "$VPS_PORT" ] && VPS_PORT=22
+
+          scp -P "$VPS_PORT" -i ~/.ssh/id_vps helios_tunnel_key "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}:~/.ssh/helios_tunnel_key"
+
+          ssh -p "$VPS_PORT" -i ~/.ssh/id_vps "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}"             "set -eu;              mkdir -p ~/.ssh;              chmod 700 ~/.ssh;              chmod 600 ~/.ssh/helios_tunnel_key;              ssh-keyscan -p '$HELIOS_PORT' -H '$HELIOS_HOST' >> ~/.ssh/known_hosts 2>/dev/null || true;              pkill -f 'R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}' 2>/dev/null || true;              ssh -f -N -i ~/.ssh/helios_tunnel_key -p '$HELIOS_PORT'                -o ExitOnForwardFailure=yes                -o ServerAliveInterval=30                -o ServerAliveCountMax=3                -R ${DB_PORT}:${REMOTE_DB_HOST}:${REMOTE_DB_PORT}                '$HELIOS_USER@$HELIOS_HOST'"
+
+          for i in {1..20}; do
+            if ssh -p "$HELIOS_PORT" -i ~/.ssh/id_key -o ConnectTimeout=5 "$HELIOS_USER@$HELIOS_HOST" "nc -z 127.0.0.1 $DB_PORT"; then
+              echo "Reverse DB tunnel is ready on helios:127.0.0.1:$DB_PORT"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Reverse DB tunnel did not become reachable on helios:127.0.0.1:$DB_PORT" >&2
+          exit 1
+
+      - name: Restart service on server
+        run: |
+          ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cd \$HOME/apps/blps && ./appctl.sh restart"
+
+      - name: Healthcheck
+        run: |
+          PORT="${{ vars.SERVER_PORT }}"
+          [ -z "$PORT" ] && PORT=8080
+          ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "i=0; while [ \$i -lt 60 ]; do nc -z 127.0.0.1 ${PORT} && exit 0; sleep 1; i=\$((i+1)); done; echo 'Port ${PORT} not open'; exit 1"
+
+      - name: Run deployed API tests via SSH tunnel
+        run: |
+          PORT="${{ vars.SERVER_PORT }}"
+          [ -z "$PORT" ] && PORT=8080
+          LOCAL_PORT=18080
+
+          ssh -N \
+            -L ${LOCAL_PORT}:127.0.0.1:${PORT} \
+            -p "${{ secrets.SSH_PORT }}" \
+            -i ~/.ssh/id_key \
+            -o ExitOnForwardFailure=yes \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=3 \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" &
+          TUNNEL_PID=$!
+          trap 'kill ${TUNNEL_PID} 2>/dev/null || true' EXIT
+
+          READY=0
+          for i in {1..20}; do
+            if curl -fsS "http://127.0.0.1:${LOCAL_PORT}/actuator/health" > /dev/null; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          [ "$READY" = "1" ] || { echo "Forwarded healthcheck failed"; exit 1; }
+
+          export BASE_URL="http://127.0.0.1:${LOCAL_PORT}"
+          export REQUEST_TIMEOUT=60
+
+          ADMIN_EMAIL_VALUE="${{ vars.ADMIN_EMAIL }}"
+          [ -n "$ADMIN_EMAIL_VALUE" ] && export ADMIN_EMAIL="$ADMIN_EMAIL_VALUE"
+
+          ADMIN_PASSWORD_VALUE="${{ secrets.ADMIN_PASSWORD }}"
+          [ -z "$ADMIN_PASSWORD_VALUE" ] && ADMIN_PASSWORD_VALUE="${{ vars.ADMIN_PASSWORD }}"
+          [ -n "$ADMIN_PASSWORD_VALUE" ] && export ADMIN_PASSWORD="$ADMIN_PASSWORD_VALUE"
+
+          RECRUITER_EMAIL_VALUE="${{ vars.RECRUITER_EMAIL }}"
+          [ -n "$RECRUITER_EMAIL_VALUE" ] && export RECRUITER_EMAIL="$RECRUITER_EMAIL_VALUE"
+
+          RECRUITER_PASSWORD_VALUE="${{ secrets.RECRUITER_PASSWORD }}"
+          [ -z "$RECRUITER_PASSWORD_VALUE" ] && RECRUITER_PASSWORD_VALUE="${{ vars.RECRUITER_PASSWORD }}"
+          [ -n "$RECRUITER_PASSWORD_VALUE" ] && export RECRUITER_PASSWORD="$RECRUITER_PASSWORD_VALUE"
+
+          CANDIDATE_PASSWORD_VALUE="${{ secrets.CANDIDATE_PASSWORD }}"
+          [ -z "$CANDIDATE_PASSWORD_VALUE" ] && CANDIDATE_PASSWORD_VALUE="${{ vars.CANDIDATE_PASSWORD }}"
+          [ -n "$CANDIDATE_PASSWORD_VALUE" ] && export CANDIDATE_PASSWORD="$CANDIDATE_PASSWORD_VALUE"
+
+          APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS_VALUE="${{ vars.APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS }}"
+          [ -n "$APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS_VALUE" ] && export APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS="$APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS_VALUE"
+          if [ -n "${TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-}" ]; then
+            export TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS
+          elif [ -n "$APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS_VALUE" ]; then
+            case "$(echo "$APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS_VALUE" | tr '[:upper:]' '[:lower:]')" in
+              1|true|yes|on) export TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=1 ;;&
+              *) export TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=0 ;;&
+            esac
+          fi
+
+          echo "APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-}"
+          echo "TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:-}"
+
+          python test/test.py
+
+
+      - name: Fetch app.log from server
+        if: always()
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_key
+          chmod 600 ~/.ssh/id_key
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -p "${{ secrets.SSH_PORT }}" -i ~/.ssh/id_key -o ConnectTimeout=10 \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cat ~/apps/blps/app.log 2>/dev/null || echo '(app.log not found or empty)'" > app.log 2>/dev/null || true
+          test -f app.log || echo "app.log not available" > app.log
+
+      - name: Upload app.log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-log-${{ github.run_id }}
+          path: app.log
+
+  notify-telegram-on-failure:
+    needs: [test, build, deploy]
+    if: failure() && (needs.deploy.result == 'failure' || needs.test.result == 'failure')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download app.log artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: app-log-${{ github.run_id }}
+
+      - name: Download CI app log artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: ci-app-log-${{ github.run_id }}
+
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_IDS" ]; then
+            echo "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_IDS not set, skipping notification"
+            exit 0
+          fi
+          if [ -f app.log ] && [ -s app.log ] && [ $(wc -c < app.log) -gt 2000000 ]; then
+            tail -c 2000000 app.log > app_truncated.log && mv app_truncated.log app.log
+          fi
+          if [ -f app-ci.log ] && [ -s app-ci.log ] && [ $(wc -c < app-ci.log) -gt 2000000 ]; then
+            tail -c 2000000 app-ci.log > app_ci_truncated.log && mv app_ci_truncated.log app-ci.log
+          fi
+          REPO="${{ github.repository }}"
+          RUN_URL="${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT="${{ github.sha }}"
+          MSG="❌ *Пайплайн упал:* \`$REPO\`
+          Ветка: \`$BRANCH\`
+          Коммит: \`${COMMIT:0:7}\`
+          [Смотреть запуск]($RUN_URL)"
+          MSG_JSON=$(echo "$MSG" | jq -Rs .)
+          echo "$TELEGRAM_CHAT_IDS" | tr ',' '\n' | while IFS= read -r raw; do
+            raw=$(echo "$raw" | tr -d '[:space:]')
+            [ -z "$raw" ] && continue
+            if echo "$raw" | grep -qE '^-?[0-9]+$'; then
+              CHAT_ID="$raw"
+            else
+              [ "${raw#@}" = "$raw" ] && CHAT_ID="@$raw" || CHAT_ID="$raw"
+            fi
+            RESP=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d "{\"chat_id\":\"${CHAT_ID}\",\"text\":${MSG_JSON},\"parse_mode\":\"Markdown\",\"disable_web_page_preview\":true}")
+            if echo "$RESP" | jq -e '.ok == false' >/dev/null 2>&1; then
+              echo "Telegram error for ${CHAT_ID}: $(echo "$RESP" | jq -r '.description // .')"
+            fi
+            for log in app.log app-ci.log; do
+              if [ -f "$log" ] && [ -s "$log" ]; then
+                RESP2=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+                  -F "chat_id=${CHAT_ID}" -F "document=@${log}" -F "caption=${log}")
+                if echo "$RESP2" | jq -e '.ok == false' >/dev/null 2>&1; then
+                  echo "Telegram sendDocument error for ${CHAT_ID}: $(echo "$RESP2" | jq -r '.description // .')"
+                fi
+              fi
+            done
+          done
+
+  notify-telegram-on-success:
+    needs: [test, build, deploy]
+    if: success() && (needs.deploy.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_IDS" ]; then
+            echo "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_IDS not set, skipping notification"
+            exit 0
+          fi
+          REPO="${{ github.repository }}"
+          RUN_URL="${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT="${{ github.sha }}"
+          MSG="✅ *Деплой успешен:* \`$REPO\`
+          Ветка: \`$BRANCH\`
+          Коммит: \`${COMMIT:0:7}\`
+          [Смотреть запуск]($RUN_URL)"
+          MSG_JSON=$(echo "$MSG" | jq -Rs .)
+          echo "$TELEGRAM_CHAT_IDS" | tr ',' '\n' | while IFS= read -r raw; do
+            raw=$(echo "$raw" | tr -d '[:space:]')
+            [ -z "$raw" ] && continue
+            if echo "$raw" | grep -qE '^-?[0-9]+$'; then
+              CHAT_ID="$raw"
+            else
+              [ "${raw#@}" = "$raw" ] && CHAT_ID="@$raw" || CHAT_ID="$raw"
+            fi
+            RESP=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d "{\"chat_id\":\"${CHAT_ID}\",\"text\":${MSG_JSON},\"parse_mode\":\"Markdown\",\"disable_web_page_preview\":true}")
+            if echo "$RESP" | jq -e '.ok == false' >/dev/null 2>&1; then
+              echo "Telegram error for ${CHAT_ID}: $(echo "$RESP" | jq -r '.description // .')"
+            fi
+          done

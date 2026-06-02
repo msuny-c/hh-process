@@ -35,6 +35,7 @@ public class ApplicationService {
         private final AuthService authService;
         private final ApplicationMapper applicationMapper;
         private final InterviewService interviewService;
+        private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
 
         @Transactional
         public CreateApplicationResponse create(UUID vacancyId, CreateApplicationRequest request) {
@@ -52,11 +53,14 @@ public class ApplicationService {
                 }
 
                 ApplicationEntity application = saveNewApplication(vacancy, candidateUser, request);
-                ScreeningResultEntity screeningResult = screeningService.performScreening(application);
+                camundaWorkflowFacade.startApplicationProcess(application)
+                                .ifPresent(application::setCamundaProcessInstanceId);
 
-                return screeningResult.isPassed()
-                                ? handleScreeningPassed(application, vacancy)
-                                : handleScreeningFailed(application, candidateUser);
+                return CreateApplicationResponse.builder()
+                                .applicationId(application.getId())
+                                .status(ApplicationStatus.SCREENING_IN_PROGRESS.toExternalStatus())
+                                .message("Application submitted")
+                                .build();
         }
 
         @Transactional(readOnly = true)
@@ -105,45 +109,4 @@ public class ApplicationService {
                 return application;
         }
 
-        private CreateApplicationResponse handleScreeningFailed(ApplicationEntity application,
-                        UserEntity candidateUser) {
-                application.setStatus(ApplicationStatus.SCREENING_FAILED);
-                application.setClosedAt(Instant.now());
-                applicationRepository.save(application);
-
-                historyService.record(application,
-                                ApplicationStatus.SCREENING_IN_PROGRESS,
-                                ApplicationStatus.SCREENING_FAILED,
-                                null);
-
-                notificationService.create(candidateUser, application,
-                                NotificationType.SCREENING_RESULT, "Your application has been rejected");
-
-                return CreateApplicationResponse.builder()
-                                .applicationId(application.getId())
-                                .status(ApplicationStatus.SCREENING_FAILED.toExternalStatus())
-                                .message("Application rejected")
-                                .build();
-        }
-
-        private CreateApplicationResponse handleScreeningPassed(ApplicationEntity application, VacancyEntity vacancy) {
-                application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
-                applicationRepository.save(application);
-
-                historyService.record(application,
-                                ApplicationStatus.SCREENING_IN_PROGRESS,
-                                ApplicationStatus.ON_RECRUITER_REVIEW,
-                                null);
-
-                UserEntity recruiterUser = vacancy.getRecruiterUser();
-                notificationService.create(recruiterUser, application,
-                                NotificationType.NEW_APPLICATION,
-                                "New application received for vacancy: " + vacancy.getTitle());
-
-                return CreateApplicationResponse.builder()
-                                .applicationId(application.getId())
-                                .status(ApplicationStatus.ON_RECRUITER_REVIEW.toExternalStatus())
-                                .message("Application submitted")
-                                .build();
-        }
 }

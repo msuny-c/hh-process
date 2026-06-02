@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, Tuple
 import requests
 from requests.exceptions import ReadTimeout
 
-BASE_URL = os.getenv('BASE_URL', 'http://localhost:8080').rstrip('/')
+BASE_URL = os.getenv('BASE_URL', 'http:
 RECRUITER_EMAIL = os.getenv('RECRUITER_EMAIL', 'recruiter@example.com')
 RECRUITER_PASSWORD = os.getenv('RECRUITER_PASSWORD', 'password123')
 CANDIDATE_PASSWORD = os.getenv('CANDIDATE_PASSWORD', 'password123')
@@ -56,7 +56,7 @@ def week_offset_for(dt: datetime) -> int:
     now = datetime.now(timezone.utc)
     current_week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     target_week_start = (dt - timedelta(days=dt.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-    return int((target_week_start - current_week_start).days // 7)
+    return int((target_week_start - current_week_start).days
 
 def invite_with_retry(api: API, app_id: str, recruiter: SessionCtx, start_at: datetime, duration_minutes: int, attempts: int = 6):
     scheduled_at = start_at

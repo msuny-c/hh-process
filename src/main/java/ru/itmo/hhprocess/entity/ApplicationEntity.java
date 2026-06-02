@@ -63,6 +63,9 @@ public class ApplicationEntity {
     @Column(name = "closed_at")
     private Instant closedAt;
 
+    @Column(name = "camunda_process_instance_id", length = 64)
+    private String camundaProcessInstanceId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

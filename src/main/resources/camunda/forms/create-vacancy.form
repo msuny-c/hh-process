@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 11,
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "type": "default",
+  "id": "create-vacancy-form",
+  "components": [
+    { "type": "textfield", "id": "title", "key": "title", "label": "Название вакансии", "validate": { "required": true } },
+    { "type": "textarea", "id": "description", "key": "description", "label": "Описание" },
+    { "type": "textarea", "id": "requiredSkills", "key": "requiredSkills", "label": "Навыки через запятую", "validate": { "required": true } },
+    { "type": "number", "id": "screeningThreshold", "key": "screeningThreshold", "label": "Порог автоскрининга, %", "defaultValue": 75, "validate": { "required": true, "min": 0, "max": 100 } }
+  ]
+}

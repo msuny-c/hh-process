@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_HH_Application"
+                  targetNamespace="http://itmo.ru/hhprocess/camunda">
+
+  <bpmn:process id="hhApplicationProcess" name="HH.ru: обработка отклика кандидата" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:laneSet id="LaneSet_Application">
+      <bpmn:lane id="Lane_Candidate" name="Соискатель">
+        <bpmn:flowNodeRef>Start_ApplicationSubmitted</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CandidateInvitationResponseTask</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_ResponseSaved</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_ScreeningFailed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Rejected</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Timeout</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_VacancyClosed</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_System" name="Система HH">
+        <bpmn:flowNodeRef>AutoScreenApplication</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ScreeningPassed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>NotifyScreeningFailed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>PersistInvitation</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>PersistCandidateResponse</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CloseByTimeout</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>InvitationTimeoutBoundary</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Response</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_RecruiterDecision</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>NotifyRecruiter</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Recruiter" name="HR / рекрутер">
+        <bpmn:flowNodeRef>RecruiterDecisionTask</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>WriteInvitationTask</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>PersistRejection</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <bpmn:startEvent id="Start_ApplicationSubmitted" name="Отклик отправлен">
+      <bpmn:outgoing>Flow_Start_AutoScreen</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="AutoScreenApplication" name="Выполнить автоскрининг резюме" camunda:type="external" camunda:topic="application-auto-screening">
+      <bpmn:incoming>Flow_Start_AutoScreen</bpmn:incoming>
+      <bpmn:outgoing>Flow_AutoScreen_Gateway</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="Gateway_ScreeningPassed" name="Автоскрининг пройден?">
+      <bpmn:incoming>Flow_AutoScreen_Gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_Screening_No</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Screening_Yes</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="NotifyScreeningFailed" name="Зафиксировать отказ и уведомить кандидата" camunda:type="external" camunda:topic="notification-send">
+      <bpmn:incoming>Flow_Screening_No</bpmn:incoming>
+      <bpmn:outgoing>Flow_ScreeningFailed_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="End_ScreeningFailed" name="Получен отказ">
+      <bpmn:incoming>Flow_ScreeningFailed_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:serviceTask id="NotifyRecruiter" name="Отправить уведомление рекрутеру об отклике" camunda:type="external" camunda:topic="notification-send">
+      <bpmn:incoming>Flow_Screening_Yes</bpmn:incoming>
+      <bpmn:outgoing>Flow_Notify_RecruiterDecision</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:userTask id="RecruiterDecisionTask" name="Рассмотреть отклик и принять решение" camunda:candidateGroups="RECRUITER" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest">
+      <bpmn:incoming>Flow_Notify_RecruiterDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_Decision_Gateway</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_RecruiterDecision" name="Решение рекрутера">
+      <bpmn:incoming>Flow_Decision_Gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_Decision_Reject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Decision_Invite</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Decision_VacancyClosed</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="PersistRejection" name="Зафиксировать отказ в БД и уведомить кандидата" camunda:type="external" camunda:topic="notification-send">
+      <bpmn:incoming>Flow_Decision_Reject</bpmn:incoming>
+      <bpmn:outgoing>Flow_Rejection_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="End_Rejected" name="Отклик отклонен">
+      <bpmn:incoming>Flow_Rejection_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:userTask id="WriteInvitationTask" name="Написать приглашение" camunda:candidateGroups="RECRUITER" camunda:formRef="invitation-form" camunda:formRefBinding="latest">
+      <bpmn:incoming>Flow_Decision_Invite</bpmn:incoming>
+      <bpmn:outgoing>Flow_Invitation_Persist</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:serviceTask id="PersistInvitation" name="Зафиксировать приглашение и уведомить кандидата" camunda:type="external" camunda:topic="notification-send">
+      <bpmn:incoming>Flow_Invitation_Persist</bpmn:incoming>
+      <bpmn:outgoing>Flow_Persist_ResponseTask</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:userTask id="CandidateInvitationResponseTask" name="Ответить на приглашение" camunda:candidateGroups="CANDIDATE" camunda:formRef="invitation-response-form" camunda:formRefBinding="latest">
+      <bpmn:incoming>Flow_Persist_ResponseTask</bpmn:incoming>
+      <bpmn:outgoing>Flow_Response_Gateway</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:boundaryEvent id="InvitationTimeoutBoundary" name="Срок ответа истек" attachedToRef="CandidateInvitationResponseTask" cancelActivity="true">
+      <bpmn:outgoing>Flow_Timeout_Close</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerDefinition_InvitationTimeout">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT48H</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+
+    <bpmn:exclusiveGateway id="Gateway_Response" name="Ответ кандидата">
+      <bpmn:incoming>Flow_Response_Gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_Response_Normal</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Response_VacancyClosed</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Response_Timeout</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="PersistCandidateResponse" name="Зафиксировать ответ и уведомить рекрутера" camunda:type="external" camunda:topic="notification-send">
+      <bpmn:incoming>Flow_Response_Normal</bpmn:incoming>
+      <bpmn:outgoing>Flow_Response_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="CloseByTimeout" name="Закрыть отклик по таймауту" camunda:type="external" camunda:topic="timeout-close-expired">
+      <bpmn:incoming>Flow_Timeout_Close</bpmn:incoming>
+      <bpmn:outgoing>Flow_Timeout_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="End_ResponseSaved" name="Получен ответ на приглашение">
+      <bpmn:incoming>Flow_Response_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="End_Timeout" name="Отклик закрыт по таймауту">
+      <bpmn:incoming>Flow_Timeout_End</bpmn:incoming>
+      <bpmn:incoming>Flow_Response_Timeout</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="End_VacancyClosed" name="Отклик закрыт из-за закрытия вакансии">
+      <bpmn:incoming>Flow_Decision_VacancyClosed</bpmn:incoming>
+      <bpmn:incoming>Flow_Response_VacancyClosed</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_AutoScreen" sourceRef="Start_ApplicationSubmitted" targetRef="AutoScreenApplication" />
+    <bpmn:sequenceFlow id="Flow_AutoScreen_Gateway" sourceRef="AutoScreenApplication" targetRef="Gateway_ScreeningPassed" />
+    <bpmn:sequenceFlow id="Flow_Screening_No" sourceRef="Gateway_ScreeningPassed" targetRef="NotifyScreeningFailed">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${screeningPassed == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Screening_Yes" sourceRef="Gateway_ScreeningPassed" targetRef="NotifyRecruiter">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${screeningPassed == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ScreeningFailed_End" sourceRef="NotifyScreeningFailed" targetRef="End_ScreeningFailed" />
+    <bpmn:sequenceFlow id="Flow_Notify_RecruiterDecision" sourceRef="NotifyRecruiter" targetRef="RecruiterDecisionTask" />
+    <bpmn:sequenceFlow id="Flow_Decision_Gateway" sourceRef="RecruiterDecisionTask" targetRef="Gateway_RecruiterDecision" />
+    <bpmn:sequenceFlow id="Flow_Decision_Reject" sourceRef="Gateway_RecruiterDecision" targetRef="PersistRejection">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${decision == 'REJECT'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Decision_Invite" sourceRef="Gateway_RecruiterDecision" targetRef="WriteInvitationTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${decision == 'INVITE'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Decision_VacancyClosed" sourceRef="Gateway_RecruiterDecision" targetRef="End_VacancyClosed">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${decision == 'VACANCY_CLOSED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Rejection_End" sourceRef="PersistRejection" targetRef="End_Rejected" />
+    <bpmn:sequenceFlow id="Flow_Invitation_Persist" sourceRef="WriteInvitationTask" targetRef="PersistInvitation" />
+    <bpmn:sequenceFlow id="Flow_Persist_ResponseTask" sourceRef="PersistInvitation" targetRef="CandidateInvitationResponseTask" />
+    <bpmn:sequenceFlow id="Flow_Response_Gateway" sourceRef="CandidateInvitationResponseTask" targetRef="Gateway_Response" />
+    <bpmn:sequenceFlow id="Flow_Response_Normal" sourceRef="Gateway_Response" targetRef="PersistCandidateResponse">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType == 'ACCEPT' || responseType == 'DECLINE' || responseType == 'OTHER'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Response_VacancyClosed" sourceRef="Gateway_Response" targetRef="End_VacancyClosed">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType == 'VACANCY_CLOSED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Response_Timeout" sourceRef="Gateway_Response" targetRef="End_Timeout">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType == 'TIMEOUT'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Response_End" sourceRef="PersistCandidateResponse" targetRef="End_ResponseSaved" />
+    <bpmn:sequenceFlow id="Flow_Timeout_Close" sourceRef="InvitationTimeoutBoundary" targetRef="CloseByTimeout" />
+    <bpmn:sequenceFlow id="Flow_Timeout_End" sourceRef="CloseByTimeout" targetRef="End_Timeout" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_HH_Application">
+    <bpmndi:BPMNPlane id="BPMNPlane_HH_Application" bpmnElement="hhApplicationProcess">
+      <bpmndi:BPMNShape id="Start_ApplicationSubmitted_di" bpmnElement="Start_ApplicationSubmitted"><dc:Bounds x="120" y="180" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="AutoScreenApplication_di" bpmnElement="AutoScreenApplication"><dc:Bounds x="210" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_ScreeningPassed_di" bpmnElement="Gateway_ScreeningPassed" isMarkerVisible="true"><dc:Bounds x="420" y="173" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NotifyScreeningFailed_di" bpmnElement="NotifyScreeningFailed"><dc:Bounds x="530" y="70" width="180" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_ScreeningFailed_di" bpmnElement="End_ScreeningFailed"><dc:Bounds x="780" y="92" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NotifyRecruiter_di" bpmnElement="NotifyRecruiter"><dc:Bounds x="530" y="240" width="180" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="RecruiterDecisionTask_di" bpmnElement="RecruiterDecisionTask"><dc:Bounds x="780" y="240" width="180" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_RecruiterDecision_di" bpmnElement="Gateway_RecruiterDecision" isMarkerVisible="true"><dc:Bounds x="1015" y="255" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PersistRejection_di" bpmnElement="PersistRejection"><dc:Bounds x="1130" y="120" width="190" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Rejected_di" bpmnElement="End_Rejected"><dc:Bounds x="1370" y="142" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="WriteInvitationTask_di" bpmnElement="WriteInvitationTask"><dc:Bounds x="1130" y="260" width="180" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PersistInvitation_di" bpmnElement="PersistInvitation"><dc:Bounds x="1370" y="260" width="190" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CandidateInvitationResponseTask_di" bpmnElement="CandidateInvitationResponseTask"><dc:Bounds x="1620" y="260" width="180" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="InvitationTimeoutBoundary_di" bpmnElement="InvitationTimeoutBoundary"><dc:Bounds x="1692" y="322" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Response_di" bpmnElement="Gateway_Response" isMarkerVisible="true"><dc:Bounds x="1860" y="275" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PersistCandidateResponse_di" bpmnElement="PersistCandidateResponse"><dc:Bounds x="1970" y="240" width="190" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_ResponseSaved_di" bpmnElement="End_ResponseSaved"><dc:Bounds x="2220" y="262" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CloseByTimeout_di" bpmnElement="CloseByTimeout"><dc:Bounds x="1790" y="410" width="180" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Timeout_di" bpmnElement="End_Timeout"><dc:Bounds x="2040" y="432" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_VacancyClosed_di" bpmnElement="End_VacancyClosed"><dc:Bounds x="1370" y="420" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

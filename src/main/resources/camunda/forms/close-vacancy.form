@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 11,
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "type": "default",
+  "id": "close-vacancy-form",
+  "components": [
+    {
+      "type": "select",
+      "id": "action",
+      "key": "action",
+      "label": "Действие",
+      "values": [
+        { "label": "Закрыть вакансию", "value": "CLOSE" }
+      ],
+      "defaultValue": "CLOSE",
+      "validate": { "required": true }
+    },
+    { "type": "textarea", "id": "closeReason", "key": "closeReason", "label": "Причина закрытия" }
+  ]
+}

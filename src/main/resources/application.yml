@@ -1,6 +1,8 @@
 spring:
   application:
     name: hh-process
+  jta:
+    enabled: ${SPRING_JTA_ENABLED:true}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -10,7 +12,7 @@ spring:
         format_sql: true
         default_schema: ${POSTGRES_SCHEMA}
         transaction:
-          coordinator_class: jta
+          coordinator_class: ${HIBERNATE_TRANSACTION_COORDINATOR_CLASS:jta}
     open-in-view: false
   flyway:
     enabled: true
@@ -48,17 +50,36 @@ narayana:
 
 app:
   openapi:
-    title: @project.name@
-    version: @project.version@
-    description: @project.description@
+    title: "@project.name@"
+    version: "@project.version@"
+    description: "@project.description@"
   security:
     users-xml-path: ${APP_SECURITY_USERS_XML:${user.dir}/data/users.xml}
 
   websocket:
     allowed-origins: ${WS_ALLOWED_ORIGINS:http://localhost:3000}
   timeout:
+    local-scheduler-enabled: ${APP_TIMEOUT_LOCAL_SCHEDULER_ENABLED:false}
     debug:
       disable-notifications: ${APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS:false}
+
+  camunda:
+    enabled: ${CAMUNDA_ENABLED:true}
+    base-url: ${CAMUNDA_BASE_URL:http://camunda:8080/engine-rest}
+    username: ${CAMUNDA_USERNAME:}
+    password: ${CAMUNDA_PASSWORD:}
+    fail-on-error: ${CAMUNDA_FAIL_ON_ERROR:false}
+    deployment-name: ${CAMUNDA_DEPLOYMENT_NAME:hh-process-bpmn}
+    application-process-key: hhApplicationProcess
+    vacancy-process-key: hhVacancyProcess
+    timeout-scheduler-process-key: hhTimeoutSchedulerProcess
+    worker:
+      enabled: ${CAMUNDA_WORKER_ENABLED:true}
+      id: ${CAMUNDA_WORKER_ID:hh-process-worker}
+      max-tasks: ${CAMUNDA_WORKER_MAX_TASKS:10}
+      lock-duration-ms: ${CAMUNDA_WORKER_LOCK_DURATION_MS:30000}
+      async-response-timeout-ms: ${CAMUNDA_WORKER_ASYNC_RESPONSE_TIMEOUT_MS:2000}
+      poll-interval-ms: ${CAMUNDA_WORKER_POLL_INTERVAL_MS:3000}
 
 
 logging:

@@ -26,6 +26,11 @@ public class ScreeningService {
 
     @Transactional
     public ScreeningResultEntity performScreening(ApplicationEntity application) {
+        return screeningResultRepository.findByApplicationId(application.getId())
+                .orElseGet(() -> performNewScreening(application));
+    }
+
+    private ScreeningResultEntity performNewScreening(ApplicationEntity application) {
         VacancyEntity vacancy = application.getVacancy();
         List<String> requiredSkills = vacancy.getRequiredSkills();
         String resumeText = application.getResumeText();

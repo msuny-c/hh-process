@@ -438,7 +438,7 @@ jobs:
             if echo "$raw" | grep -qE '^-?[0-9]+$'; then
               CHAT_ID="$raw"
             else
-              [ "${raw#@}" = "$raw" ] && CHAT_ID="@$raw" || CHAT_ID="$raw"
+              [ "${raw
             fi
             RESP=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
               -H "Content-Type: application/json" \
@@ -486,7 +486,7 @@ jobs:
             if echo "$raw" | grep -qE '^-?[0-9]+$'; then
               CHAT_ID="$raw"
             else
-              [ "${raw#@}" = "$raw" ] && CHAT_ID="@$raw" || CHAT_ID="$raw"
+              [ "${raw
             fi
             RESP=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
               -H "Content-Type: application/json" \

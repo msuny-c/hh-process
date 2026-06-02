@@ -33,8 +33,8 @@ public class InterviewProcessService {
     private final ScheduleService scheduleService;
     private final HistoryService historyService;
     private final NotificationService notificationService;
+    private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
 
-    @Transactional
     public InviteResponse invite(UUID applicationId, InviteRequest request) {
         UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
         ApplicationEntity application = findAndCheckOwnership(applicationId, recruiterUser);
@@ -54,31 +54,25 @@ public class InterviewProcessService {
         int duration = request.getDurationMinutes() != null ? request.getDurationMinutes() : DEFAULT_DURATION_MINUTES;
         Instant expiresAt = now.plus(INVITATION_TTL_HOURS, ChronoUnit.HOURS);
 
-        application.setStatus(ApplicationStatus.INVITED);
-        application.setInvitationText(request.getMessage());
-        application.setInvitationSentAt(now);
-        application.setInvitationExpiresAt(expiresAt);
-        applicationRepository.save(application);
+        if (!camundaWorkflowFacade.recruiterInvited(application, request.getMessage(), scheduledAt, duration, expiresAt)) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                    "Camunda recruiter invitation task is not active");
+        }
 
-        InterviewEntity interview = interviewService.createScheduledInterview(application, recruiterUser, scheduledAt, duration, request.getMessage());
-        RecruiterScheduleSlotEntity slot = scheduleService.reserveOnTheFly(recruiterUser, interview, scheduledAt, duration);
-
-        historyService.record(application, ApplicationStatus.ON_RECRUITER_REVIEW, ApplicationStatus.INVITED, recruiterUser);
-        notificationService.create(application.getCandidateUser(), application, NotificationType.INVITATION,
-                "You have been invited to an interview: " + request.getMessage());
-
+        application = waitForApplicationStatus(applicationId, ApplicationStatus.INVITED);
+        InterviewEntity interview = waitForActiveInterview(applicationId);
+        RecruiterScheduleSlotEntity slot = scheduleService.findByInterviewId(interview);
         return InviteResponse.builder()
                 .applicationId(application.getId())
                 .status(ApplicationStatus.INVITED.toExternalStatus())
-                .expiresAt(expiresAt)
+                .expiresAt(application.getInvitationExpiresAt())
                 .interviewId(interview.getId())
                 .scheduledAt(interview.getScheduledAt())
                 .durationMinutes(interview.getDurationMinutes())
-                .scheduleSlotId(slot.getId())
+                .scheduleSlotId(slot != null ? slot.getId() : null)
                 .build();
     }
 
-    @Transactional
     public RejectResponse reject(UUID applicationId, RejectRequest request) {
         UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
         ApplicationEntity application = findAndCheckOwnership(applicationId, recruiterUser);
@@ -87,20 +81,12 @@ public class InterviewProcessService {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE, "Application is already closed");
         }
 
-        interviewService.findActiveByApplicationId(application.getId()).ifPresent(interview -> {
-            interviewService.cancel(interview, request.getComment());
-            scheduleService.releaseForInterview(interview);
-        });
+        if (!camundaWorkflowFacade.recruiterRejected(application, request.getComment())) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                    "Camunda recruiter decision task is not active");
+        }
 
-        application.setStatus(ApplicationStatus.REJECTED_BY_RECRUITER);
-        application.setRecruiterComment(request.getComment());
-        application.setClosedAt(Instant.now());
-        applicationRepository.save(application);
-
-        historyService.record(application, oldStatus, ApplicationStatus.REJECTED_BY_RECRUITER, recruiterUser);
-        notificationService.create(application.getCandidateUser(), application, NotificationType.APPLICATION_REJECTED,
-                "Your application has been rejected");
-
+        application = waitForApplicationStatus(applicationId, ApplicationStatus.REJECTED_BY_RECRUITER);
         return RejectResponse.builder().applicationId(application.getId()).status(ApplicationStatus.REJECTED_BY_RECRUITER.toExternalStatus()).build();
     }
 
@@ -145,7 +131,7 @@ public class InterviewProcessService {
     }
 
     private ApplicationEntity findAndCheckOwnership(UUID applicationId, UserEntity recruiterUser) {
-        ApplicationEntity application = applicationRepository.findById(applicationId)
+        ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
         if (!application.getVacancy().getRecruiterUser().getId().equals(recruiterUser.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED, "Application does not belong to your vacancy");
@@ -157,6 +143,41 @@ public class InterviewProcessService {
         if (application.getStatus() != expected) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
                     "Application is not in " + expected + " status");
+        }
+    }
+
+    private ApplicationEntity waitForApplicationStatus(UUID applicationId, ApplicationStatus expected) {
+        for (int attempt = 0; attempt < 24; attempt++) {
+            ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
+            if (application.getStatus() == expected) {
+                return application;
+            }
+            sleep();
+        }
+        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                "Camunda process did not reach " + expected + " in time");
+    }
+
+    private InterviewEntity waitForActiveInterview(UUID applicationId) {
+        for (int attempt = 0; attempt < 24; attempt++) {
+            var interview = interviewService.findActiveByApplicationId(applicationId);
+            if (interview.isPresent()) {
+                return interview.get();
+            }
+            sleep();
+        }
+        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                "Camunda process did not create an active interview in time");
+    }
+
+    private static void sleep() {
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                    "Interrupted while waiting for Camunda process");
         }
     }
 }

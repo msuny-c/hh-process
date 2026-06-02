@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_HH_TimeoutScheduler"
+                  targetNamespace="http://itmo.ru/hhprocess/camunda">
+  <bpmn:process id="hhTimeoutSchedulerProcess" name="HH.ru: периодическая проверка просроченных приглашений" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="Start_Timer" name="Каждую минуту">
+      <bpmn:outgoing>Flow_Timer_CloseExpired</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerDefinition_EveryMinute">
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT1M</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="CloseExpiredInvitations" name="Закрыть просроченные приглашения" camunda:type="external" camunda:topic="timeout-close-expired">
+      <bpmn:incoming>Flow_Timer_CloseExpired</bpmn:incoming>
+      <bpmn:outgoing>Flow_CloseExpired_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="End_TimerRunCompleted" name="Проверка завершена">
+      <bpmn:incoming>Flow_CloseExpired_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_Timer_CloseExpired" sourceRef="Start_Timer" targetRef="CloseExpiredInvitations" />
+    <bpmn:sequenceFlow id="Flow_CloseExpired_End" sourceRef="CloseExpiredInvitations" targetRef="End_TimerRunCompleted" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_HH_TimeoutScheduler">
+    <bpmndi:BPMNPlane id="BPMNPlane_HH_TimeoutScheduler" bpmnElement="hhTimeoutSchedulerProcess">
+      <bpmndi:BPMNShape id="Start_Timer_di" bpmnElement="Start_Timer"><dc:Bounds x="120" y="180" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CloseExpiredInvitations_di" bpmnElement="CloseExpiredInvitations"><dc:Bounds x="230" y="158" width="220" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_TimerRunCompleted_di" bpmnElement="End_TimerRunCompleted"><dc:Bounds x="540" y="180" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

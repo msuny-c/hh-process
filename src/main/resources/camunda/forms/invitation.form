@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 11,
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "type": "default",
+  "id": "invitation-form",
+  "components": [
+    { "type": "textarea", "id": "invitationMessage", "key": "invitationMessage", "label": "Текст приглашения", "validate": { "required": true } },
+    { "type": "textfield", "id": "scheduledAt", "key": "scheduledAt", "label": "Дата интервью ISO-8601", "validate": { "required": true } },
+    { "type": "number", "id": "durationMinutes", "key": "durationMinutes", "label": "Длительность, минут", "defaultValue": 60, "validate": { "required": true, "min": 5 } }
+  ]
+}
