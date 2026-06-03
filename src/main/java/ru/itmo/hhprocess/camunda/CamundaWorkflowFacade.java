@@ -4,15 +4,20 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
+import ru.itmo.hhprocess.entity.InterviewEntity;
+import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.entity.VacancyEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
+import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.enums.ResponseType;
+import ru.itmo.hhprocess.exception.ApiException;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 
 @Slf4j
 @Component
@@ -23,6 +28,8 @@ public class CamundaWorkflowFacade {
     private static final String WRITE_INVITATION_TASK = "WriteInvitationTask";
     private static final String CANDIDATE_RESPONSE_TASK = "CandidateInvitationResponseTask";
     private static final String MANAGE_VACANCY_TASK = "ManageVacancyTask";
+    private static final String RECRUITER_GROUP = "RECRUITER";
+    private static final String CANDIDATE_GROUP = "CANDIDATE";
 
     private final CamundaRestClient camundaRestClient;
     private final CamundaProperties properties;
@@ -57,21 +64,34 @@ public class CamundaWorkflowFacade {
         );
     }
 
-    public boolean recruiterRejected(ApplicationEntity application, String comment) {
-        return completeApplicationTask(application.getId(), RECRUITER_DECISION_TASK, Map.of(
+    public boolean recruiterRejected(ApplicationEntity application, UserEntity recruiterUser, String comment) {
+        assertRecruiterCanComplete(application, recruiterUser);
+        Map<String, Object> variables = Map.of(
                 "decision", "REJECT",
                 "recruiterComment", safe(comment),
                 "decidedAt", Instant.now()
+        );
+        if (completeApplicationTask(application.getId(), RECRUITER_DECISION_TASK, RECRUITER_GROUP, recruiterUser.getId(), variables)) {
+            return true;
+        }
+        return completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, Map.of(
+                "responseType", "RECRUITER_REJECT",
+                "decision", "REJECT",
+                "recruiterComment", safe(comment),
+                "decidedAt", Instant.now(),
+                "completedByUserId", recruiterUser.getId(),
+                "completedByGroup", RECRUITER_GROUP
         ));
     }
 
-    public boolean recruiterInvited(ApplicationEntity application, String message, Instant scheduledAt, Integer durationMinutes, Instant expiresAt) {
+    public boolean recruiterInvited(ApplicationEntity application, UserEntity recruiterUser, String message, Instant scheduledAt, Integer durationMinutes, Instant expiresAt) {
+        assertRecruiterCanComplete(application, recruiterUser);
         UUID applicationId = application.getId();
-        boolean decisionCompleted = completeApplicationTask(applicationId, RECRUITER_DECISION_TASK, Map.of(
+        boolean decisionCompleted = completeApplicationTask(applicationId, RECRUITER_DECISION_TASK, RECRUITER_GROUP, recruiterUser.getId(), Map.of(
                 "decision", "INVITE",
                 "decidedAt", Instant.now()
         ));
-        boolean invitationCompleted = completeApplicationTask(applicationId, WRITE_INVITATION_TASK, Map.of(
+        boolean invitationCompleted = completeApplicationTask(applicationId, WRITE_INVITATION_TASK, RECRUITER_GROUP, recruiterUser.getId(), Map.of(
                 "invitationMessage", safe(message),
                 "scheduledAt", scheduledAt,
                 "durationMinutes", durationMinutes,
@@ -81,8 +101,9 @@ public class CamundaWorkflowFacade {
         return decisionCompleted && invitationCompleted;
     }
 
-    public boolean invitationResponded(ApplicationEntity application, ResponseType responseType, String message) {
-        return completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, Map.of(
+    public boolean invitationResponded(ApplicationEntity application, UserEntity candidateUser, ResponseType responseType, String message) {
+        assertCandidateCanComplete(application, candidateUser);
+        return completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, CANDIDATE_GROUP, candidateUser.getId(), Map.of(
                 "responseType", responseType.name(),
                 "responseMessage", safe(message),
                 "responseReceivedAt", Instant.now()
@@ -112,8 +133,9 @@ public class CamundaWorkflowFacade {
         return completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, variables);
     }
 
-    public boolean closeVacancy(VacancyEntity vacancy, String reason) {
-        return completeVacancyTask(vacancy.getId(), MANAGE_VACANCY_TASK, Map.of(
+    public boolean closeVacancy(VacancyEntity vacancy, UserEntity recruiterUser, String reason) {
+        assertVacancyRecruiterCanComplete(vacancy, recruiterUser);
+        return completeVacancyTask(vacancy.getId(), MANAGE_VACANCY_TASK, RECRUITER_GROUP, recruiterUser.getId(), Map.of(
                 "action", "CLOSE",
                 "closeReason", safe(reason),
                 "closedAt", Instant.now()
@@ -132,23 +154,60 @@ public class CamundaWorkflowFacade {
         );
     }
 
+    public boolean adminResetInterview(InterviewEntity interview, UserEntity adminUser, String reason) {
+        ApplicationEntity application = interview.getApplication();
+        return camundaRestClient.startProcessByKey(
+                properties.getAdminInterviewResetProcessKey(),
+                "admin-reset:" + interview.getId() + ":" + UUID.randomUUID(),
+                Map.of(
+                        "interviewId", interview.getId(),
+                        "applicationId", application.getId(),
+                        "vacancyId", application.getVacancy().getId(),
+                        "candidateUserId", application.getCandidateUser().getId(),
+                        "recruiterUserId", application.getVacancy().getRecruiterUser().getId(),
+                        "adminUserId", adminUser.getId(),
+                        "resetReason", safe(reason),
+                        "requestedAt", Instant.now()
+                )
+        ).isPresent();
+    }
+
     private boolean completeApplicationTask(UUID applicationId, String taskDefinitionKey, Map<String, ?> variables) {
-        return completeTask(applicationBusinessKey(applicationId), taskDefinitionKey, variables);
+        return completeApplicationTask(applicationId, taskDefinitionKey, null, null, variables);
     }
 
-    private boolean completeVacancyTask(UUID vacancyId, String taskDefinitionKey, Map<String, ?> variables) {
-        return completeTask(vacancyBusinessKey(vacancyId), taskDefinitionKey, variables);
+    private boolean completeApplicationTask(UUID applicationId, String taskDefinitionKey, String expectedGroup,
+                                            UUID actorUserId, Map<String, ?> variables) {
+        return completeTask(applicationBusinessKey(applicationId), taskDefinitionKey, expectedGroup, actorUserId, variables);
     }
 
-    private boolean completeTask(String businessKey, String taskDefinitionKey, Map<String, ?> variables) {
+    private boolean completeVacancyTask(UUID vacancyId, String taskDefinitionKey, String expectedGroup,
+                                        UUID actorUserId, Map<String, ?> variables) {
+        return completeTask(vacancyBusinessKey(vacancyId), taskDefinitionKey, expectedGroup, actorUserId, variables);
+    }
+
+    private boolean completeTask(String businessKey, String taskDefinitionKey, String expectedGroup,
+                                 UUID actorUserId, Map<String, ?> variables) {
         for (int attempt = 1; attempt <= 20; attempt++) {
             var tasks = camundaRestClient.findActiveTasks(businessKey, taskDefinitionKey);
             if (!tasks.isEmpty()) {
                 Object id = tasks.get(0).get("id");
                 if (id != null) {
-                    boolean completed = camundaRestClient.completeTask(String.valueOf(id), variables);
+                    String taskId = String.valueOf(id);
+                    if (expectedGroup != null && !camundaRestClient.taskHasCandidateGroup(taskId, expectedGroup)) {
+                        log.warn("Camunda task {} for businessKey={} does not expose candidate group {}", taskDefinitionKey, businessKey, expectedGroup);
+                        return false;
+                    }
+                    Map<String, Object> completedVariables = new LinkedHashMap<>(variables);
+                    if (actorUserId != null) {
+                        completedVariables.put("completedByUserId", actorUserId);
+                    }
+                    if (expectedGroup != null) {
+                        completedVariables.put("completedByGroup", expectedGroup);
+                    }
+                    boolean completed = camundaRestClient.completeTask(taskId, completedVariables);
                     if (completed) {
-                        log.info("Completed Camunda task {}; businessKey={}; taskId={}", taskDefinitionKey, businessKey, id);
+                        log.info("Completed Camunda task {}; businessKey={}; taskId={}", taskDefinitionKey, businessKey, taskId);
                     }
                     return completed;
                 }
@@ -162,6 +221,27 @@ public class CamundaWorkflowFacade {
         }
         log.warn("Camunda task {} for businessKey={} was not found", taskDefinitionKey, businessKey);
         return false;
+    }
+
+    private static void assertRecruiterCanComplete(ApplicationEntity application, UserEntity recruiterUser) {
+        if (!application.getVacancy().getRecruiterUser().getId().equals(recruiterUser.getId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED,
+                    "Application does not belong to your vacancy");
+        }
+    }
+
+    private static void assertCandidateCanComplete(ApplicationEntity application, UserEntity candidateUser) {
+        if (!application.getCandidateUser().getId().equals(candidateUser.getId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED,
+                    "Not your application");
+        }
+    }
+
+    private static void assertVacancyRecruiterCanComplete(VacancyEntity vacancy, UserEntity recruiterUser) {
+        if (!vacancy.getRecruiterUser().getId().equals(recruiterUser.getId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED,
+                    "Vacancy does not belong to current recruiter");
+        }
     }
 
     private static String applicationBusinessKey(UUID applicationId) {

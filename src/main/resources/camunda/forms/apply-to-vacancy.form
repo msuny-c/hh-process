@@ -4,7 +4,7 @@
   "type": "default",
   "id": "apply-to-vacancy-form",
   "components": [
-    { "type": "textarea", "id": "resumeText", "key": "resumeText", "label": "Текст резюме", "validate": { "required": true } },
-    { "type": "textarea", "id": "coverLetter", "key": "coverLetter", "label": "Сопроводительное письмо" }
+    { "type": "textarea", "id": "resumeText", "key": "resumeText", "label": "Текст резюме", "validate": { "required": true, "minLength": 20, "maxLength": 50000 } },
+    { "type": "textarea", "id": "coverLetter", "key": "coverLetter", "label": "Сопроводительное письмо", "validate": { "maxLength": 10000 } }
   ]
 }

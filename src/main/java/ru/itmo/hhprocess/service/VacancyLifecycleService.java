@@ -47,7 +47,7 @@ public class VacancyLifecycleService {
             return vacancyMapper.toResponse(vacancy);
         }
 
-        if (!camundaWorkflowFacade.closeVacancy(vacancy, request.getReason())) {
+        if (!camundaWorkflowFacade.closeVacancy(vacancy, recruiterUser, request.getReason())) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_VACANCY_STATE,
                     "Camunda vacancy management task is not active");
         }

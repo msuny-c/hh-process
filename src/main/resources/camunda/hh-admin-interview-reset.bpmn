@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_HH_AdminInterviewReset"
+                  targetNamespace="http://itmo.ru/hhprocess/camunda">
+  <bpmn:error id="Error_AdminResetFailed" name="Ошибка сброса интервью" errorCode="ADMIN_RESET_FAILED" />
+  <bpmn:process id="hhAdminInterviewResetProcess" name="HH.ru: админский сброс интервью" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:laneSet id="LaneSet_AdminInterviewReset">
+      <bpmn:lane id="Lane_Admin_Reset" name="Администратор">
+        <bpmn:flowNodeRef>Start_AdminResetRequested</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_System_Reset" name="Система HH">
+        <bpmn:flowNodeRef>Transaction_AdminInterviewReset</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>AdminResetErrorBoundary</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>RollbackAdminReset</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_AdminResetCompleted</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_AdminResetRolledBack</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:dataStoreReference id="DataStore_HH_DB_AdminReset" name="БД HH" />
+    <bpmn:startEvent id="Start_AdminResetRequested" name="Админ запросил сброс интервью">
+      <bpmn:outgoing>Flow_AdminStart_ResetTransaction</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:subProcess id="Transaction_AdminInterviewReset" name="Транзакционный блок Narayana/JTA: сброс интервью">
+      <bpmn:incoming>Flow_AdminStart_ResetTransaction</bpmn:incoming>
+      <bpmn:outgoing>Flow_AdminReset_End</bpmn:outgoing>
+      <bpmn:startEvent id="Start_AdminResetTransaction" name="Начать транзакцию">
+        <bpmn:outgoing>Flow_AdminTx_Reset</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="ResetInterviewTransaction" name="Отменить интервью, освободить слот, вернуть отклик и уведомить участников" camunda:type="external" camunda:topic="admin-interview-reset">
+        <bpmn:incoming>Flow_AdminTx_Reset</bpmn:incoming>
+        <bpmn:outgoing>Flow_AdminTx_End</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DataAssociation_ResetInterview_DB">
+          <bpmn:targetRef>DataStore_HH_DB_AdminReset</bpmn:targetRef>
+        </bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:endEvent id="End_AdminResetTransaction" name="Зафиксировать транзакцию">
+        <bpmn:incoming>Flow_AdminTx_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_AdminTx_Reset" sourceRef="Start_AdminResetTransaction" targetRef="ResetInterviewTransaction" />
+      <bpmn:sequenceFlow id="Flow_AdminTx_End" sourceRef="ResetInterviewTransaction" targetRef="End_AdminResetTransaction" />
+    </bpmn:subProcess>
+    <bpmn:boundaryEvent id="AdminResetErrorBoundary" name="Ошибка транзакции" attachedToRef="Transaction_AdminInterviewReset" cancelActivity="true">
+      <bpmn:outgoing>Flow_AdminReset_Error_Rollback</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ErrorDefinition_AdminReset" errorRef="Error_AdminResetFailed" />
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="RollbackAdminReset" name="Откатить сброс интервью" camunda:type="external" camunda:topic="transaction-rollback">
+      <bpmn:incoming>Flow_AdminReset_Error_Rollback</bpmn:incoming>
+      <bpmn:outgoing>Flow_AdminRollback_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_AdminResetCompleted" name="Интервью сброшено">
+      <bpmn:incoming>Flow_AdminReset_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_AdminResetRolledBack" name="Сброс отменен">
+      <bpmn:incoming>Flow_AdminRollback_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_AdminStart_ResetTransaction" sourceRef="Start_AdminResetRequested" targetRef="Transaction_AdminInterviewReset" />
+    <bpmn:sequenceFlow id="Flow_AdminReset_End" sourceRef="Transaction_AdminInterviewReset" targetRef="End_AdminResetCompleted" />
+    <bpmn:sequenceFlow id="Flow_AdminReset_Error_Rollback" sourceRef="AdminResetErrorBoundary" targetRef="RollbackAdminReset" />
+    <bpmn:sequenceFlow id="Flow_AdminRollback_End" sourceRef="RollbackAdminReset" targetRef="End_AdminResetRolledBack" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_HH_AdminInterviewReset">
+    <bpmndi:BPMNPlane id="BPMNPlane_HH_AdminInterviewReset" bpmnElement="hhAdminInterviewResetProcess">
+      <bpmndi:BPMNShape id="Lane_Admin_Reset_di" bpmnElement="Lane_Admin_Reset" isHorizontal="true">
+        <dc:Bounds x="120" y="80" width="980" height="130" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_System_Reset_di" bpmnElement="Lane_System_Reset" isHorizontal="true">
+        <dc:Bounds x="120" y="210" width="980" height="260" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_AdminResetRequested_di" bpmnElement="Start_AdminResetRequested">
+        <dc:Bounds x="190" y="145" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Transaction_AdminInterviewReset_di" bpmnElement="Transaction_AdminInterviewReset" isExpanded="true">
+        <dc:Bounds x="310" y="245" width="500" height="180" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_AdminResetTransaction_di" bpmnElement="Start_AdminResetTransaction">
+        <dc:Bounds x="345" y="327" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ResetInterviewTransaction_di" bpmnElement="ResetInterviewTransaction">
+        <dc:Bounds x="430" y="305" width="250" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_AdminResetTransaction_di" bpmnElement="End_AdminResetTransaction">
+        <dc:Bounds x="735" y="327" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="AdminResetErrorBoundary_di" bpmnElement="AdminResetErrorBoundary">
+        <dc:Bounds x="535" y="407" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="RollbackAdminReset_di" bpmnElement="RollbackAdminReset">
+        <dc:Bounds x="600" y="440" width="190" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_AdminResetCompleted_di" bpmnElement="End_AdminResetCompleted">
+        <dc:Bounds x="900" y="327" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_AdminResetRolledBack_di" bpmnElement="End_AdminResetRolledBack">
+        <dc:Bounds x="900" y="462" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DataStore_HH_DB_AdminReset_di" bpmnElement="DataStore_HH_DB_AdminReset">
+        <dc:Bounds x="485" y="545" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_AdminStart_ResetTransaction_di" bpmnElement="Flow_AdminStart_ResetTransaction">
+        <di:waypoint x="226" y="163" />
+        <di:waypoint x="270" y="163" />
+        <di:waypoint x="270" y="345" />
+        <di:waypoint x="310" y="345" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AdminTx_Reset_di" bpmnElement="Flow_AdminTx_Reset">
+        <di:waypoint x="381" y="345" />
+        <di:waypoint x="430" y="345" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AdminTx_End_di" bpmnElement="Flow_AdminTx_End">
+        <di:waypoint x="680" y="345" />
+        <di:waypoint x="735" y="345" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AdminReset_End_di" bpmnElement="Flow_AdminReset_End">
+        <di:waypoint x="810" y="345" />
+        <di:waypoint x="900" y="345" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AdminReset_Error_Rollback_di" bpmnElement="Flow_AdminReset_Error_Rollback">
+        <di:waypoint x="553" y="443" />
+        <di:waypoint x="553" y="480" />
+        <di:waypoint x="600" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AdminRollback_End_di" bpmnElement="Flow_AdminRollback_End">
+        <di:waypoint x="790" y="480" />
+        <di:waypoint x="900" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DataAssociation_ResetInterview_DB_di" bpmnElement="DataAssociation_ResetInterview_DB">
+        <di:waypoint x="555" y="385" />
+        <di:waypoint x="510" y="545" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

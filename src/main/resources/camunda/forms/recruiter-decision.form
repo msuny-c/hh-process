@@ -16,6 +16,6 @@
       ],
       "validate": { "required": true }
     },
-    { "type": "textarea", "id": "recruiterComment", "key": "recruiterComment", "label": "Комментарий" }
+    { "type": "textarea", "id": "recruiterComment", "key": "recruiterComment", "label": "Комментарий", "validate": { "maxLength": 5000 } }
   ]
 }

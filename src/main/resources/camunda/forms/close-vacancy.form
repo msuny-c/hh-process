@@ -15,6 +15,6 @@
       "defaultValue": "CLOSE",
       "validate": { "required": true }
     },
-    { "type": "textarea", "id": "closeReason", "key": "closeReason", "label": "Причина закрытия" }
+    { "type": "textarea", "id": "closeReason", "key": "closeReason", "label": "Причина закрытия", "validate": { "required": true, "maxLength": 5000 } }
   ]
 }

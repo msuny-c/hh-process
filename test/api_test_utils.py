@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -226,20 +227,29 @@ def invite(api: API, recruiter: SessionCtx, application_id: str, when: datetime,
 
 
 def invite_json(api: API, recruiter: SessionCtx, application_id: str, when: datetime, duration_minutes: int = 60, message: str = 'Interview') -> Dict[str, Any]:
-    resp = invite(api, recruiter, application_id, when, duration_minutes, message)
-    if resp.status_code != 200:
-        raise CheckError(f'Invite failed: {resp.status_code} {resp.text}')
-    return resp.json()
-
-
-def invite_with_retry(api: API, recruiter: SessionCtx, application_id: str, start_at: datetime, duration_minutes: int = 60, attempts: int = 6) -> Dict[str, Any]:
-    candidate_time = start_at
     last_response: Optional[requests.Response] = None
-    for _ in range(attempts):
-        resp = invite(api, recruiter, application_id, candidate_time, duration_minutes)
+    for _ in range(24):
+        resp = invite(api, recruiter, application_id, when, duration_minutes, message)
         if resp.status_code == 200:
             return resp.json()
         last_response = resp
+        if 'Application is not in ON_RECRUITER_REVIEW status' not in resp.text:
+            break
+        time.sleep(0.5)
+    raise CheckError(f'Invite failed: {last_response.status_code} {last_response.text}')
+
+
+def invite_with_retry(api: API, recruiter: SessionCtx, application_id: str, start_at: datetime, duration_minutes: int = 60, attempts: int = 24, message: str = 'Interview') -> Dict[str, Any]:
+    candidate_time = start_at
+    last_response: Optional[requests.Response] = None
+    for _ in range(attempts):
+        resp = invite(api, recruiter, application_id, candidate_time, duration_minutes, message)
+        if resp.status_code == 200:
+            return resp.json()
+        last_response = resp
+        if 'Application is not in ON_RECRUITER_REVIEW status' in resp.text:
+            time.sleep(0.5)
+            continue
         if 'SCHEDULE_SLOT_CONFLICT' not in resp.text:
             raise CheckError(f'Invite failed: {resp.status_code} {resp.text}')
         candidate_time += timedelta(hours=2)
@@ -271,6 +281,16 @@ def cancel_interview(api: API, recruiter: SessionCtx, interview_id: str, reason:
         'POST',
         f'/api/v1/recruiters/interviews/{interview_id}/cancel',
         auth=recruiter.auth,
+        expected=[200],
+        payload={'reason': reason},
+    )
+
+
+def admin_reset_interview(api: API, admin: SessionCtx, interview_id: str, reason: str = 'Admin reset') -> Dict[str, Any]:
+    return api.json(
+        'POST',
+        f'/api/v1/admin/interviews/{interview_id}/reset',
+        auth=admin.auth,
         expected=[200],
         payload={'reason': reason},
     )

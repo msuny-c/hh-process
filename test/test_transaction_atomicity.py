@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+from datetime import datetime
 
 from api_test_utils import (
     API,
@@ -12,6 +13,7 @@ from api_test_utils import (
     get_recruiter_application_json,
     invite,
     invite_json,
+    invite_with_retry,
     notifications,
     recruiter_session,
     register_candidate,
@@ -49,7 +51,8 @@ def assert_failed_invite_does_not_leave_partial_state() -> None:
     )
 
     scheduled = future_slot(days=12, hour_shift=1)
-    invite_a = invite_json(api, recruiter, app_a['application_id'], scheduled, message='Atomicity interview A')
+    invite_a = invite_with_retry(api, recruiter, app_a['application_id'], scheduled, message='Atomicity interview A')
+    scheduled = datetime.fromisoformat(invite_a['scheduled_at'].replace('Z', '+00:00'))
     invite_b_resp = invite(api, recruiter, app_b['application_id'], scheduled, message='Atomicity interview B')
 
     if invite_b_resp.status_code != 409 or 'SCHEDULE_SLOT_CONFLICT' not in invite_b_resp.text:
@@ -98,7 +101,7 @@ def assert_reject_with_interview_releases_slot() -> None:
     )
 
     scheduled = future_slot(days=14, hour_shift=2)
-    invite_data = invite_json(api, recruiter, app['application_id'], scheduled, message='Reject path interview')
+    invite_data = invite_with_retry(api, recruiter, app['application_id'], scheduled, message='Reject path interview')
     reject_application(api, recruiter, app['application_id'], comment='Reject after invite')
 
     recruiter_view = get_recruiter_application_json(api, recruiter, app['application_id'])

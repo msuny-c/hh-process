@@ -29,10 +29,7 @@ public class ScheduleService {
     public RecruiterScheduleSlotEntity reserveOnTheFly(UserEntity recruiterUser, InterviewEntity interview,
                                                        Instant startAt, int durationMinutes) {
         Instant endAt = startAt.plusSeconds(durationMinutes * 60L);
-        if (scheduleSlotRepository.existsOverlapping(recruiterUser.getId(), ScheduleSlotStatus.RESERVED, startAt, endAt)) {
-            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.SCHEDULE_SLOT_CONFLICT,
-                    "Recruiter schedule slot overlaps with another reserved interview");
-        }
+        ensureAvailable(recruiterUser, startAt, durationMinutes);
         return scheduleSlotRepository.save(RecruiterScheduleSlotEntity.builder()
                 .recruiterUser(recruiterUser)
                 .interview(interview)
@@ -40,6 +37,19 @@ public class ScheduleService {
                 .endAt(endAt)
                 .status(ScheduleSlotStatus.RESERVED)
                 .build());
+    }
+
+    @Transactional(readOnly = true)
+    public void ensureAvailable(UserEntity recruiterUser, Instant startAt, int durationMinutes) {
+        if (durationMinutes < 15 || durationMinutes > 480) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR,
+                    "Duration must be between 15 and 480 minutes");
+        }
+        Instant endAt = startAt.plusSeconds(durationMinutes * 60L);
+        if (scheduleSlotRepository.existsOverlapping(recruiterUser.getId(), ScheduleSlotStatus.RESERVED, startAt, endAt)) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.SCHEDULE_SLOT_CONFLICT,
+                    "Recruiter schedule slot overlaps with another reserved interview");
+        }
     }
 
     @Transactional(readOnly = true)

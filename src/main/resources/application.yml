@@ -73,6 +73,7 @@ app:
     application-process-key: hhApplicationProcess
     vacancy-process-key: hhVacancyProcess
     timeout-scheduler-process-key: hhTimeoutSchedulerProcess
+    admin-interview-reset-process-key: hhAdminInterviewResetProcess
     worker:
       enabled: ${CAMUNDA_WORKER_ENABLED:true}
       id: ${CAMUNDA_WORKER_ID:hh-process-worker}

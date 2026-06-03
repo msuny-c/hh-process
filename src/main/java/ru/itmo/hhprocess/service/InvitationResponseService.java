@@ -56,7 +56,7 @@ public class InvitationResponseService {
                     "Invitation response already exists");
         }
 
-        if (!camundaWorkflowFacade.invitationResponded(application, request.getResponseType(), request.getMessage())) {
+        if (!camundaWorkflowFacade.invitationResponded(application, candidateUser, request.getResponseType(), request.getMessage())) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
                     "Camunda candidate response task is not active");
         }

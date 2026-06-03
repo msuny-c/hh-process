@@ -1,37 +1,86 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
-                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
-                  id="Definitions_HH_TimeoutScheduler"
-                  targetNamespace="http://itmo.ru/hhprocess/camunda">
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_HH_TimeoutScheduler" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:process id="hhTimeoutSchedulerProcess" name="HH.ru: периодическая проверка просроченных приглашений" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:laneSet id="LaneSet_TimeoutScheduler">
+      <bpmn:lane id="Lane_System_Scheduler" name="Система HH">
+        <bpmn:flowNodeRef>CloseExpiredInvitations</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_TimerRunCompleted</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Transaction_TimeoutBatch</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Timer_Scheduler" name="Шедулер">
+        <bpmn:flowNodeRef>Start_Timer</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:dataStoreReference id="DataStore_HH_DB_Timeout" name="БД HH" />
     <bpmn:startEvent id="Start_Timer" name="Каждую минуту">
       <bpmn:outgoing>Flow_Timer_CloseExpired</bpmn:outgoing>
       <bpmn:timerEventDefinition id="TimerDefinition_EveryMinute">
         <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT1M</bpmn:timeCycle>
       </bpmn:timerEventDefinition>
     </bpmn:startEvent>
-
-    <bpmn:serviceTask id="CloseExpiredInvitations" name="Закрыть просроченные приглашения" camunda:type="external" camunda:topic="timeout-close-expired">
+    <bpmn:subProcess id="Transaction_TimeoutBatch" name="Транзакционный batch: просроченные приглашения">
       <bpmn:incoming>Flow_Timer_CloseExpired</bpmn:incoming>
       <bpmn:outgoing>Flow_CloseExpired_End</bpmn:outgoing>
-    </bpmn:serviceTask>
-
+      <bpmn:startEvent id="Start_TimeoutBatchTransaction" name="Начать batch">
+        <bpmn:outgoing>Flow_TimeoutBatch_Close</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="CloseExpiredInvitations" name="Найти просроченные приглашения, закрыть отклики, освободить слоты и уведомить участников" camunda:type="external" camunda:topic="timeout-close-expired">
+        <bpmn:incoming>Flow_TimeoutBatch_Close</bpmn:incoming>
+        <bpmn:outgoing>Flow_TimeoutBatch_End</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DataAssociation_TimeoutBatch_DB">
+          <bpmn:targetRef>DataStore_HH_DB_Timeout</bpmn:targetRef>
+        </bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:endEvent id="End_TimeoutBatchTransaction" name="Зафиксировать batch">
+        <bpmn:incoming>Flow_TimeoutBatch_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_TimeoutBatch_Close" sourceRef="Start_TimeoutBatchTransaction" targetRef="CloseExpiredInvitations" />
+      <bpmn:sequenceFlow id="Flow_TimeoutBatch_End" sourceRef="CloseExpiredInvitations" targetRef="End_TimeoutBatchTransaction" />
+    </bpmn:subProcess>
     <bpmn:endEvent id="End_TimerRunCompleted" name="Проверка завершена">
       <bpmn:incoming>Flow_CloseExpired_End</bpmn:incoming>
     </bpmn:endEvent>
-
-    <bpmn:sequenceFlow id="Flow_Timer_CloseExpired" sourceRef="Start_Timer" targetRef="CloseExpiredInvitations" />
-    <bpmn:sequenceFlow id="Flow_CloseExpired_End" sourceRef="CloseExpiredInvitations" targetRef="End_TimerRunCompleted" />
+    <bpmn:sequenceFlow id="Flow_Timer_CloseExpired" sourceRef="Start_Timer" targetRef="Transaction_TimeoutBatch" />
+    <bpmn:sequenceFlow id="Flow_CloseExpired_End" sourceRef="Transaction_TimeoutBatch" targetRef="End_TimerRunCompleted" />
   </bpmn:process>
-
   <bpmndi:BPMNDiagram id="BPMNDiagram_HH_TimeoutScheduler">
     <bpmndi:BPMNPlane id="BPMNPlane_HH_TimeoutScheduler" bpmnElement="hhTimeoutSchedulerProcess">
-      <bpmndi:BPMNShape id="Start_Timer_di" bpmnElement="Start_Timer"><dc:Bounds x="120" y="180" width="36" height="36" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="CloseExpiredInvitations_di" bpmnElement="CloseExpiredInvitations"><dc:Bounds x="230" y="158" width="220" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="End_TimerRunCompleted_di" bpmnElement="End_TimerRunCompleted"><dc:Bounds x="540" y="180" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Timer_Scheduler_di" bpmnElement="Lane_Timer_Scheduler" isHorizontal="true">
+        <dc:Bounds x="160" y="100" width="640" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_System_Scheduler_di" bpmnElement="Lane_System_Scheduler" isHorizontal="true">
+        <dc:Bounds x="160" y="220" width="640" height="130" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DataStore_HH_DB_Timeout_di" bpmnElement="DataStore_HH_DB_Timeout">
+        <dc:Bounds x="460" y="385" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Timer_di" bpmnElement="Start_Timer">
+        <dc:Bounds x="212" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="190" y="188" width="80" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Transaction_TimeoutBatch_di" bpmnElement="Transaction_TimeoutBatch" isExpanded="true">
+        <dc:Bounds x="340" y="220" width="300" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CloseExpiredInvitations_di" bpmnElement="CloseExpiredInvitations">
+        <dc:Bounds x="360" y="240" width="220" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_TimerRunCompleted_di" bpmnElement="End_TimerRunCompleted">
+        <dc:Bounds x="662" y="262" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="652" y="298" width="57" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Timer_CloseExpired_di" bpmnElement="Flow_Timer_CloseExpired">
+        <di:waypoint x="248" y="170" />
+        <di:waypoint x="480" y="170" />
+        <di:waypoint x="480" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CloseExpired_End_di" bpmnElement="Flow_CloseExpired_End">
+        <di:waypoint x="640" y="280" />
+        <di:waypoint x="662" y="280" />
+      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

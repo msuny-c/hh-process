@@ -32,7 +32,8 @@ public final class RolePrivileges {
         ));
         MAPPING.put(UserRole.ADMIN, EnumSet.of(
                 Privilege.PROFILE_VIEW,
-                Privilege.JOB_RUN_TIMEOUT_CLOSE
+                Privilege.JOB_RUN_TIMEOUT_CLOSE,
+                Privilege.INTERVIEW_RESET_ANY
         ));
     }
 

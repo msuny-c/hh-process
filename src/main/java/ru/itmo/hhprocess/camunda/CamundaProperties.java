@@ -24,6 +24,7 @@ public class CamundaProperties {
     private String applicationProcessKey = "hhApplicationProcess";
     private String vacancyProcessKey = "hhVacancyProcess";
     private String timeoutSchedulerProcessKey = "hhTimeoutSchedulerProcess";
+    private String adminInterviewResetProcessKey = "hhAdminInterviewResetProcess";
 
     private Worker worker = new Worker();
 

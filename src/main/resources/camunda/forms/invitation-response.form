@@ -16,6 +16,6 @@
       ],
       "validate": { "required": true }
     },
-    { "type": "textarea", "id": "responseMessage", "key": "responseMessage", "label": "Комментарий" }
+    { "type": "textarea", "id": "responseMessage", "key": "responseMessage", "label": "Комментарий", "validate": { "maxLength": 5000 } }
   ]
 }

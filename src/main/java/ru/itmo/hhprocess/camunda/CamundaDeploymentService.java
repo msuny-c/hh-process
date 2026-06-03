@@ -33,6 +33,8 @@ public class CamundaDeploymentService {
         add(resources, "hh-application-process.bpmn", "camunda/hh-application-process.bpmn");
         add(resources, "hh-vacancy-process.bpmn", "camunda/hh-vacancy-process.bpmn");
         add(resources, "hh-timeout-scheduler.bpmn", "camunda/hh-timeout-scheduler.bpmn");
+        add(resources, "hh-admin-interview-reset.bpmn", "camunda/hh-admin-interview-reset.bpmn");
+        add(resources, "hh-process-overview.bpmn", "camunda/hh-process-overview.bpmn");
         add(resources, "apply-to-vacancy.form", "camunda/forms/apply-to-vacancy.form");
         add(resources, "create-vacancy.form", "camunda/forms/create-vacancy.form");
         add(resources, "recruiter-decision.form", "camunda/forms/recruiter-decision.form");

@@ -1,0 +1,664 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_HH_Overview"
+                  targetNamespace="http://itmo.ru/hhprocess/overview">
+  <bpmn:dataStore id="DataStore_HH_Main" name="Единая БД HH" />
+  <bpmn:message id="Message_ApplicationSubmitted" name="Отклик отправлен" />
+  <bpmn:message id="Message_NewApplication" name="Новый отклик рекрутеру" />
+  <bpmn:message id="Message_RecruiterRejected" name="Рекрутер отклонил отклик" />
+  <bpmn:message id="Message_RecruiterInvited" name="Рекрутер отправил приглашение" />
+  <bpmn:message id="Message_InvitationSent" name="Приглашение отправлено кандидату" />
+  <bpmn:message id="Message_CandidateResponded" name="Кандидат ответил на приглашение" />
+  <bpmn:message id="Message_ResponseStored" name="Ответ доставлен рекрутеру" />
+  <bpmn:message id="Message_TimeoutScan" name="Запуск проверки таймаутов" />
+  <bpmn:message id="Message_TimeoutClosed" name="Отклик закрыт по таймауту" />
+  <bpmn:message id="Message_CloseVacancy" name="Закрыть вакансию" />
+  <bpmn:message id="Message_VacancyClosed" name="Вакансия закрыта" />
+  <bpmn:message id="Message_AdminResetInterview" name="Админ сбросил интервью" />
+  <bpmn:message id="Message_InterviewReset" name="Интервью сброшено" />
+  <bpmn:error id="Error_TransactionFailed" name="Ошибка транзакции" errorCode="TX_FAILED" />
+  <bpmn:collaboration id="Collaboration_HH_Overview">
+    <bpmn:participant id="Participant_Candidate" name="Соискатель (ROLE=CANDIDATE)" processRef="Process_Candidate_Overview" />
+    <bpmn:participant id="Participant_Recruiter" name="HR / рекрутер (ROLE=RECRUITER)" processRef="Process_Recruiter_Overview" />
+    <bpmn:participant id="Participant_System" name="Система HH + Camunda + Narayana" processRef="Process_System_Overview" />
+    <bpmn:participant id="Participant_Scheduler" name="Шедулер Camunda" processRef="Process_Scheduler_Overview" />
+    <bpmn:participant id="Participant_Admin" name="Администратор (ROLE=ADMIN)" processRef="Process_Admin_Overview" />
+    <bpmn:messageFlow id="MF_Candidate_System_Application" sourceRef="Throw_ApplicationSubmitted" targetRef="Start_System_ApplicationSubmitted" />
+    <bpmn:messageFlow id="MF_System_Recruiter_NewApplication" sourceRef="Throw_NewApplication" targetRef="Start_Recruiter_NewApplication" />
+    <bpmn:messageFlow id="MF_Recruiter_System_Reject" sourceRef="Throw_RecruiterRejected" targetRef="Start_System_RecruiterRejected" />
+    <bpmn:messageFlow id="MF_Recruiter_System_Invite" sourceRef="Throw_RecruiterInvited" targetRef="Start_System_RecruiterInvited" />
+    <bpmn:messageFlow id="MF_System_Candidate_Invitation" sourceRef="Throw_InvitationSent" targetRef="Catch_Candidate_Invitation" />
+    <bpmn:messageFlow id="MF_Candidate_System_Response" sourceRef="Throw_CandidateResponded" targetRef="Start_System_CandidateResponded" />
+    <bpmn:messageFlow id="MF_System_Recruiter_Response" sourceRef="Throw_ResponseStored" targetRef="Catch_Recruiter_Response" />
+    <bpmn:messageFlow id="MF_Scheduler_System_TimeoutScan" sourceRef="Throw_TimeoutScan" targetRef="Start_System_TimeoutScan" />
+    <bpmn:messageFlow id="MF_System_Candidate_Timeout" sourceRef="Throw_TimeoutClosed" targetRef="Catch_Candidate_TimeoutClosed" />
+    <bpmn:messageFlow id="MF_Recruiter_System_CloseVacancy" sourceRef="Throw_CloseVacancy" targetRef="Start_System_CloseVacancy" />
+    <bpmn:messageFlow id="MF_System_Candidate_VacancyClosed" sourceRef="Throw_VacancyClosed" targetRef="Catch_Candidate_VacancyClosed" />
+    <bpmn:messageFlow id="MF_Admin_System_Reset" sourceRef="Throw_AdminResetInterview" targetRef="Start_System_AdminReset" />
+    <bpmn:messageFlow id="MF_System_Candidate_Reset" sourceRef="Throw_InterviewReset" targetRef="Catch_Candidate_InterviewReset" />
+  </bpmn:collaboration>
+
+  <bpmn:process id="Process_Candidate_Overview" name="Соискатель" isExecutable="false">
+    <bpmn:startEvent id="Start_Candidate_Search" name="Выбрал вакансию">
+      <bpmn:outgoing>Flow_Candidate_Apply</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Candidate_Apply" name="Заполнить форму отклика">
+      <bpmn:incoming>Flow_Candidate_Apply</bpmn:incoming>
+      <bpmn:outgoing>Flow_Candidate_SendApplication</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:intermediateThrowEvent id="Throw_ApplicationSubmitted" name="Отправить отклик">
+      <bpmn:incoming>Flow_Candidate_SendApplication</bpmn:incoming>
+      <bpmn:outgoing>Flow_Candidate_WaitInvitation</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_ApplicationSubmitted" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateCatchEvent id="Catch_Candidate_Invitation" name="Получить приглашение">
+      <bpmn:incoming>Flow_Candidate_WaitInvitation</bpmn:incoming>
+      <bpmn:outgoing>Flow_Candidate_ResponseTask</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_InvitationSent" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:userTask id="Task_Candidate_Response" name="Заполнить ответ на приглашение">
+      <bpmn:incoming>Flow_Candidate_ResponseTask</bpmn:incoming>
+      <bpmn:outgoing>Flow_Candidate_SendResponse</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:intermediateThrowEvent id="Throw_CandidateResponded" name="Отправить ответ">
+      <bpmn:incoming>Flow_Candidate_SendResponse</bpmn:incoming>
+      <bpmn:outgoing>Flow_Candidate_ResponseEnd</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_CandidateResponded" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="End_Candidate_Response" name="Ответ отправлен">
+      <bpmn:incoming>Flow_Candidate_ResponseEnd</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:intermediateCatchEvent id="Catch_Candidate_TimeoutClosed" name="Получить уведомление о таймауте">
+      <bpmn:messageEventDefinition messageRef="Message_TimeoutClosed" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="Catch_Candidate_VacancyClosed" name="Получить уведомление о закрытии вакансии">
+      <bpmn:messageEventDefinition messageRef="Message_VacancyClosed" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="Catch_Candidate_InterviewReset" name="Получить уведомление о сбросе интервью">
+      <bpmn:messageEventDefinition messageRef="Message_InterviewReset" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="Flow_Candidate_Apply" sourceRef="Start_Candidate_Search" targetRef="Task_Candidate_Apply" />
+    <bpmn:sequenceFlow id="Flow_Candidate_SendApplication" sourceRef="Task_Candidate_Apply" targetRef="Throw_ApplicationSubmitted" />
+    <bpmn:sequenceFlow id="Flow_Candidate_WaitInvitation" sourceRef="Throw_ApplicationSubmitted" targetRef="Catch_Candidate_Invitation" />
+    <bpmn:sequenceFlow id="Flow_Candidate_ResponseTask" sourceRef="Catch_Candidate_Invitation" targetRef="Task_Candidate_Response" />
+    <bpmn:sequenceFlow id="Flow_Candidate_SendResponse" sourceRef="Task_Candidate_Response" targetRef="Throw_CandidateResponded" />
+    <bpmn:sequenceFlow id="Flow_Candidate_ResponseEnd" sourceRef="Throw_CandidateResponded" targetRef="End_Candidate_Response" />
+  </bpmn:process>
+
+  <bpmn:process id="Process_Recruiter_Overview" name="HR / рекрутер" isExecutable="false">
+    <bpmn:startEvent id="Start_Recruiter_NewApplication" name="Получен новый отклик">
+      <bpmn:outgoing>Flow_Recruiter_Review</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_NewApplication" />
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Recruiter_Review" name="Рассмотреть отклик">
+      <bpmn:incoming>Flow_Recruiter_Review</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recruiter_Decision</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_Recruiter_Decision" name="Решение">
+      <bpmn:incoming>Flow_Recruiter_Decision</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recruiter_Reject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Recruiter_Invite</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateThrowEvent id="Throw_RecruiterRejected" name="Отправить отказ">
+      <bpmn:incoming>Flow_Recruiter_Reject</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recruiter_RejectEnd</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_RecruiterRejected" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:userTask id="Task_Recruiter_WriteInvitation" name="Заполнить форму приглашения">
+      <bpmn:incoming>Flow_Recruiter_Invite</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recruiter_SendInvitation</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:intermediateThrowEvent id="Throw_RecruiterInvited" name="Отправить приглашение">
+      <bpmn:incoming>Flow_Recruiter_SendInvitation</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recruiter_WaitResponse</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_RecruiterInvited" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateCatchEvent id="Catch_Recruiter_Response" name="Получить ответ кандидата">
+      <bpmn:incoming>Flow_Recruiter_WaitResponse</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recruiter_ResponseEnd</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_ResponseStored" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="End_Recruiter_Response" name="Ответ обработан">
+      <bpmn:incoming>Flow_Recruiter_ResponseEnd</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_Recruiter_Reject" name="Отказ отправлен">
+      <bpmn:incoming>Flow_Recruiter_RejectEnd</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:userTask id="Task_Recruiter_CloseVacancy" name="Закрыть вакансию">
+      <bpmn:outgoing>Flow_Recruiter_CloseVacancy</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:intermediateThrowEvent id="Throw_CloseVacancy" name="Отправить событие закрытия вакансии">
+      <bpmn:incoming>Flow_Recruiter_CloseVacancy</bpmn:incoming>
+      <bpmn:messageEventDefinition messageRef="Message_CloseVacancy" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:sequenceFlow id="Flow_Recruiter_Review" sourceRef="Start_Recruiter_NewApplication" targetRef="Task_Recruiter_Review" />
+    <bpmn:sequenceFlow id="Flow_Recruiter_Decision" sourceRef="Task_Recruiter_Review" targetRef="Gateway_Recruiter_Decision" />
+    <bpmn:sequenceFlow id="Flow_Recruiter_Reject" sourceRef="Gateway_Recruiter_Decision" targetRef="Throw_RecruiterRejected" />
+    <bpmn:sequenceFlow id="Flow_Recruiter_Invite" sourceRef="Gateway_Recruiter_Decision" targetRef="Task_Recruiter_WriteInvitation" />
+    <bpmn:sequenceFlow id="Flow_Recruiter_SendInvitation" sourceRef="Task_Recruiter_WriteInvitation" targetRef="Throw_RecruiterInvited" />
+    <bpmn:sequenceFlow id="Flow_Recruiter_WaitResponse" sourceRef="Throw_RecruiterInvited" targetRef="Catch_Recruiter_Response" />
+    <bpmn:sequenceFlow id="Flow_Recruiter_ResponseEnd" sourceRef="Catch_Recruiter_Response" targetRef="End_Recruiter_Response" />
+    <bpmn:sequenceFlow id="Flow_Recruiter_RejectEnd" sourceRef="Throw_RecruiterRejected" targetRef="End_Recruiter_Reject" />
+    <bpmn:sequenceFlow id="Flow_Recruiter_CloseVacancy" sourceRef="Task_Recruiter_CloseVacancy" targetRef="Throw_CloseVacancy" />
+  </bpmn:process>
+
+  <bpmn:process id="Process_System_Overview" name="Система HH" isExecutable="false">
+    <bpmn:dataStoreReference id="DataStoreRef_HH_Main" name="Единая БД HH" dataStoreRef="DataStore_HH_Main" />
+    <bpmn:startEvent id="Start_System_ApplicationSubmitted" name="Получить отклик">
+      <bpmn:outgoing>Flow_System_ApplicationTx</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_ApplicationSubmitted" />
+    </bpmn:startEvent>
+    <bpmn:transaction id="Transaction_ApplicationSubmit" name="Транзакция приема отклика и автоскрининга">
+      <bpmn:incoming>Flow_System_ApplicationTx</bpmn:incoming>
+      <bpmn:outgoing>Flow_System_ScreeningGateway</bpmn:outgoing>
+      <bpmn:startEvent id="Start_Tx_ApplicationSubmit" name="Начать">
+        <bpmn:outgoing>Flow_Tx_App_Save</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="Task_Tx_App_SaveApplication" name="Сохранить отклик">
+        <bpmn:incoming>Flow_Tx_App_Save</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_App_Screen</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_App_Save_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_App_AutoScreen" name="Выполнить автоскрининг">
+        <bpmn:incoming>Flow_Tx_App_Screen</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_App_WriteScreening</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_App_WriteScreening" name="Записать статус и историю">
+        <bpmn:incoming>Flow_Tx_App_WriteScreening</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_App_End</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_App_Screening_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:endEvent id="End_Tx_ApplicationSubmit" name="Commit">
+        <bpmn:incoming>Flow_Tx_App_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_Tx_App_Save" sourceRef="Start_Tx_ApplicationSubmit" targetRef="Task_Tx_App_SaveApplication" />
+      <bpmn:sequenceFlow id="Flow_Tx_App_Screen" sourceRef="Task_Tx_App_SaveApplication" targetRef="Task_Tx_App_AutoScreen" />
+      <bpmn:sequenceFlow id="Flow_Tx_App_WriteScreening" sourceRef="Task_Tx_App_AutoScreen" targetRef="Task_Tx_App_WriteScreening" />
+      <bpmn:sequenceFlow id="Flow_Tx_App_End" sourceRef="Task_Tx_App_WriteScreening" targetRef="End_Tx_ApplicationSubmit" />
+    </bpmn:transaction>
+    <bpmn:exclusiveGateway id="Gateway_System_Screening" name="Скрининг пройден?">
+      <bpmn:incoming>Flow_System_ScreeningGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_System_NewApplication</bpmn:outgoing>
+      <bpmn:outgoing>Flow_System_ScreeningRejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateThrowEvent id="Throw_NewApplication" name="Сообщить рекрутеру">
+      <bpmn:incoming>Flow_System_NewApplication</bpmn:incoming>
+      <bpmn:messageEventDefinition messageRef="Message_NewApplication" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="End_System_ScreeningRejected" name="Отклик закрыт скринингом">
+      <bpmn:incoming>Flow_System_ScreeningRejected</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:startEvent id="Start_System_RecruiterRejected" name="Получить отказ рекрутера">
+      <bpmn:outgoing>Flow_System_RejectionTx</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_RecruiterRejected" />
+    </bpmn:startEvent>
+    <bpmn:transaction id="Transaction_Rejection" name="Транзакция отказа">
+      <bpmn:incoming>Flow_System_RejectionTx</bpmn:incoming>
+      <bpmn:outgoing>Flow_System_RejectionEnd</bpmn:outgoing>
+      <bpmn:startEvent id="Start_Tx_Rejection" name="Начать">
+        <bpmn:outgoing>Flow_Tx_Rej_CancelInterview</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="Task_Tx_Rej_CancelInterview" name="Отменить активное интервью">
+        <bpmn:incoming>Flow_Tx_Rej_CancelInterview</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Rej_ReleaseSlot</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_Rej_ReleaseSlot" name="Освободить слот расписания">
+        <bpmn:incoming>Flow_Tx_Rej_ReleaseSlot</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Rej_UpdateStatus</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_Rej_Slot_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_Rej_UpdateStatus" name="Записать отказ и историю">
+        <bpmn:incoming>Flow_Tx_Rej_UpdateStatus</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Rej_Notify</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_Rej_Status_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:sendTask id="Task_Tx_Rej_NotifyCandidate" name="Уведомить кандидата">
+        <bpmn:incoming>Flow_Tx_Rej_Notify</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Rej_End</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:endEvent id="End_Tx_Rejection" name="Commit">
+        <bpmn:incoming>Flow_Tx_Rej_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_Tx_Rej_CancelInterview" sourceRef="Start_Tx_Rejection" targetRef="Task_Tx_Rej_CancelInterview" />
+      <bpmn:sequenceFlow id="Flow_Tx_Rej_ReleaseSlot" sourceRef="Task_Tx_Rej_CancelInterview" targetRef="Task_Tx_Rej_ReleaseSlot" />
+      <bpmn:sequenceFlow id="Flow_Tx_Rej_UpdateStatus" sourceRef="Task_Tx_Rej_ReleaseSlot" targetRef="Task_Tx_Rej_UpdateStatus" />
+      <bpmn:sequenceFlow id="Flow_Tx_Rej_Notify" sourceRef="Task_Tx_Rej_UpdateStatus" targetRef="Task_Tx_Rej_NotifyCandidate" />
+      <bpmn:sequenceFlow id="Flow_Tx_Rej_End" sourceRef="Task_Tx_Rej_NotifyCandidate" targetRef="End_Tx_Rejection" />
+    </bpmn:transaction>
+    <bpmn:endEvent id="End_System_Rejection" name="Отказ сохранен">
+      <bpmn:incoming>Flow_System_RejectionEnd</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:startEvent id="Start_System_RecruiterInvited" name="Получить приглашение">
+      <bpmn:outgoing>Flow_System_InvitationTx</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_RecruiterInvited" />
+    </bpmn:startEvent>
+    <bpmn:transaction id="Transaction_Invitation" name="Транзакция приглашения и бронирования слота">
+      <bpmn:incoming>Flow_System_InvitationTx</bpmn:incoming>
+      <bpmn:outgoing>Flow_System_InvitationMessage</bpmn:outgoing>
+      <bpmn:startEvent id="Start_Tx_Invitation" name="Начать">
+        <bpmn:outgoing>Flow_Tx_Inv_Validate</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="Task_Tx_Inv_Validate" name="Проверить форму и доступ рекрутера">
+        <bpmn:incoming>Flow_Tx_Inv_Validate</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Inv_SaveInvitation</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_Inv_SaveInvitation" name="Сохранить приглашение">
+        <bpmn:incoming>Flow_Tx_Inv_SaveInvitation</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Inv_CreateInterview</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_Inv_Invitation_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_Inv_CreateInterview" name="Создать интервью">
+        <bpmn:incoming>Flow_Tx_Inv_CreateInterview</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Inv_ReserveSlot</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_Inv_Interview_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_Inv_ReserveSlot" name="Зарезервировать слот">
+        <bpmn:incoming>Flow_Tx_Inv_ReserveSlot</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Inv_Notify</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_Inv_Slot_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:sendTask id="Task_Tx_Inv_NotifyCandidate" name="Уведомить кандидата">
+        <bpmn:incoming>Flow_Tx_Inv_Notify</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Inv_End</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:endEvent id="End_Tx_Invitation" name="Commit">
+        <bpmn:incoming>Flow_Tx_Inv_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_Tx_Inv_Validate" sourceRef="Start_Tx_Invitation" targetRef="Task_Tx_Inv_Validate" />
+      <bpmn:sequenceFlow id="Flow_Tx_Inv_SaveInvitation" sourceRef="Task_Tx_Inv_Validate" targetRef="Task_Tx_Inv_SaveInvitation" />
+      <bpmn:sequenceFlow id="Flow_Tx_Inv_CreateInterview" sourceRef="Task_Tx_Inv_SaveInvitation" targetRef="Task_Tx_Inv_CreateInterview" />
+      <bpmn:sequenceFlow id="Flow_Tx_Inv_ReserveSlot" sourceRef="Task_Tx_Inv_CreateInterview" targetRef="Task_Tx_Inv_ReserveSlot" />
+      <bpmn:sequenceFlow id="Flow_Tx_Inv_Notify" sourceRef="Task_Tx_Inv_ReserveSlot" targetRef="Task_Tx_Inv_NotifyCandidate" />
+      <bpmn:sequenceFlow id="Flow_Tx_Inv_End" sourceRef="Task_Tx_Inv_NotifyCandidate" targetRef="End_Tx_Invitation" />
+    </bpmn:transaction>
+    <bpmn:intermediateThrowEvent id="Throw_InvitationSent" name="Сообщить кандидату о приглашении">
+      <bpmn:incoming>Flow_System_InvitationMessage</bpmn:incoming>
+      <bpmn:messageEventDefinition messageRef="Message_InvitationSent" />
+    </bpmn:intermediateThrowEvent>
+
+    <bpmn:startEvent id="Start_System_CandidateResponded" name="Получить ответ кандидата">
+      <bpmn:outgoing>Flow_System_ResponseTx</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_CandidateResponded" />
+    </bpmn:startEvent>
+    <bpmn:transaction id="Transaction_Response" name="Транзакция ответа кандидата">
+      <bpmn:incoming>Flow_System_ResponseTx</bpmn:incoming>
+      <bpmn:outgoing>Flow_System_ResponseMessage</bpmn:outgoing>
+      <bpmn:startEvent id="Start_Tx_Response" name="Начать">
+        <bpmn:outgoing>Flow_Tx_Resp_Validate</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="Task_Tx_Resp_Validate" name="Проверить форму и доступ кандидата">
+        <bpmn:incoming>Flow_Tx_Resp_Validate</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Resp_Save</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_Resp_Save" name="Сохранить ответ">
+        <bpmn:incoming>Flow_Tx_Resp_Save</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Resp_UpdateStatus</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_Resp_Save_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_Resp_UpdateStatus" name="Обновить статус отклика">
+        <bpmn:incoming>Flow_Tx_Resp_UpdateStatus</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Resp_Notify</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_Resp_Status_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:sendTask id="Task_Tx_Resp_NotifyRecruiter" name="Уведомить рекрутера">
+        <bpmn:incoming>Flow_Tx_Resp_Notify</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Resp_End</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:endEvent id="End_Tx_Response" name="Commit">
+        <bpmn:incoming>Flow_Tx_Resp_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_Tx_Resp_Validate" sourceRef="Start_Tx_Response" targetRef="Task_Tx_Resp_Validate" />
+      <bpmn:sequenceFlow id="Flow_Tx_Resp_Save" sourceRef="Task_Tx_Resp_Validate" targetRef="Task_Tx_Resp_Save" />
+      <bpmn:sequenceFlow id="Flow_Tx_Resp_UpdateStatus" sourceRef="Task_Tx_Resp_Save" targetRef="Task_Tx_Resp_UpdateStatus" />
+      <bpmn:sequenceFlow id="Flow_Tx_Resp_Notify" sourceRef="Task_Tx_Resp_UpdateStatus" targetRef="Task_Tx_Resp_NotifyRecruiter" />
+      <bpmn:sequenceFlow id="Flow_Tx_Resp_End" sourceRef="Task_Tx_Resp_NotifyRecruiter" targetRef="End_Tx_Response" />
+    </bpmn:transaction>
+    <bpmn:intermediateThrowEvent id="Throw_ResponseStored" name="Сообщить рекрутеру об ответе">
+      <bpmn:incoming>Flow_System_ResponseMessage</bpmn:incoming>
+      <bpmn:messageEventDefinition messageRef="Message_ResponseStored" />
+    </bpmn:intermediateThrowEvent>
+
+    <bpmn:startEvent id="Start_System_TimeoutScan" name="Получить запуск шедулера">
+      <bpmn:outgoing>Flow_System_TimeoutTx</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_TimeoutScan" />
+    </bpmn:startEvent>
+    <bpmn:transaction id="Transaction_TimeoutBatch" name="Batch-транзакция таймаутов">
+      <bpmn:incoming>Flow_System_TimeoutTx</bpmn:incoming>
+      <bpmn:outgoing>Flow_System_TimeoutMessage</bpmn:outgoing>
+      <bpmn:startEvent id="Start_Tx_Timeout" name="Начать">
+        <bpmn:outgoing>Flow_Tx_Timeout_Find</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="Task_Tx_Timeout_Find" name="Найти просроченные приглашения">
+        <bpmn:incoming>Flow_Tx_Timeout_Find</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Timeout_Close</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_Timeout_Find_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_Timeout_Close" name="Закрыть отклики и отменить интервью">
+        <bpmn:incoming>Flow_Tx_Timeout_Close</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Timeout_Release</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_Timeout_Close_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_Timeout_Release" name="Освободить слоты">
+        <bpmn:incoming>Flow_Tx_Timeout_Release</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Timeout_Notify</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_Timeout_Slots_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:sendTask id="Task_Tx_Timeout_Notify" name="Уведомить кандидата и рекрутера">
+        <bpmn:incoming>Flow_Tx_Timeout_Notify</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_Timeout_End</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:endEvent id="End_Tx_Timeout" name="Commit">
+        <bpmn:incoming>Flow_Tx_Timeout_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_Tx_Timeout_Find" sourceRef="Start_Tx_Timeout" targetRef="Task_Tx_Timeout_Find" />
+      <bpmn:sequenceFlow id="Flow_Tx_Timeout_Close" sourceRef="Task_Tx_Timeout_Find" targetRef="Task_Tx_Timeout_Close" />
+      <bpmn:sequenceFlow id="Flow_Tx_Timeout_Release" sourceRef="Task_Tx_Timeout_Close" targetRef="Task_Tx_Timeout_Release" />
+      <bpmn:sequenceFlow id="Flow_Tx_Timeout_Notify" sourceRef="Task_Tx_Timeout_Release" targetRef="Task_Tx_Timeout_Notify" />
+      <bpmn:sequenceFlow id="Flow_Tx_Timeout_End" sourceRef="Task_Tx_Timeout_Notify" targetRef="End_Tx_Timeout" />
+    </bpmn:transaction>
+    <bpmn:intermediateThrowEvent id="Throw_TimeoutClosed" name="Разослать сообщения о таймауте">
+      <bpmn:incoming>Flow_System_TimeoutMessage</bpmn:incoming>
+      <bpmn:messageEventDefinition messageRef="Message_TimeoutClosed" />
+    </bpmn:intermediateThrowEvent>
+
+    <bpmn:startEvent id="Start_System_CloseVacancy" name="Получить закрытие вакансии">
+      <bpmn:outgoing>Flow_System_CloseVacancyTx</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_CloseVacancy" />
+    </bpmn:startEvent>
+    <bpmn:transaction id="Transaction_CloseVacancy" name="Транзакция закрытия вакансии">
+      <bpmn:incoming>Flow_System_CloseVacancyTx</bpmn:incoming>
+      <bpmn:outgoing>Flow_System_VacancyClosedMessage</bpmn:outgoing>
+      <bpmn:startEvent id="Start_Tx_CloseVacancy" name="Начать">
+        <bpmn:outgoing>Flow_Tx_CloseVacancy_Update</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="Task_Tx_CloseVacancy_Update" name="Закрыть вакансию">
+        <bpmn:incoming>Flow_Tx_CloseVacancy_Update</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_CloseVacancy_Applications</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_CloseVacancy_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_CloseVacancy_Applications" name="Закрыть активные отклики">
+        <bpmn:incoming>Flow_Tx_CloseVacancy_Applications</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_CloseVacancy_Interviews</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_CloseApps_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_CloseVacancy_Interviews" name="Отменить интервью и освободить слоты">
+        <bpmn:incoming>Flow_Tx_CloseVacancy_Interviews</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_CloseVacancy_Notify</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_CloseSlots_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:sendTask id="Task_Tx_CloseVacancy_Notify" name="Уведомить кандидатов">
+        <bpmn:incoming>Flow_Tx_CloseVacancy_Notify</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_CloseVacancy_End</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:endEvent id="End_Tx_CloseVacancy" name="Commit">
+        <bpmn:incoming>Flow_Tx_CloseVacancy_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_Tx_CloseVacancy_Update" sourceRef="Start_Tx_CloseVacancy" targetRef="Task_Tx_CloseVacancy_Update" />
+      <bpmn:sequenceFlow id="Flow_Tx_CloseVacancy_Applications" sourceRef="Task_Tx_CloseVacancy_Update" targetRef="Task_Tx_CloseVacancy_Applications" />
+      <bpmn:sequenceFlow id="Flow_Tx_CloseVacancy_Interviews" sourceRef="Task_Tx_CloseVacancy_Applications" targetRef="Task_Tx_CloseVacancy_Interviews" />
+      <bpmn:sequenceFlow id="Flow_Tx_CloseVacancy_Notify" sourceRef="Task_Tx_CloseVacancy_Interviews" targetRef="Task_Tx_CloseVacancy_Notify" />
+      <bpmn:sequenceFlow id="Flow_Tx_CloseVacancy_End" sourceRef="Task_Tx_CloseVacancy_Notify" targetRef="End_Tx_CloseVacancy" />
+    </bpmn:transaction>
+    <bpmn:intermediateThrowEvent id="Throw_VacancyClosed" name="Разослать сообщения о закрытии вакансии">
+      <bpmn:incoming>Flow_System_VacancyClosedMessage</bpmn:incoming>
+      <bpmn:messageEventDefinition messageRef="Message_VacancyClosed" />
+    </bpmn:intermediateThrowEvent>
+
+    <bpmn:startEvent id="Start_System_AdminReset" name="Получить админский сброс интервью">
+      <bpmn:outgoing>Flow_System_AdminResetTx</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_AdminResetInterview" />
+    </bpmn:startEvent>
+    <bpmn:transaction id="Transaction_AdminReset" name="Транзакция админского сброса интервью">
+      <bpmn:incoming>Flow_System_AdminResetTx</bpmn:incoming>
+      <bpmn:outgoing>Flow_System_AdminResetMessage</bpmn:outgoing>
+      <bpmn:startEvent id="Start_Tx_AdminReset" name="Начать">
+        <bpmn:outgoing>Flow_Tx_AdminReset_Check</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="Task_Tx_AdminReset_Check" name="Проверить роль ADMIN">
+        <bpmn:incoming>Flow_Tx_AdminReset_Check</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_AdminReset_Cancel</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_AdminReset_Cancel" name="Отменить интервью">
+        <bpmn:incoming>Flow_Tx_AdminReset_Cancel</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_AdminReset_Release</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_AdminReset_Interview_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_AdminReset_Release" name="Освободить слот">
+        <bpmn:incoming>Flow_Tx_AdminReset_Release</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_AdminReset_Status</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_AdminReset_Slot_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Task_Tx_AdminReset_Status" name="Вернуть отклик на рассмотрение">
+        <bpmn:incoming>Flow_Tx_AdminReset_Status</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_AdminReset_Notify</bpmn:outgoing>
+        <bpmn:dataOutputAssociation id="DA_AdminReset_Status_DB"><bpmn:targetRef>DataStoreRef_HH_Main</bpmn:targetRef></bpmn:dataOutputAssociation>
+      </bpmn:serviceTask>
+      <bpmn:sendTask id="Task_Tx_AdminReset_Notify" name="Уведомить кандидата и рекрутера">
+        <bpmn:incoming>Flow_Tx_AdminReset_Notify</bpmn:incoming>
+        <bpmn:outgoing>Flow_Tx_AdminReset_End</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:endEvent id="End_Tx_AdminReset" name="Commit">
+        <bpmn:incoming>Flow_Tx_AdminReset_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_Tx_AdminReset_Check" sourceRef="Start_Tx_AdminReset" targetRef="Task_Tx_AdminReset_Check" />
+      <bpmn:sequenceFlow id="Flow_Tx_AdminReset_Cancel" sourceRef="Task_Tx_AdminReset_Check" targetRef="Task_Tx_AdminReset_Cancel" />
+      <bpmn:sequenceFlow id="Flow_Tx_AdminReset_Release" sourceRef="Task_Tx_AdminReset_Cancel" targetRef="Task_Tx_AdminReset_Release" />
+      <bpmn:sequenceFlow id="Flow_Tx_AdminReset_Status" sourceRef="Task_Tx_AdminReset_Release" targetRef="Task_Tx_AdminReset_Status" />
+      <bpmn:sequenceFlow id="Flow_Tx_AdminReset_Notify" sourceRef="Task_Tx_AdminReset_Status" targetRef="Task_Tx_AdminReset_Notify" />
+      <bpmn:sequenceFlow id="Flow_Tx_AdminReset_End" sourceRef="Task_Tx_AdminReset_Notify" targetRef="End_Tx_AdminReset" />
+    </bpmn:transaction>
+    <bpmn:intermediateThrowEvent id="Throw_InterviewReset" name="Разослать сообщения о сбросе интервью">
+      <bpmn:incoming>Flow_System_AdminResetMessage</bpmn:incoming>
+      <bpmn:messageEventDefinition messageRef="Message_InterviewReset" />
+    </bpmn:intermediateThrowEvent>
+
+    <bpmn:sequenceFlow id="Flow_System_ApplicationTx" sourceRef="Start_System_ApplicationSubmitted" targetRef="Transaction_ApplicationSubmit" />
+    <bpmn:sequenceFlow id="Flow_System_ScreeningGateway" sourceRef="Transaction_ApplicationSubmit" targetRef="Gateway_System_Screening" />
+    <bpmn:sequenceFlow id="Flow_System_NewApplication" sourceRef="Gateway_System_Screening" targetRef="Throw_NewApplication" />
+    <bpmn:sequenceFlow id="Flow_System_ScreeningRejected" sourceRef="Gateway_System_Screening" targetRef="End_System_ScreeningRejected" />
+    <bpmn:sequenceFlow id="Flow_System_RejectionTx" sourceRef="Start_System_RecruiterRejected" targetRef="Transaction_Rejection" />
+    <bpmn:sequenceFlow id="Flow_System_RejectionEnd" sourceRef="Transaction_Rejection" targetRef="End_System_Rejection" />
+    <bpmn:sequenceFlow id="Flow_System_InvitationTx" sourceRef="Start_System_RecruiterInvited" targetRef="Transaction_Invitation" />
+    <bpmn:sequenceFlow id="Flow_System_InvitationMessage" sourceRef="Transaction_Invitation" targetRef="Throw_InvitationSent" />
+    <bpmn:sequenceFlow id="Flow_System_ResponseTx" sourceRef="Start_System_CandidateResponded" targetRef="Transaction_Response" />
+    <bpmn:sequenceFlow id="Flow_System_ResponseMessage" sourceRef="Transaction_Response" targetRef="Throw_ResponseStored" />
+    <bpmn:sequenceFlow id="Flow_System_TimeoutTx" sourceRef="Start_System_TimeoutScan" targetRef="Transaction_TimeoutBatch" />
+    <bpmn:sequenceFlow id="Flow_System_TimeoutMessage" sourceRef="Transaction_TimeoutBatch" targetRef="Throw_TimeoutClosed" />
+    <bpmn:sequenceFlow id="Flow_System_CloseVacancyTx" sourceRef="Start_System_CloseVacancy" targetRef="Transaction_CloseVacancy" />
+    <bpmn:sequenceFlow id="Flow_System_VacancyClosedMessage" sourceRef="Transaction_CloseVacancy" targetRef="Throw_VacancyClosed" />
+    <bpmn:sequenceFlow id="Flow_System_AdminResetTx" sourceRef="Start_System_AdminReset" targetRef="Transaction_AdminReset" />
+    <bpmn:sequenceFlow id="Flow_System_AdminResetMessage" sourceRef="Transaction_AdminReset" targetRef="Throw_InterviewReset" />
+  </bpmn:process>
+
+  <bpmn:process id="Process_Scheduler_Overview" name="Шедулер" isExecutable="false">
+    <bpmn:startEvent id="Start_Scheduler_Timer" name="Периодический таймер">
+      <bpmn:outgoing>Flow_Scheduler_TimeoutScan</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT1M</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:intermediateThrowEvent id="Throw_TimeoutScan" name="Запустить проверку просрочек">
+      <bpmn:incoming>Flow_Scheduler_TimeoutScan</bpmn:incoming>
+      <bpmn:messageEventDefinition messageRef="Message_TimeoutScan" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:sequenceFlow id="Flow_Scheduler_TimeoutScan" sourceRef="Start_Scheduler_Timer" targetRef="Throw_TimeoutScan" />
+  </bpmn:process>
+
+  <bpmn:process id="Process_Admin_Overview" name="Админ" isExecutable="false">
+    <bpmn:startEvent id="Start_Admin_Reset" name="Нужно сбросить интервью">
+      <bpmn:outgoing>Flow_Admin_ResetTask</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Admin_ResetInterview" name="Сбросить интервью без шедулера">
+      <bpmn:incoming>Flow_Admin_ResetTask</bpmn:incoming>
+      <bpmn:outgoing>Flow_Admin_SendReset</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:intermediateThrowEvent id="Throw_AdminResetInterview" name="Отправить запрос на сброс">
+      <bpmn:incoming>Flow_Admin_SendReset</bpmn:incoming>
+      <bpmn:messageEventDefinition messageRef="Message_AdminResetInterview" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:sequenceFlow id="Flow_Admin_ResetTask" sourceRef="Start_Admin_Reset" targetRef="Task_Admin_ResetInterview" />
+    <bpmn:sequenceFlow id="Flow_Admin_SendReset" sourceRef="Task_Admin_ResetInterview" targetRef="Throw_AdminResetInterview" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_HH_Overview">
+    <bpmndi:BPMNPlane id="BPMNPlane_HH_Overview" bpmnElement="Collaboration_HH_Overview">
+      <bpmndi:BPMNShape id="Participant_Candidate_di" bpmnElement="Participant_Candidate" isHorizontal="true"><dc:Bounds x="80" y="40" width="3700" height="160" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_Recruiter_di" bpmnElement="Participant_Recruiter" isHorizontal="true"><dc:Bounds x="80" y="200" width="3700" height="190" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_System_di" bpmnElement="Participant_System" isHorizontal="true"><dc:Bounds x="80" y="390" width="3700" height="740" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_Scheduler_di" bpmnElement="Participant_Scheduler" isHorizontal="true"><dc:Bounds x="80" y="1130" width="3700" height="120" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_Admin_di" bpmnElement="Participant_Admin" isHorizontal="true"><dc:Bounds x="80" y="1250" width="3700" height="150" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DataStoreRef_HH_Main_di" bpmnElement="DataStoreRef_HH_Main"><dc:Bounds x="1600" y="430" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Candidate_Search_di" bpmnElement="Start_Candidate_Search"><dc:Bounds x="170" y="100" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Candidate_Apply_di" bpmnElement="Task_Candidate_Apply"><dc:Bounds x="250" y="78" width="160" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_ApplicationSubmitted_di" bpmnElement="Throw_ApplicationSubmitted"><dc:Bounds x="455" y="100" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_Candidate_Invitation_di" bpmnElement="Catch_Candidate_Invitation"><dc:Bounds x="1135" y="100" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Candidate_Response_di" bpmnElement="Task_Candidate_Response"><dc:Bounds x="1220" y="78" width="190" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_CandidateResponded_di" bpmnElement="Throw_CandidateResponded"><dc:Bounds x="1460" y="100" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Candidate_Response_di" bpmnElement="End_Candidate_Response"><dc:Bounds x="1545" y="100" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_Candidate_TimeoutClosed_di" bpmnElement="Catch_Candidate_TimeoutClosed"><dc:Bounds x="2180" y="100" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_Candidate_VacancyClosed_di" bpmnElement="Catch_Candidate_VacancyClosed"><dc:Bounds x="2700" y="100" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_Candidate_InterviewReset_di" bpmnElement="Catch_Candidate_InterviewReset"><dc:Bounds x="3130" y="100" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Recruiter_NewApplication_di" bpmnElement="Start_Recruiter_NewApplication"><dc:Bounds x="500" y="278" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Recruiter_Review_di" bpmnElement="Task_Recruiter_Review"><dc:Bounds x="580" y="256" width="160" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Recruiter_Decision_di" bpmnElement="Gateway_Recruiter_Decision" isMarkerVisible="true"><dc:Bounds x="790" y="271" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_RecruiterRejected_di" bpmnElement="Throw_RecruiterRejected"><dc:Bounds x="900" y="230" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Recruiter_Reject_di" bpmnElement="End_Recruiter_Reject"><dc:Bounds x="985" y="230" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Recruiter_WriteInvitation_di" bpmnElement="Task_Recruiter_WriteInvitation"><dc:Bounds x="900" y="295" width="180" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_RecruiterInvited_di" bpmnElement="Throw_RecruiterInvited"><dc:Bounds x="1135" y="318" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_Recruiter_Response_di" bpmnElement="Catch_Recruiter_Response"><dc:Bounds x="1700" y="318" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Recruiter_Response_di" bpmnElement="End_Recruiter_Response"><dc:Bounds x="1785" y="318" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Recruiter_CloseVacancy_di" bpmnElement="Task_Recruiter_CloseVacancy"><dc:Bounds x="2300" y="255" width="160" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_CloseVacancy_di" bpmnElement="Throw_CloseVacancy"><dc:Bounds x="2510" y="278" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_System_ApplicationSubmitted_di" bpmnElement="Start_System_ApplicationSubmitted"><dc:Bounds x="455" y="520" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Transaction_ApplicationSubmit_di" bpmnElement="Transaction_ApplicationSubmit" isExpanded="true"><dc:Bounds x="540" y="475" width="430" height="150" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Tx_ApplicationSubmit_di" bpmnElement="Start_Tx_ApplicationSubmit"><dc:Bounds x="570" y="537" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_App_SaveApplication_di" bpmnElement="Task_Tx_App_SaveApplication"><dc:Bounds x="610" y="525" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_App_AutoScreen_di" bpmnElement="Task_Tx_App_AutoScreen"><dc:Bounds x="740" y="525" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_App_WriteScreening_di" bpmnElement="Task_Tx_App_WriteScreening"><dc:Bounds x="870" y="525" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Tx_ApplicationSubmit_di" bpmnElement="End_Tx_ApplicationSubmit"><dc:Bounds x="950" y="537" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_System_Screening_di" bpmnElement="Gateway_System_Screening" isMarkerVisible="true"><dc:Bounds x="1015" y="525" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_NewApplication_di" bpmnElement="Throw_NewApplication"><dc:Bounds x="1120" y="520" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_System_ScreeningRejected_di" bpmnElement="End_System_ScreeningRejected"><dc:Bounds x="1120" y="600" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_System_RecruiterRejected_di" bpmnElement="Start_System_RecruiterRejected"><dc:Bounds x="900" y="700" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Transaction_Rejection_di" bpmnElement="Transaction_Rejection" isExpanded="true"><dc:Bounds x="980" y="655" width="520" height="150" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Tx_Rejection_di" bpmnElement="Start_Tx_Rejection"><dc:Bounds x="995" y="723" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Rej_CancelInterview_di" bpmnElement="Task_Tx_Rej_CancelInterview"><dc:Bounds x="1030" y="705" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Rej_ReleaseSlot_di" bpmnElement="Task_Tx_Rej_ReleaseSlot"><dc:Bounds x="1160" y="705" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Rej_UpdateStatus_di" bpmnElement="Task_Tx_Rej_UpdateStatus"><dc:Bounds x="1290" y="705" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Rej_NotifyCandidate_di" bpmnElement="Task_Tx_Rej_NotifyCandidate"><dc:Bounds x="1420" y="705" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Tx_Rejection_di" bpmnElement="End_Tx_Rejection"><dc:Bounds x="1470" y="723" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_System_Rejection_di" bpmnElement="End_System_Rejection"><dc:Bounds x="1545" y="718" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_System_RecruiterInvited_di" bpmnElement="Start_System_RecruiterInvited"><dc:Bounds x="1135" y="850" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Transaction_Invitation_di" bpmnElement="Transaction_Invitation" isExpanded="true"><dc:Bounds x="1220" y="815" width="650" height="150" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Tx_Invitation_di" bpmnElement="Start_Tx_Invitation"><dc:Bounds x="1230" y="883" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Inv_Validate_di" bpmnElement="Task_Tx_Inv_Validate"><dc:Bounds x="1260" y="865" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Inv_SaveInvitation_di" bpmnElement="Task_Tx_Inv_SaveInvitation"><dc:Bounds x="1390" y="865" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Inv_CreateInterview_di" bpmnElement="Task_Tx_Inv_CreateInterview"><dc:Bounds x="1520" y="865" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Inv_ReserveSlot_di" bpmnElement="Task_Tx_Inv_ReserveSlot"><dc:Bounds x="1650" y="865" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Inv_NotifyCandidate_di" bpmnElement="Task_Tx_Inv_NotifyCandidate"><dc:Bounds x="1780" y="865" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Tx_Invitation_di" bpmnElement="End_Tx_Invitation"><dc:Bounds x="1840" y="883" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_InvitationSent_di" bpmnElement="Throw_InvitationSent"><dc:Bounds x="1940" y="878" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_System_CandidateResponded_di" bpmnElement="Start_System_CandidateResponded"><dc:Bounds x="1460" y="1000" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Transaction_Response_di" bpmnElement="Transaction_Response" isExpanded="true"><dc:Bounds x="1540" y="970" width="520" height="140" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Tx_Response_di" bpmnElement="Start_Tx_Response"><dc:Bounds x="1550" y="1033" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Resp_Validate_di" bpmnElement="Task_Tx_Resp_Validate"><dc:Bounds x="1585" y="1015" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Resp_Save_di" bpmnElement="Task_Tx_Resp_Save"><dc:Bounds x="1715" y="1015" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Resp_UpdateStatus_di" bpmnElement="Task_Tx_Resp_UpdateStatus"><dc:Bounds x="1845" y="1015" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Resp_NotifyRecruiter_di" bpmnElement="Task_Tx_Resp_NotifyRecruiter"><dc:Bounds x="1975" y="1015" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Tx_Response_di" bpmnElement="End_Tx_Response"><dc:Bounds x="2030" y="1033" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_ResponseStored_di" bpmnElement="Throw_ResponseStored"><dc:Bounds x="2130" y="1028" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_System_TimeoutScan_di" bpmnElement="Start_System_TimeoutScan"><dc:Bounds x="2050" y="520" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Transaction_TimeoutBatch_di" bpmnElement="Transaction_TimeoutBatch" isExpanded="true"><dc:Bounds x="2130" y="475" width="520" height="150" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Tx_Timeout_di" bpmnElement="Start_Tx_Timeout"><dc:Bounds x="2140" y="537" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Timeout_Find_di" bpmnElement="Task_Tx_Timeout_Find"><dc:Bounds x="2180" y="525" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Timeout_Close_di" bpmnElement="Task_Tx_Timeout_Close"><dc:Bounds x="2310" y="525" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Timeout_Release_di" bpmnElement="Task_Tx_Timeout_Release"><dc:Bounds x="2440" y="525" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_Timeout_Notify_di" bpmnElement="Task_Tx_Timeout_Notify"><dc:Bounds x="2570" y="525" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Tx_Timeout_di" bpmnElement="End_Tx_Timeout"><dc:Bounds x="2620" y="537" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_TimeoutClosed_di" bpmnElement="Throw_TimeoutClosed"><dc:Bounds x="2710" y="520" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_System_CloseVacancy_di" bpmnElement="Start_System_CloseVacancy"><dc:Bounds x="2510" y="700" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Transaction_CloseVacancy_di" bpmnElement="Transaction_CloseVacancy" isExpanded="true"><dc:Bounds x="2590" y="655" width="520" height="150" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Tx_CloseVacancy_di" bpmnElement="Start_Tx_CloseVacancy"><dc:Bounds x="2600" y="723" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_CloseVacancy_Update_di" bpmnElement="Task_Tx_CloseVacancy_Update"><dc:Bounds x="2635" y="705" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_CloseVacancy_Applications_di" bpmnElement="Task_Tx_CloseVacancy_Applications"><dc:Bounds x="2765" y="705" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_CloseVacancy_Interviews_di" bpmnElement="Task_Tx_CloseVacancy_Interviews"><dc:Bounds x="2895" y="705" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_CloseVacancy_Notify_di" bpmnElement="Task_Tx_CloseVacancy_Notify"><dc:Bounds x="3025" y="705" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Tx_CloseVacancy_di" bpmnElement="End_Tx_CloseVacancy"><dc:Bounds x="3080" y="723" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_VacancyClosed_di" bpmnElement="Throw_VacancyClosed"><dc:Bounds x="3160" y="718" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_System_AdminReset_di" bpmnElement="Start_System_AdminReset"><dc:Bounds x="2820" y="910" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Transaction_AdminReset_di" bpmnElement="Transaction_AdminReset" isExpanded="true"><dc:Bounds x="2900" y="855" width="650" height="150" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Tx_AdminReset_di" bpmnElement="Start_Tx_AdminReset"><dc:Bounds x="2910" y="923" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_AdminReset_Check_di" bpmnElement="Task_Tx_AdminReset_Check"><dc:Bounds x="2940" y="905" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_AdminReset_Cancel_di" bpmnElement="Task_Tx_AdminReset_Cancel"><dc:Bounds x="3070" y="905" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_AdminReset_Release_di" bpmnElement="Task_Tx_AdminReset_Release"><dc:Bounds x="3200" y="905" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_AdminReset_Status_di" bpmnElement="Task_Tx_AdminReset_Status"><dc:Bounds x="3330" y="905" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tx_AdminReset_Notify_di" bpmnElement="Task_Tx_AdminReset_Notify"><dc:Bounds x="3460" y="905" width="110" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Tx_AdminReset_di" bpmnElement="End_Tx_AdminReset"><dc:Bounds x="3520" y="923" width="24" height="24" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_InterviewReset_di" bpmnElement="Throw_InterviewReset"><dc:Bounds x="3600" y="918" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Scheduler_Timer_di" bpmnElement="Start_Scheduler_Timer"><dc:Bounds x="2050" y="1175" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_TimeoutScan_di" bpmnElement="Throw_TimeoutScan"><dc:Bounds x="2140" y="1175" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Admin_Reset_di" bpmnElement="Start_Admin_Reset"><dc:Bounds x="2820" y="1310" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Admin_ResetInterview_di" bpmnElement="Task_Admin_ResetInterview"><dc:Bounds x="2900" y="1288" width="190" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_AdminResetInterview_di" bpmnElement="Throw_AdminResetInterview"><dc:Bounds x="3130" y="1310" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Candidate_Apply_di" bpmnElement="Flow_Candidate_Apply"><di:waypoint x="206" y="118" /><di:waypoint x="250" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Candidate_SendApplication_di" bpmnElement="Flow_Candidate_SendApplication"><di:waypoint x="410" y="118" /><di:waypoint x="455" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Candidate_WaitInvitation_di" bpmnElement="Flow_Candidate_WaitInvitation"><di:waypoint x="491" y="118" /><di:waypoint x="1135" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Candidate_ResponseTask_di" bpmnElement="Flow_Candidate_ResponseTask"><di:waypoint x="1171" y="118" /><di:waypoint x="1220" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Candidate_SendResponse_di" bpmnElement="Flow_Candidate_SendResponse"><di:waypoint x="1410" y="118" /><di:waypoint x="1460" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Candidate_ResponseEnd_di" bpmnElement="Flow_Candidate_ResponseEnd"><di:waypoint x="1496" y="118" /><di:waypoint x="1545" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recruiter_Review_di" bpmnElement="Flow_Recruiter_Review"><di:waypoint x="536" y="296" /><di:waypoint x="580" y="296" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recruiter_Decision_di" bpmnElement="Flow_Recruiter_Decision"><di:waypoint x="740" y="296" /><di:waypoint x="790" y="296" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recruiter_Reject_di" bpmnElement="Flow_Recruiter_Reject"><di:waypoint x="815" y="271" /><di:waypoint x="815" y="248" /><di:waypoint x="900" y="248" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recruiter_Invite_di" bpmnElement="Flow_Recruiter_Invite"><di:waypoint x="840" y="296" /><di:waypoint x="900" y="335" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recruiter_SendInvitation_di" bpmnElement="Flow_Recruiter_SendInvitation"><di:waypoint x="1080" y="335" /><di:waypoint x="1135" y="336" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recruiter_WaitResponse_di" bpmnElement="Flow_Recruiter_WaitResponse"><di:waypoint x="1171" y="336" /><di:waypoint x="1700" y="336" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recruiter_ResponseEnd_di" bpmnElement="Flow_Recruiter_ResponseEnd"><di:waypoint x="1736" y="336" /><di:waypoint x="1785" y="336" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recruiter_RejectEnd_di" bpmnElement="Flow_Recruiter_RejectEnd"><di:waypoint x="936" y="248" /><di:waypoint x="985" y="248" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recruiter_CloseVacancy_di" bpmnElement="Flow_Recruiter_CloseVacancy"><di:waypoint x="2460" y="295" /><di:waypoint x="2510" y="296" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_ApplicationTx_di" bpmnElement="Flow_System_ApplicationTx"><di:waypoint x="491" y="538" /><di:waypoint x="540" y="550" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_ScreeningGateway_di" bpmnElement="Flow_System_ScreeningGateway"><di:waypoint x="970" y="550" /><di:waypoint x="1015" y="550" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_NewApplication_di" bpmnElement="Flow_System_NewApplication"><di:waypoint x="1065" y="550" /><di:waypoint x="1120" y="538" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_ScreeningRejected_di" bpmnElement="Flow_System_ScreeningRejected"><di:waypoint x="1040" y="575" /><di:waypoint x="1040" y="618" /><di:waypoint x="1120" y="618" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_RejectionTx_di" bpmnElement="Flow_System_RejectionTx"><di:waypoint x="936" y="718" /><di:waypoint x="980" y="730" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_RejectionEnd_di" bpmnElement="Flow_System_RejectionEnd"><di:waypoint x="1500" y="730" /><di:waypoint x="1545" y="736" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_InvitationTx_di" bpmnElement="Flow_System_InvitationTx"><di:waypoint x="1171" y="868" /><di:waypoint x="1220" y="890" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_InvitationMessage_di" bpmnElement="Flow_System_InvitationMessage"><di:waypoint x="1870" y="890" /><di:waypoint x="1940" y="896" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_ResponseTx_di" bpmnElement="Flow_System_ResponseTx"><di:waypoint x="1496" y="1018" /><di:waypoint x="1540" y="1040" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_ResponseMessage_di" bpmnElement="Flow_System_ResponseMessage"><di:waypoint x="2060" y="1040" /><di:waypoint x="2130" y="1046" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_TimeoutTx_di" bpmnElement="Flow_System_TimeoutTx"><di:waypoint x="2086" y="538" /><di:waypoint x="2130" y="550" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_TimeoutMessage_di" bpmnElement="Flow_System_TimeoutMessage"><di:waypoint x="2650" y="550" /><di:waypoint x="2710" y="538" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_CloseVacancyTx_di" bpmnElement="Flow_System_CloseVacancyTx"><di:waypoint x="2546" y="718" /><di:waypoint x="2590" y="730" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_VacancyClosedMessage_di" bpmnElement="Flow_System_VacancyClosedMessage"><di:waypoint x="3110" y="730" /><di:waypoint x="3160" y="736" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_AdminResetTx_di" bpmnElement="Flow_System_AdminResetTx"><di:waypoint x="2856" y="928" /><di:waypoint x="2900" y="930" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_System_AdminResetMessage_di" bpmnElement="Flow_System_AdminResetMessage"><di:waypoint x="3550" y="930" /><di:waypoint x="3600" y="936" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Scheduler_TimeoutScan_di" bpmnElement="Flow_Scheduler_TimeoutScan"><di:waypoint x="2086" y="1193" /><di:waypoint x="2140" y="1193" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Admin_ResetTask_di" bpmnElement="Flow_Admin_ResetTask"><di:waypoint x="2856" y="1328" /><di:waypoint x="2900" y="1328" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Admin_SendReset_di" bpmnElement="Flow_Admin_SendReset"><di:waypoint x="3090" y="1328" /><di:waypoint x="3130" y="1328" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Candidate_System_Application_di" bpmnElement="MF_Candidate_System_Application"><di:waypoint x="473" y="136" /><di:waypoint x="473" y="520" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_System_Recruiter_NewApplication_di" bpmnElement="MF_System_Recruiter_NewApplication"><di:waypoint x="1138" y="520" /><di:waypoint x="1138" y="410" /><di:waypoint x="518" y="314" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Recruiter_System_Reject_di" bpmnElement="MF_Recruiter_System_Reject"><di:waypoint x="918" y="266" /><di:waypoint x="918" y="700" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Recruiter_System_Invite_di" bpmnElement="MF_Recruiter_System_Invite"><di:waypoint x="1153" y="354" /><di:waypoint x="1153" y="850" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_System_Candidate_Invitation_di" bpmnElement="MF_System_Candidate_Invitation"><di:waypoint x="1958" y="878" /><di:waypoint x="1958" y="160" /><di:waypoint x="1171" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Candidate_System_Response_di" bpmnElement="MF_Candidate_System_Response"><di:waypoint x="1478" y="136" /><di:waypoint x="1478" y="1000" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_System_Recruiter_Response_di" bpmnElement="MF_System_Recruiter_Response"><di:waypoint x="2148" y="1028" /><di:waypoint x="2148" y="360" /><di:waypoint x="1736" y="336" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Scheduler_System_TimeoutScan_di" bpmnElement="MF_Scheduler_System_TimeoutScan"><di:waypoint x="2158" y="1175" /><di:waypoint x="2158" y="640" /><di:waypoint x="2068" y="556" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_System_Candidate_Timeout_di" bpmnElement="MF_System_Candidate_Timeout"><di:waypoint x="2728" y="520" /><di:waypoint x="2728" y="160" /><di:waypoint x="2216" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Recruiter_System_CloseVacancy_di" bpmnElement="MF_Recruiter_System_CloseVacancy"><di:waypoint x="2528" y="314" /><di:waypoint x="2528" y="700" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_System_Candidate_VacancyClosed_di" bpmnElement="MF_System_Candidate_VacancyClosed"><di:waypoint x="3178" y="718" /><di:waypoint x="3178" y="160" /><di:waypoint x="2736" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Admin_System_Reset_di" bpmnElement="MF_Admin_System_Reset"><di:waypoint x="3148" y="1310" /><di:waypoint x="3148" y="1050" /><di:waypoint x="2838" y="946" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_System_Candidate_Reset_di" bpmnElement="MF_System_Candidate_Reset"><di:waypoint x="3618" y="918" /><di:waypoint x="3618" y="160" /><di:waypoint x="3166" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DA_App_Save_DB_di" bpmnElement="DA_App_Save_DB"><di:waypoint x="665" y="525" /><di:waypoint x="1625" y="480" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DA_App_Screening_DB_di" bpmnElement="DA_App_Screening_DB"><di:waypoint x="925" y="525" /><di:waypoint x="1625" y="480" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DA_Inv_Slot_DB_di" bpmnElement="DA_Inv_Slot_DB"><di:waypoint x="1705" y="865" /><di:waypoint x="1625" y="480" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DA_Timeout_Find_DB_di" bpmnElement="DA_Timeout_Find_DB"><di:waypoint x="2235" y="525" /><di:waypoint x="1650" y="455" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DA_CloseVacancy_DB_di" bpmnElement="DA_CloseVacancy_DB"><di:waypoint x="2690" y="705" /><di:waypoint x="1650" y="455" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DA_AdminReset_Interview_DB_di" bpmnElement="DA_AdminReset_Interview_DB"><di:waypoint x="3125" y="905" /><di:waypoint x="1650" y="455" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

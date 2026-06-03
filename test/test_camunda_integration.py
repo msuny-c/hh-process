@@ -36,6 +36,7 @@ def main() -> int:
         'hhApplicationProcess',
         'hhVacancyProcess',
         'hhTimeoutSchedulerProcess',
+        'hhAdminInterviewResetProcess',
     ]
     for key in required:
         for _ in range(60):

@@ -17,6 +17,7 @@ import ru.itmo.hhprocess.enums.ResponseType;
 import ru.itmo.hhprocess.enums.VacancyStatus;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 import ru.itmo.hhprocess.repository.InvitationResponseRepository;
+import ru.itmo.hhprocess.repository.UserRepository;
 import ru.itmo.hhprocess.repository.VacancyRepository;
 import ru.itmo.hhprocess.service.HistoryService;
 import ru.itmo.hhprocess.service.InterviewService;
@@ -51,6 +52,7 @@ public class CamundaProcessAdapterService {
 
     private final ApplicationRepository applicationRepository;
     private final VacancyRepository vacancyRepository;
+    private final UserRepository userRepository;
     private final InvitationResponseRepository invitationResponseRepository;
     private final ScreeningService screeningService;
     private final HistoryService historyService;
@@ -126,10 +128,16 @@ public class CamundaProcessAdapterService {
 
         historyService.record(application, oldStatus, ApplicationStatus.REJECTED_BY_RECRUITER,
                 application.getVacancy().getRecruiterUser());
-        notificationService.createIfAbsent(application.getCandidateUser(), application,
-                NotificationType.APPLICATION_REJECTED, "Your application has been rejected");
 
         return Map.of("rejectionPersisted", true, "status", application.getStatus().name());
+    }
+
+    @Transactional
+    public Map<String, Object> notifyApplicationRejected(UUID applicationId) {
+        ApplicationEntity application = getApplication(applicationId);
+        notificationService.createIfAbsent(application.getCandidateUser(), application,
+                NotificationType.APPLICATION_REJECTED, "Your application has been rejected");
+        return Map.of("notificationSent", true, "status", application.getStatus().name());
     }
 
     @Transactional
@@ -165,8 +173,6 @@ public class CamundaProcessAdapterService {
         var slot = scheduleService.reserveOnTheFly(recruiterUser, interview, scheduledAt, durationMinutes);
 
         historyService.record(application, oldStatus, ApplicationStatus.INVITED, recruiterUser);
-        notificationService.createIfAbsent(application.getCandidateUser(), application,
-                NotificationType.INVITATION, "You have been invited to an interview: " + message);
 
         return Map.of(
                 "invitationPersisted", true,
@@ -175,6 +181,14 @@ public class CamundaProcessAdapterService {
                 "scheduleSlotId", slot.getId(),
                 "invitationExpiresAt", expiresAt
         );
+    }
+
+    @Transactional
+    public Map<String, Object> notifyInvitation(UUID applicationId, String message) {
+        ApplicationEntity application = getApplication(applicationId);
+        notificationService.createIfAbsent(application.getCandidateUser(), application,
+                NotificationType.INVITATION, "You have been invited to an interview: " + message);
+        return Map.of("notificationSent", true, "status", application.getStatus().name());
     }
 
     @Transactional
@@ -199,10 +213,16 @@ public class CamundaProcessAdapterService {
         applicationRepository.save(application);
         historyService.record(application, ApplicationStatus.INVITED, ApplicationStatus.INVITATION_RESPONDED,
                 application.getCandidateUser());
-        notificationService.createIfAbsent(application.getVacancy().getRecruiterUser(), application,
-                NotificationType.INVITATION_RESPONSE, "Candidate responded to interview invitation");
 
         return Map.of("responsePersisted", true, "status", application.getStatus().name());
+    }
+
+    @Transactional
+    public Map<String, Object> notifyCandidateResponse(UUID applicationId) {
+        ApplicationEntity application = getApplication(applicationId);
+        notificationService.createIfAbsent(application.getVacancy().getRecruiterUser(), application,
+                NotificationType.INVITATION_RESPONSE, "Candidate responded to interview invitation");
+        return Map.of("notificationSent", true, "status", application.getStatus().name());
     }
 
     @Transactional
@@ -236,6 +256,13 @@ public class CamundaProcessAdapterService {
 
     @Transactional
     public Map<String, Object> closeVacancyApplications(UUID vacancyId, String reason) {
+        Map<String, Object> dbResult = closeVacancyApplicationsInDb(vacancyId, reason);
+        notifyVacancyClosedCandidates(vacancyId);
+        return dbResult;
+    }
+
+    @Transactional
+    public Map<String, Object> closeVacancyApplicationsInDb(UUID vacancyId, String reason) {
         VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
                 .orElseThrow(() -> new IllegalArgumentException("Vacancy not found: " + vacancyId));
         VacancyStatus oldVacancyStatus = vacancy.getStatus();
@@ -267,11 +294,109 @@ public class CamundaProcessAdapterService {
             application.setResponseReceivedAt(null);
             application.setRecruiterComment(reason);
             historyService.record(application, oldStatus, ApplicationStatus.CLOSED_BY_VACANCY, vacancy.getRecruiterUser());
-            notificationService.createIfAbsent(application.getCandidateUser(), application,
-                    NotificationType.VACANCY_CLOSED, "Vacancy was closed: " + vacancy.getTitle());
             closedCount++;
         }
         return Map.of("vacancyClosed", true, "closedApplicationsCount", closedCount, "status", vacancy.getStatus().name());
+    }
+
+    @Transactional
+    public Map<String, Object> notifyVacancyClosedCandidates(UUID vacancyId) {
+        VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
+                .orElseThrow(() -> new IllegalArgumentException("Vacancy not found: " + vacancyId));
+        List<ApplicationEntity> applications = applicationRepository.findByVacancyIdAndStatusIn(
+                vacancyId, List.of(ApplicationStatus.CLOSED_BY_VACANCY));
+        int notifiedCount = 0;
+        for (ApplicationEntity application : applications) {
+            notificationService.createIfAbsent(application.getCandidateUser(), application,
+                    NotificationType.VACANCY_CLOSED, "Vacancy was closed: " + vacancy.getTitle());
+            notifiedCount++;
+        }
+        return Map.of("notificationSent", true, "notifiedCount", notifiedCount, "status", vacancy.getStatus().name());
+    }
+
+    @Transactional
+    public Map<String, Object> resetInterviewByAdmin(UUID interviewId, UUID adminUserId, String reason) {
+        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
+        UserEntity adminUser = userRepository.findById(adminUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Admin user not found: " + adminUserId));
+        ApplicationEntity application = interview.getApplication();
+        ApplicationStatus oldStatus = application.getStatus();
+        if (interview.getStatus() == InterviewStatus.CANCELLED) {
+            return Map.of(
+                    "interviewReset", true,
+                    "interviewId", interview.getId(),
+                    "applicationId", application.getId(),
+                    "status", interview.getStatus().name(),
+                    "idempotent", true
+            );
+        }
+        if (interview.getStatus() != InterviewStatus.SCHEDULED) {
+            throw new IllegalArgumentException("Interview is not active: " + interviewId);
+        }
+
+        interviewService.cancel(interview, reason);
+        scheduleService.releaseForInterview(interview);
+
+        application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
+        application.setInvitationText(null);
+        application.setInvitationSentAt(null);
+        application.setInvitationExpiresAt(null);
+        application.setResponseReceivedAt(null);
+        application.setRecruiterComment(reason);
+        applicationRepository.save(application);
+
+        historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW, adminUser);
+        notificationService.create(application.getCandidateUser(), application,
+                NotificationType.INTERVIEW_CANCELLED, "Interview was reset by administrator: " + reason);
+        notificationService.create(application.getVacancy().getRecruiterUser(), application,
+                NotificationType.INTERVIEW_CANCELLED, "Interview was reset by administrator: " + reason);
+
+        return Map.of(
+                "interviewReset", true,
+                "interviewId", interview.getId(),
+                "applicationId", application.getId(),
+                "status", interview.getStatus().name(),
+                "applicationStatus", application.getStatus().name()
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> rollbackApplicationTransaction(UUID applicationId, String reason) {
+        ApplicationEntity application = getApplication(applicationId);
+        ApplicationStatus oldStatus = application.getStatus();
+        interviewService.findActiveByApplicationId(application.getId()).ifPresent(interview -> {
+            interviewService.cancel(interview, reason);
+            scheduleService.releaseForInterview(interview);
+        });
+        if (oldStatus == ApplicationStatus.INVITED || oldStatus == ApplicationStatus.INVITATION_RESPONDED) {
+            application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
+            application.setInvitationText(null);
+            application.setInvitationSentAt(null);
+            application.setInvitationExpiresAt(null);
+            application.setResponseReceivedAt(null);
+            application.setRecruiterComment(reason);
+            applicationRepository.save(application);
+            historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW,
+                    application.getVacancy().getRecruiterUser());
+        }
+        return Map.of(
+                "rollbackCompleted", true,
+                "applicationId", application.getId(),
+                "oldStatus", oldStatus.name(),
+                "status", application.getStatus().name()
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> rollbackVacancyTransaction(UUID vacancyId, String reason) {
+        VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
+                .orElseThrow(() -> new IllegalArgumentException("Vacancy not found: " + vacancyId));
+        return Map.of(
+                "rollbackCompleted", true,
+                "vacancyId", vacancy.getId(),
+                "status", vacancy.getStatus().name(),
+                "rollbackReason", reason == null ? "" : reason
+        );
     }
 
     public Instant scheduledAtOrDefault(Object value) {

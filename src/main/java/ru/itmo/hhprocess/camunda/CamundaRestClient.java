@@ -156,6 +156,31 @@ public class CamundaRestClient {
         }
     }
 
+    public boolean taskHasCandidateGroup(String taskId, String expectedGroup) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        try {
+            ResponseEntity<List> response = camundaRestTemplate.exchange(
+                    url("/task/" + taskId + "/identity-links"), HttpMethod.GET, null, List.class);
+            List<?> raw = response.getBody();
+            if (raw == null || raw.isEmpty()) {
+                return false;
+            }
+            for (Object item : raw) {
+                if (item instanceof Map<?, ?> map
+                        && expectedGroup.equals(String.valueOf(map.get("groupId")))
+                        && "candidate".equals(String.valueOf(map.get("type")))) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (RuntimeException e) {
+            handle("read Camunda task identity links " + taskId, e);
+            return false;
+        }
+    }
+
     public boolean completeTask(String taskId, Map<String, ?> variables) {
         if (!properties.isEnabled()) {
             return false;
@@ -185,9 +210,11 @@ public class CamundaRestClient {
                         "lockDuration", properties.getWorker().getLockDurationMs(),
                         "variables", List.of(
                                 "applicationId",
+                                "interviewId",
                                 "vacancyId",
                                 "candidateUserId",
                                 "recruiterUserId",
+                                "adminUserId",
                                 "vacancyTitle",
                                 "screeningPassed",
                                 "status",
@@ -198,7 +225,9 @@ public class CamundaRestClient {
                                 "durationMinutes",
                                 "responseType",
                                 "responseMessage",
-                                "closeReason")))
+                                "closeReason",
+                                "resetReason",
+                                "rollbackReason")))
                 .toList();
         body.put("topics", topicBody);
         try {
@@ -229,6 +258,21 @@ public class CamundaRestClient {
             camundaRestTemplate.postForEntity(url("/external-task/" + externalTaskId + "/complete"), body, Void.class);
         } catch (RuntimeException e) {
             handle("complete Camunda external task " + externalTaskId, e);
+        }
+    }
+
+    public boolean throwBpmnErrorExternalTask(String externalTaskId, String errorCode, String message, Map<String, ?> variables) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("workerId", properties.getWorker().getId());
+        body.put("errorCode", errorCode);
+        body.put("errorMessage", message == null ? "External task transaction failed" : message);
+        body.put("variables", CamundaVariable.variables(variables));
+        try {
+            camundaRestTemplate.postForEntity(url("/external-task/" + externalTaskId + "/bpmnError"), body, Void.class);
+            return true;
+        } catch (RuntimeException e) {
+            handle("throw Camunda BPMN error for external task " + externalTaskId, e);
+            return false;
         }
     }
 

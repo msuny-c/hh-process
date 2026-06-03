@@ -5,6 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.dto.recruiter.*;
+import ru.itmo.hhprocess.dto.admin.ResetInterviewRequest;
+import ru.itmo.hhprocess.dto.admin.ResetInterviewResponse;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.InterviewEntity;
 import ru.itmo.hhprocess.entity.RecruiterScheduleSlotEntity;
@@ -34,6 +36,7 @@ public class InterviewProcessService {
     private final HistoryService historyService;
     private final NotificationService notificationService;
     private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
+    private final AuthService authService;
 
     public InviteResponse invite(UUID applicationId, InviteRequest request) {
         UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
@@ -52,9 +55,10 @@ public class InterviewProcessService {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE, "Interview must be scheduled in the future");
         }
         int duration = request.getDurationMinutes() != null ? request.getDurationMinutes() : DEFAULT_DURATION_MINUTES;
+        scheduleService.ensureAvailable(recruiterUser, scheduledAt, duration);
         Instant expiresAt = now.plus(INVITATION_TTL_HOURS, ChronoUnit.HOURS);
 
-        if (!camundaWorkflowFacade.recruiterInvited(application, request.getMessage(), scheduledAt, duration, expiresAt)) {
+        if (!camundaWorkflowFacade.recruiterInvited(application, recruiterUser, request.getMessage(), scheduledAt, duration, expiresAt)) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
                     "Camunda recruiter invitation task is not active");
         }
@@ -81,13 +85,34 @@ public class InterviewProcessService {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE, "Application is already closed");
         }
 
-        if (!camundaWorkflowFacade.recruiterRejected(application, request.getComment())) {
+        if (!camundaWorkflowFacade.recruiterRejected(application, recruiterUser, request.getComment())) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
                     "Camunda recruiter decision task is not active");
         }
 
         application = waitForApplicationStatus(applicationId, ApplicationStatus.REJECTED_BY_RECRUITER);
         return RejectResponse.builder().applicationId(application.getId()).status(ApplicationStatus.REJECTED_BY_RECRUITER.toExternalStatus()).build();
+    }
+
+    public ResetInterviewResponse resetInterviewByAdmin(UUID interviewId, ResetInterviewRequest request) {
+        UserEntity adminUser = authService.getCurrentUser();
+        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
+        if (interview.getStatus() != ru.itmo.hhprocess.enums.InterviewStatus.SCHEDULED) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE, "Interview is not active");
+        }
+
+        if (!camundaWorkflowFacade.adminResetInterview(interview, adminUser, request.getReason())) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                    "Camunda admin reset process was not started");
+        }
+
+        interview = waitForInterviewCancelled(interviewId);
+        return ResetInterviewResponse.builder()
+                .interviewId(interview.getId())
+                .applicationId(interview.getApplication().getId())
+                .status("CANCELLED")
+                .message("Interview reset")
+                .build();
     }
 
     @Transactional
@@ -169,6 +194,18 @@ public class InterviewProcessService {
         }
         throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
                 "Camunda process did not create an active interview in time");
+    }
+
+    private InterviewEntity waitForInterviewCancelled(UUID interviewId) {
+        for (int attempt = 0; attempt < 24; attempt++) {
+            InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
+            if (interview.getStatus() == ru.itmo.hhprocess.enums.InterviewStatus.CANCELLED) {
+                return interview;
+            }
+            sleep();
+        }
+        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                "Camunda process did not reset interview in time");
     }
 
     private static void sleep() {
