@@ -211,7 +211,7 @@ jobs:
           echo "Stopping previous Camunda/Tomcat tasks..."
           if [ -x "$HOME/apps/camunda/camundactl.sh" ]; then
             CAMUNDA_DIR="$HOME/apps/camunda" \
-            CAMUNDA_HOME="$HOME/apps/camunda/camunda-bpm-tomcat-7.21.0" \
+            CAMUNDA_HOME="$HOME/apps/camunda" \
             CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" \
             "$HOME/apps/camunda/camundactl.sh" stop || true
           fi
@@ -235,11 +235,11 @@ jobs:
             "env CAMUNDA_ZIP_URL='${{ env.CAMUNDA_ZIP_URL }}' CAMUNDA_HTTP_PORT='$CAMUNDA_HTTP_PORT' bash -s" <<'REMOTE'
           set -eu
           CAMUNDA_DIR="$HOME/apps/camunda"
-          CAMUNDA_HOME="$CAMUNDA_DIR/camunda-bpm-tomcat-7.21.0"
+          CAMUNDA_HOME="$CAMUNDA_DIR"
           ZIP="$CAMUNDA_DIR/camunda-bpm-tomcat.zip"
           cd "$CAMUNDA_DIR"
-          if [ ! -d "$CAMUNDA_HOME" ]; then
-            rm -rf "$CAMUNDA_HOME"
+          if [ ! -x "$CAMUNDA_HOME/start-camunda.sh" ]; then
+            rm -rf "$CAMUNDA_DIR"/*
             if command -v curl >/dev/null 2>&1; then
               curl -L --fail --retry 3 --retry-delay 5 -o "$ZIP" "$CAMUNDA_ZIP_URL"
             else
@@ -247,6 +247,15 @@ jobs:
             fi
             unzip -o "$ZIP" -d "$CAMUNDA_DIR"
             rm -f "$ZIP"
+            if [ -d "$CAMUNDA_DIR/camunda-bpm-tomcat-7.21.0" ]; then
+              cp -a "$CAMUNDA_DIR/camunda-bpm-tomcat-7.21.0/." "$CAMUNDA_DIR/"
+              rm -rf "$CAMUNDA_DIR/camunda-bpm-tomcat-7.21.0"
+            fi
+          fi
+          if [ ! -x "$CAMUNDA_HOME/start-camunda.sh" ]; then
+            echo "Camunda Tomcat distribution not found: $CAMUNDA_HOME"
+            ls -la "$CAMUNDA_DIR" || true
+            exit 1
           fi
           CAMUNDA_DIR="$CAMUNDA_DIR" CAMUNDA_HOME="$CAMUNDA_HOME" CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" "$CAMUNDA_DIR/camundactl.sh" restart
           for i in $(seq 1 90); do
