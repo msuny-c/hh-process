@@ -229,6 +229,8 @@ jobs:
           set -eu
           REM="${CAMUNDA_SSH_USER}@${CAMUNDA_SSH_HOST}"
           ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "mkdir -p \$HOME/apps/camunda"
+          # Helios has `python`, but not always `python3`. Make camundactl.sh compatible before upload.
+          sed -i 's/python3 -/python -/g' infra/helios-split/camundactl.sh
           ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "cat > \$HOME/apps/camunda/camundactl.sh" < infra/helios-split/camundactl.sh
           ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "chmod +x \$HOME/apps/camunda/camundactl.sh"
           ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" \
