@@ -3,7 +3,7 @@
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED"/>
   <bpmn:error id="Error_ApplicationTxFailed" name="APPLICATION_TX_FAILED" errorCode="APPLICATION_TX_FAILED"/>
   <bpmn:message id="Message_VacancyClosed" name="MSG_VACANCY_CLOSED"/>
-  <bpmn:process id="hhApplicationProcess" name="HH application process with roles" isExecutable="true">
+  <bpmn:process id="hhApplicationProcess" name="HH application process with roles" isExecutable="true" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_Application">
       <bpmn:lane id="Lane_Candidate" name="CANDIDATE">
         <bpmn:flowNodeRef>ApplyToVacancyTask</bpmn:flowNodeRef>
