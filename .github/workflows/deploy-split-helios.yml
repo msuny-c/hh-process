@@ -21,7 +21,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   WILDFLY_VERSION: "40.0.0.Final"
-  WILDFLY_ZIP_URL: "https://download.jboss.org/wildfly/40.0.0.Final/wildfly-40.0.0.Final.zip"
+  WILDFLY_ZIP_URL: https://github.com/wildfly/wildfly/releases/download/40.0.0.Final/wildfly-40.0.0.Final.zip
   CAMUNDA_VERSION: "7.21.0"
   CAMUNDA_ZIP_URL: "https://downloads.camunda.cloud/release/camunda-bpm/tomcat/7.21/camunda-bpm-tomcat-7.21.0.zip"
 
