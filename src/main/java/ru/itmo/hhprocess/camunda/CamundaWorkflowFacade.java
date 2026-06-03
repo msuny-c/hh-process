@@ -24,18 +24,22 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public class CamundaWorkflowFacade {
 
+    private static final String APPLY_TO_VACANCY_TASK = "ApplyToVacancyTask";
+    private static final String CREATE_VACANCY_TASK = "CreateVacancyTask";
     private static final String RECRUITER_DECISION_TASK = "RecruiterDecisionTask";
     private static final String WRITE_INVITATION_TASK = "WriteInvitationTask";
     private static final String CANDIDATE_RESPONSE_TASK = "CandidateInvitationResponseTask";
     private static final String MANAGE_VACANCY_TASK = "ManageVacancyTask";
+    private static final String ADMIN_RESET_APPROVAL_TASK = "AdminResetApprovalTask";
     private static final String RECRUITER_GROUP = "RECRUITER";
     private static final String CANDIDATE_GROUP = "CANDIDATE";
+    private static final String ADMIN_GROUP = "ADMIN";
 
     private final CamundaRestClient camundaRestClient;
     private final CamundaProperties properties;
 
     public Optional<String> startVacancyProcess(VacancyEntity vacancy) {
-        return camundaRestClient.startProcessByKey(
+        Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
                 properties.getVacancyProcessKey(),
                 vacancyBusinessKey(vacancy.getId()),
                 Map.of(
@@ -45,6 +49,13 @@ public class CamundaWorkflowFacade {
                         "status", vacancy.getStatus().name()
                 )
         );
+        processInstanceId.ifPresent(id -> completeVacancyTask(
+                vacancy.getId(),
+                CREATE_VACANCY_TASK,
+                RECRUITER_GROUP,
+                vacancy.getRecruiterUser().getId(),
+                Map.of("action", "CREATE", "createdAt", Instant.now())));
+        return processInstanceId;
     }
 
     public Optional<String> startApplicationProcess(ApplicationEntity application) {
@@ -57,11 +68,18 @@ public class CamundaWorkflowFacade {
         variables.put("vacancyTitle", application.getVacancy().getTitle());
         variables.put("screeningPassed", screeningPassed);
         variables.put("status", application.getStatus().name());
-        return camundaRestClient.startProcessByKey(
+        Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
                 properties.getApplicationProcessKey(),
                 applicationBusinessKey(application.getId()),
                 variables
         );
+        processInstanceId.ifPresent(id -> completeApplicationTask(
+                application.getId(),
+                APPLY_TO_VACANCY_TASK,
+                CANDIDATE_GROUP,
+                application.getCandidateUser().getId(),
+                Map.of("action", "APPLY", "submittedAt", Instant.now())));
+        return processInstanceId;
     }
 
     public boolean recruiterRejected(ApplicationEntity application, UserEntity recruiterUser, String comment) {
@@ -156,9 +174,10 @@ public class CamundaWorkflowFacade {
 
     public boolean adminResetInterview(InterviewEntity interview, UserEntity adminUser, String reason) {
         ApplicationEntity application = interview.getApplication();
-        return camundaRestClient.startProcessByKey(
+        String businessKey = "admin-reset:" + interview.getId() + ":" + UUID.randomUUID();
+        Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
                 properties.getAdminInterviewResetProcessKey(),
-                "admin-reset:" + interview.getId() + ":" + UUID.randomUUID(),
+                businessKey,
                 Map.of(
                         "interviewId", interview.getId(),
                         "applicationId", application.getId(),
@@ -169,7 +188,13 @@ public class CamundaWorkflowFacade {
                         "resetReason", safe(reason),
                         "requestedAt", Instant.now()
                 )
-        ).isPresent();
+        );
+        return processInstanceId.isPresent()
+                && completeTask(businessKey, ADMIN_RESET_APPROVAL_TASK, ADMIN_GROUP, adminUser.getId(), Map.of(
+                "approvedByAdminUserId", adminUser.getId(),
+                "resetReason", safe(reason),
+                "approvedAt", Instant.now()
+        ));
     }
 
     private boolean completeApplicationTask(UUID applicationId, String taskDefinitionKey, Map<String, ?> variables) {

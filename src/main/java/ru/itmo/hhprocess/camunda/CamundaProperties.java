@@ -26,6 +26,9 @@ public class CamundaProperties {
     private String timeoutSchedulerProcessKey = "hhTimeoutSchedulerProcess";
     private String adminInterviewResetProcessKey = "hhAdminInterviewResetProcess";
 
+    /** Initial password used only when the application creates a Camunda user for Tasklist access. */
+    private String identitySyncInitialPassword = "camunda";
+
     private Worker worker = new Worker();
 
     @Getter

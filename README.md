@@ -245,3 +245,19 @@ mvn clean package -DskipTests
 ./scripts/release/make-helios-freebsd-bundle.sh
 ```
 
+
+---
+
+## Camunda / BPMN quick start
+
+Подробная инструкция по запуску Camunda-процессов, ролям, входу в Tasklist, просмотру выполнения на диаграмме и демонстрационному сценарию находится в отдельном файле:
+
+```text
+CAMUNDA_README.md
+```
+
+## Helios split deployment
+
+Detailed deployment guide for the required split setup — WildFly on one Helios machine, standalone Camunda on another Helios machine, PostgreSQL on VPS — is available in [`HELIOS_SPLIT_DEPLOY.md`](HELIOS_SPLIT_DEPLOY.md).
+
+> Helios split deploy is now restricted to the `lab4` branch and stops previous WildFly/Camunda/tunnel tasks before restarting. See `HELIOS_SPLIT_DEPLOY.md`.

@@ -1,21 +1,50 @@
 {
   "schemaVersion": 11,
-  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "exporter": {
+    "name": "Camunda Modeler",
+    "version": "standalone-lab"
+  },
   "type": "default",
   "id": "invitation-response-form",
   "components": [
+    {
+      "type": "textfield",
+      "id": "formErrorMessage",
+      "key": "formErrorMessage",
+      "label": "Ошибка предыдущей отправки формы",
+      "disabled": true
+    },
     {
       "type": "select",
       "id": "responseType",
       "key": "responseType",
       "label": "Ответ на приглашение",
       "values": [
-        { "label": "Принять", "value": "ACCEPT" },
-        { "label": "Отклонить", "value": "DECLINE" },
-        { "label": "Другой ответ", "value": "OTHER" }
+        {
+          "label": "Принять",
+          "value": "ACCEPT"
+        },
+        {
+          "label": "Отклонить",
+          "value": "DECLINE"
+        },
+        {
+          "label": "Другой ответ",
+          "value": "OTHER"
+        }
       ],
-      "validate": { "required": true }
+      "validate": {
+        "required": true
+      }
     },
-    { "type": "textarea", "id": "responseMessage", "key": "responseMessage", "label": "Комментарий", "validate": { "maxLength": 5000 } }
+    {
+      "type": "textarea",
+      "id": "responseMessage",
+      "key": "responseMessage",
+      "label": "Комментарий",
+      "validate": {
+        "maxLength": 5000
+      }
+    }
   ]
 }

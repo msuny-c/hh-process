@@ -18,6 +18,8 @@ public class CamundaDeploymentService {
 
     private final CamundaRestClient camundaRestClient;
     private final CamundaWorkflowFacade camundaWorkflowFacade;
+    private final CamundaAuthorizationService camundaAuthorizationService;
+    private final CamundaIdentitySyncService camundaIdentitySyncService;
     private final CamundaProperties properties;
 
     @EventListener(ApplicationReadyEvent.class)
@@ -41,9 +43,15 @@ public class CamundaDeploymentService {
         add(resources, "invitation.form", "camunda/forms/invitation.form");
         add(resources, "invitation-response.form", "camunda/forms/invitation-response.form");
         add(resources, "close-vacancy.form", "camunda/forms/close-vacancy.form");
+        add(resources, "reset-interview.form", "camunda/forms/reset-interview.form");
+        add(resources, "application-result.form", "camunda/forms/application-result.form");
+        add(resources, "vacancy-result.form", "camunda/forms/vacancy-result.form");
+        add(resources, "admin-reset-result.form", "camunda/forms/admin-reset-result.form");
 
         camundaRestClient.deploy(properties.getDeploymentName(), resources)
                 .ifPresent(id -> log.info("Deployed BPMN/resources to Camunda deploymentId={}", id));
+        camundaAuthorizationService.configureStartAuthorizations();
+        camundaIdentitySyncService.syncUsersGroupsAndMemberships();
         camundaWorkflowFacade.startTimeoutSchedulerIfNeeded();
     }
 

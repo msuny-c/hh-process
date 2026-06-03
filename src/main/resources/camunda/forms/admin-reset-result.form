@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 11,
+  "exporter": {"name": "Camunda Modeler", "version": "standalone-lab"},
+  "type": "default",
+  "id": "admin-reset-result-form",
+  "components": [
+    {"type": "textfield", "id": "status", "key": "status", "label": "Статус интервью", "disabled": true},
+    {"type": "textfield", "id": "applicationStatus", "key": "applicationStatus", "label": "Статус отклика", "disabled": true},
+    {"type": "textarea", "id": "resetReason", "key": "resetReason", "label": "Причина сброса", "disabled": true}
+  ]
+}

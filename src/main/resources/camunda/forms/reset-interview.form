@@ -5,7 +5,7 @@
     "version": "standalone-lab"
   },
   "type": "default",
-  "id": "close-vacancy-form",
+  "id": "reset-interview-form",
   "components": [
     {
       "type": "textfield",
@@ -15,26 +15,10 @@
       "disabled": true
     },
     {
-      "type": "select",
-      "id": "action",
-      "key": "action",
-      "label": "Действие",
-      "values": [
-        {
-          "label": "Закрыть вакансию",
-          "value": "CLOSE"
-        }
-      ],
-      "defaultValue": "CLOSE",
-      "validate": {
-        "required": true
-      }
-    },
-    {
       "type": "textarea",
-      "id": "closeReason",
-      "key": "closeReason",
-      "label": "Причина закрытия",
+      "id": "resetReason",
+      "key": "resetReason",
+      "label": "Причина административного сброса интервью",
       "validate": {
         "required": true,
         "maxLength": 5000

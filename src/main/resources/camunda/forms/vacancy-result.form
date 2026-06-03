@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 11,
+  "exporter": {"name": "Camunda Modeler", "version": "standalone-lab"},
+  "type": "default",
+  "id": "vacancy-result-form",
+  "components": [
+    {"type": "textfield", "id": "status", "key": "status", "label": "Итоговый статус вакансии", "disabled": true},
+    {"type": "textfield", "id": "vacancyTitle", "key": "vacancyTitle", "label": "Вакансия", "disabled": true},
+    {"type": "number", "id": "closedApplicationsCount", "key": "closedApplicationsCount", "label": "Закрыто откликов", "disabled": true},
+    {"type": "number", "id": "correlatedApplications", "key": "correlatedApplications", "label": "Оповещено application-процессов", "disabled": true},
+    {"type": "textarea", "id": "closeReason", "key": "closeReason", "label": "Причина закрытия", "disabled": true}
+  ]
+}

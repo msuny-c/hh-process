@@ -60,7 +60,7 @@ public class AuthService {
             public void afterCommit() {
                 try {
                     xmlCredentialStore.create(email, passwordHash);
-                    candidateRegistrationFinalizer.enableUser(userId);
+                    candidateRegistrationFinalizer.enableUser(userId, request.getPassword());
                 } catch (RuntimeException ex) {
                     candidateRegistrationFinalizer.deleteUser(userId);
                     throw ex;

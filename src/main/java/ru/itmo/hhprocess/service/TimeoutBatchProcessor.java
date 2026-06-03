@@ -32,6 +32,93 @@ public class TimeoutBatchProcessor {
     @Value("${app.timeout.debug.disable-notifications:false}")
     private boolean disableNotifications;
 
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public java.util.Map<String, Object> findOneExpiredInvitation() {
+        Instant now = Instant.now();
+        List<UUID> ids = applicationRepository.findExpiredInvitationIds(
+                ApplicationStatus.INVITED, now, PageRequest.of(0, 1));
+        if (ids.isEmpty()) {
+            return java.util.Map.of("expiredFound", false, "batchClosed", 0);
+        }
+        return java.util.Map.of("expiredFound", true, "expiredApplicationId", ids.get(0), "batchClosed", 1);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public java.util.Map<String, Object> cancelExpiredInvitationInterview(UUID applicationId) {
+        ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
+                .orElseThrow(() -> new IllegalArgumentException("Application not found: " + applicationId));
+        InterviewEntity interview = interviewService.findActiveByApplicationId(application.getId()).orElse(null);
+        if (interview != null) {
+            interviewService.cancel(interview, "Invitation expired");
+            return java.util.Map.of("expiredInterviewCancelled", true, "expiredApplicationId", applicationId,
+                    "interviewId", interview.getId());
+        }
+        return java.util.Map.of("expiredInterviewCancelled", false, "expiredApplicationId", applicationId);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public java.util.Map<String, Object> releaseExpiredInvitationSlot(UUID applicationId) {
+        ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
+                .orElseThrow(() -> new IllegalArgumentException("Application not found: " + applicationId));
+        InterviewEntity interview = interviewService.findActiveByApplicationId(application.getId()).orElse(null);
+        if (interview != null) {
+            scheduleService.releaseForInterview(interview);
+            return java.util.Map.of("expiredSlotReleased", true, "expiredApplicationId", applicationId,
+                    "interviewId", interview.getId());
+        }
+        return java.util.Map.of("expiredSlotReleased", false, "expiredApplicationId", applicationId);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public java.util.Map<String, Object> closeExpiredInvitationApplication(UUID applicationId) {
+        ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
+                .orElseThrow(() -> new IllegalArgumentException("Application not found: " + applicationId));
+        if (application.getStatus() == ApplicationStatus.CLOSED_BY_TIMEOUT) {
+            return java.util.Map.of("expiredApplicationClosed", true, "expiredApplicationId", applicationId,
+                    "status", application.getStatus().name(), "idempotent", true);
+        }
+        if (application.getStatus() != ApplicationStatus.INVITED) {
+            return java.util.Map.of("expiredApplicationClosed", false, "expiredApplicationId", applicationId,
+                    "status", application.getStatus().name());
+        }
+        application.setStatus(ApplicationStatus.CLOSED_BY_TIMEOUT);
+        application.setClosedAt(Instant.now());
+        applicationRepository.saveAndFlush(application);
+        return java.util.Map.of("expiredApplicationClosed", true, "expiredApplicationId", applicationId,
+                "status", application.getStatus().name());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public java.util.Map<String, Object> recordExpiredInvitationHistory(UUID applicationId) {
+        ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
+                .orElseThrow(() -> new IllegalArgumentException("Application not found: " + applicationId));
+        historyService.record(application, ApplicationStatus.INVITED, ApplicationStatus.CLOSED_BY_TIMEOUT, null);
+        return java.util.Map.of("expiredHistoryRecorded", true, "expiredApplicationId", applicationId,
+                "status", application.getStatus().name());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public java.util.Map<String, Object> notifyExpiredInvitationParticipants(UUID applicationId) {
+        ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
+                .orElseThrow(() -> new IllegalArgumentException("Application not found: " + applicationId));
+        if (disableNotifications) {
+            return java.util.Map.of("expiredNotificationsSent", false, "expiredApplicationId", applicationId,
+                    "notificationsDisabled", true);
+        }
+        notificationService.create(application.getVacancy().getRecruiterUser(), application, NotificationType.INVITATION_TIMEOUT,
+                "Invitation expired for vacancy: " + application.getVacancy().getTitle());
+        notificationService.create(application.getCandidateUser(), application, NotificationType.INVITATION_TIMEOUT,
+                "Interview invitation expired for vacancy: " + application.getVacancy().getTitle());
+        return java.util.Map.of("expiredNotificationsSent", true, "expiredApplicationId", applicationId);
+    }
+
+    public java.util.Map<String, Object> completeExpiredInvitationProcess(UUID applicationId) {
+        applicationRepository.findById(applicationId).ifPresent(camundaWorkflowFacade::invitationTimedOut);
+        return java.util.Map.of("expiredProcessCompleted", true, "expiredApplicationId", applicationId,
+                "expiredFound", true, "batchClosed", 1);
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int processOneExpired() {
         Instant now = Instant.now();

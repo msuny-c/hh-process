@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 11,
+  "exporter": {"name": "Camunda Modeler", "version": "standalone-lab"},
+  "type": "default",
+  "id": "application-result-form",
+  "components": [
+    {"type": "textfield", "id": "status", "key": "status", "label": "Итоговый статус отклика", "disabled": true},
+    {"type": "textfield", "id": "vacancyTitle", "key": "vacancyTitle", "label": "Вакансия", "disabled": true},
+    {"type": "textarea", "id": "recruiterComment", "key": "recruiterComment", "label": "Комментарий рекрутера / причина", "disabled": true},
+    {"type": "textarea", "id": "formErrorMessage", "key": "formErrorMessage", "label": "Сообщение процесса", "disabled": true}
+  ]
+}

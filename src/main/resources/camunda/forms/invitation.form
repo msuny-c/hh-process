@@ -1,11 +1,49 @@
 {
   "schemaVersion": 11,
-  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "exporter": {
+    "name": "Camunda Modeler",
+    "version": "standalone-lab"
+  },
   "type": "default",
   "id": "invitation-form",
   "components": [
-    { "type": "textarea", "id": "invitationMessage", "key": "invitationMessage", "label": "Текст приглашения", "validate": { "required": true, "maxLength": 5000 } },
-    { "type": "textfield", "id": "scheduledAt", "key": "scheduledAt", "label": "Дата интервью ISO-8601", "validate": { "required": true } },
-    { "type": "number", "id": "durationMinutes", "key": "durationMinutes", "label": "Длительность, минут", "defaultValue": 60, "validate": { "required": true, "min": 15, "max": 480 } }
+    {
+      "type": "textfield",
+      "id": "formErrorMessage",
+      "key": "formErrorMessage",
+      "label": "Ошибка предыдущей отправки формы",
+      "disabled": true
+    },
+    {
+      "type": "textarea",
+      "id": "invitationMessage",
+      "key": "invitationMessage",
+      "label": "Текст приглашения",
+      "validate": {
+        "required": true,
+        "maxLength": 5000
+      }
+    },
+    {
+      "type": "textfield",
+      "id": "scheduledAt",
+      "key": "scheduledAt",
+      "label": "Дата интервью ISO-8601",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "type": "number",
+      "id": "durationMinutes",
+      "key": "durationMinutes",
+      "label": "Длительность, минут",
+      "defaultValue": 60,
+      "validate": {
+        "required": true,
+        "min": 15,
+        "max": 480
+      }
+    }
   ]
 }

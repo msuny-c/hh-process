@@ -1,0 +1,472 @@
+name: Deploy hh-process split Helios
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_branch:
+        description: "Deploy is intended to run from lab4 only"
+        required: false
+        default: "lab4"
+  push:
+    branches: ["lab4"]
+
+concurrency:
+  group: helios-split-lab4
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  WILDFLY_VERSION: "40.0.0.Final"
+  WILDFLY_ZIP_URL: "https://download.jboss.org/wildfly/40.0.0.Final/wildfly-40.0.0.Final.zip"
+  CAMUNDA_VERSION: "7.21.0"
+  CAMUNDA_ZIP_URL: "https://downloads.camunda.cloud/release/camunda-bpm/tomcat/7.21/camunda-bpm-tomcat-7.21.0.zip"
+
+jobs:
+  build:
+    if: ${{ github.ref_name == 'lab4' }}
+    runs-on: ubuntu-latest
+    outputs:
+      war_name: ${{ steps.detect.outputs.war_name }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Build WAR
+        run: mvn -B clean package -DskipTests
+      - name: Detect WAR
+        id: detect
+        run: |
+          WAR=$(ls -1 target/*.war | head -n1)
+          test -n "$WAR"
+          echo "war_name=$(basename "$WAR")" >> "$GITHUB_OUTPUT"
+      - name: Patch WAR for WildFly module conflicts
+        run: |
+          set -eu
+          WAR="target/${{ steps.detect.outputs.war_name }}"
+          mkdir -p /tmp/wf-patch/WEB-INF
+          cat > /tmp/wf-patch/WEB-INF/jboss-deployment-structure.xml <<'JBOSS_DS'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <jboss-deployment-structure>
+            <deployment>
+              <exclusions>
+                <module name="org.hibernate" slot="main"/>
+                <module name="org.hibernate.commons.annotations" slot="main"/>
+                <module name="org.hibernate.validator" slot="main"/>
+                <module name="org.hibernate.validator.cdi" slot="main"/>
+                <module name="org.slf4j.impl"/>
+                <module name="org.slf4j.jboss-logmanager"/>
+              </exclusions>
+            </deployment>
+          </jboss-deployment-structure>
+          JBOSS_DS
+          (cd /tmp/wf-patch && zip -u "$GITHUB_WORKSPACE/$WAR" WEB-INF/jboss-deployment-structure.xml)
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: app-war
+          path: target/${{ steps.detect.outputs.war_name }}
+
+
+  ci-docker-tests:
+    needs: build
+    if: ${{ github.ref_name == 'lab4' }}
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB || vars.POSTGRES_DB || 'postgres' }}
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER || vars.POSTGRES_USER || 'postgres' }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || vars.POSTGRES_PASSWORD || 'postgres' }}
+      POSTGRES_SCHEMA: ${{ secrets.POSTGRES_SCHEMA || vars.POSTGRES_SCHEMA || 'public' }}
+      POSTGRES_PORT_EXTERNAL: "5432"
+      APP_PORT: "8080"
+      WILDFLY_HTTP_PORT: "8080"
+      WILDFLY_MANAGEMENT_PORT: "9990"
+      WILDFLY_MANAGEMENT_HTTP_PORT: "9990"
+      CAMUNDA_PORT: "8081"
+      CAMUNDA_ADMIN_USER: admin
+      CAMUNDA_ADMIN_PASSWORD: admin
+      CAMUNDA_ENABLED: "true"
+      CAMUNDA_WORKER_ENABLED: "true"
+      CAMUNDA_FAIL_ON_ERROR: "true"
+      REQUEST_TIMEOUT: "60"
+      REQUEST_RETRIES: "2"
+      ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL || 'admin@example.com' }}
+      RECRUITER_EMAIL: ${{ vars.RECRUITER_EMAIL || 'recruiter@example.com' }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD || vars.ADMIN_PASSWORD || 'password123' }}
+      RECRUITER_PASSWORD: ${{ secrets.RECRUITER_PASSWORD || vars.RECRUITER_PASSWORD || 'password123' }}
+      CANDIDATE_PASSWORD: ${{ secrets.CANDIDATE_PASSWORD || vars.CANDIDATE_PASSWORD || 'password123' }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Start Docker stack for CI tests
+        run: |
+          set -eu
+          docker compose down -v --remove-orphans || true
+          docker compose up -d --build postgres camunda app
+
+      - name: Wait for application and Camunda
+        run: |
+          set -eu
+          echo "Waiting for application /actuator/health..."
+          for i in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:8080/actuator/health >/dev/null 2>&1; then
+              echo "Application is ready."
+              break
+            fi
+            if [ "$i" -eq 180 ]; then
+              echo "Application did not become healthy"
+              docker compose ps
+              docker compose logs --no-color --tail=250 app camunda postgres || true
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "Waiting for Camunda REST..."
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8081/engine-rest/version >/dev/null 2>&1; then
+              echo "Camunda REST is ready."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Camunda REST did not become healthy"
+          docker compose logs --no-color --tail=250 camunda || true
+          exit 1
+
+      - name: Build Docker image for tests from test/ folder
+        run: docker build -t hh-process-api-tests ./test
+
+      - name: Run API/Camunda tests in Docker
+        run: |
+          set -eu
+          docker run --rm --network host \
+            -e BASE_URL=http://127.0.0.1:8080 \
+            -e CAMUNDA_URL=http://127.0.0.1:8081/engine-rest \
+            -e POSTGRES_HOST=127.0.0.1 \
+            -e POSTGRES_PORT=5432 \
+            -e POSTGRES_DB="$POSTGRES_DB" \
+            -e POSTGRES_USER="$POSTGRES_USER" \
+            -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            -e POSTGRES_SCHEMA="$POSTGRES_SCHEMA" \
+            -e REQUEST_TIMEOUT="$REQUEST_TIMEOUT" \
+            -e REQUEST_RETRIES="$REQUEST_RETRIES" \
+            -e ADMIN_EMAIL="$ADMIN_EMAIL" \
+            -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+            -e RECRUITER_EMAIL="$RECRUITER_EMAIL" \
+            -e RECRUITER_PASSWORD="$RECRUITER_PASSWORD" \
+            -e CANDIDATE_PASSWORD="$CANDIDATE_PASSWORD" \
+            hh-process-api-tests
+
+      - name: Dump Docker logs
+        if: always()
+        run: docker compose logs --no-color > docker-ci.log || true
+
+      - name: Upload Docker CI logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: docker-ci-logs-${{ github.run_id }}
+          path: docker-ci.log
+
+      - name: Stop Docker stack
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  deploy-camunda:
+    needs: [build, ci-docker-tests]
+    runs-on: ubuntu-latest
+    env:
+      CAMUNDA_SSH_HOST: ${{ secrets.WORKER_SSH_HOST || vars.WORKER_SSH_HOST }}
+      CAMUNDA_SSH_USER: ${{ secrets.WORKER_SSH_USER || vars.WORKER_SSH_USER }}
+      CAMUNDA_SSH_PORT: ${{ secrets.WORKER_SSH_PORT || vars.WORKER_SSH_PORT || '2222' }}
+      CAMUNDA_SSH_KEY: ${{ secrets.WORKER_SSH_KEY || secrets.SSH_KEY }}
+      CAMUNDA_HTTP_PORT: ${{ vars.CAMUNDA_PORT || vars.WORKER_SERVER_PORT || '18082' }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          sparse-checkout: |
+            infra/helios-split/camundactl.sh
+          sparse-checkout-cone-mode: false
+      - name: Prepare SSH to Camunda Helios
+        run: |
+          set -eu
+          test -n "$CAMUNDA_SSH_HOST"
+          test -n "$CAMUNDA_SSH_USER"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$CAMUNDA_SSH_KEY" > ~/.ssh/id_camunda
+          chmod 600 ~/.ssh/id_camunda
+          ssh-keyscan -p "$CAMUNDA_SSH_PORT" -H "$CAMUNDA_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Stop previous Camunda tasks on second Helios machine
+        run: |
+          set -eu
+          REM="${CAMUNDA_SSH_USER}@${CAMUNDA_SSH_HOST}"
+          ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda -o BatchMode=yes "$REM" \
+            "env CAMUNDA_HTTP_PORT='$CAMUNDA_HTTP_PORT' bash -s" <<'REMOTE_STOP_CAMUNDA'
+          set +e
+          echo "Stopping previous Camunda/Tomcat tasks..."
+          if [ -x "$HOME/apps/camunda/camundactl.sh" ]; then
+            CAMUNDA_DIR="$HOME/apps/camunda" \
+            CAMUNDA_HOME="$HOME/apps/camunda/camunda-bpm-tomcat-7.21.0" \
+            CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" \
+            "$HOME/apps/camunda/camundactl.sh" stop || true
+          fi
+          pkill -f '[c]amunda-bpm-tomcat' 2>/dev/null || true
+          pkill -f '[o]rg.apache.catalina.startup.Bootstrap' 2>/dev/null || true
+          pkill -f '[c]atalina.home=.*camunda' 2>/dev/null || true
+          pkill -f '[s]sh .*127.0.0.1:'"$CAMUNDA_HTTP_PORT" 2>/dev/null || true
+          rm -f "$HOME/apps/camunda/camunda.pid" 2>/dev/null || true
+          sleep 2
+          echo "Previous Camunda tasks stopped."
+          REMOTE_STOP_CAMUNDA
+
+      - name: Install and start Camunda standalone on second Helios machine
+        run: |
+          set -eu
+          REM="${CAMUNDA_SSH_USER}@${CAMUNDA_SSH_HOST}"
+          ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "mkdir -p \$HOME/apps/camunda"
+          ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "cat > \$HOME/apps/camunda/camundactl.sh" < infra/helios-split/camundactl.sh
+          ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "chmod +x \$HOME/apps/camunda/camundactl.sh"
+          ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" \
+            "env CAMUNDA_ZIP_URL='${{ env.CAMUNDA_ZIP_URL }}' CAMUNDA_HTTP_PORT='$CAMUNDA_HTTP_PORT' bash -s" <<'REMOTE'
+          set -eu
+          CAMUNDA_DIR="$HOME/apps/camunda"
+          CAMUNDA_HOME="$CAMUNDA_DIR/camunda-bpm-tomcat-7.21.0"
+          ZIP="$CAMUNDA_DIR/camunda-bpm-tomcat.zip"
+          cd "$CAMUNDA_DIR"
+          if [ ! -d "$CAMUNDA_HOME" ]; then
+            rm -rf "$CAMUNDA_HOME"
+            if command -v curl >/dev/null 2>&1; then
+              curl -L --fail --retry 3 --retry-delay 5 -o "$ZIP" "$CAMUNDA_ZIP_URL"
+            else
+              fetch -o "$ZIP" "$CAMUNDA_ZIP_URL"
+            fi
+            unzip -o "$ZIP" -d "$CAMUNDA_DIR"
+            rm -f "$ZIP"
+          fi
+          CAMUNDA_DIR="$CAMUNDA_DIR" CAMUNDA_HOME="$CAMUNDA_HOME" CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" "$CAMUNDA_DIR/camundactl.sh" restart
+          for i in $(seq 1 90); do
+            if curl -fsS "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1 || wget -qO - "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1; then
+              echo "Camunda REST OK on $CAMUNDA_HTTP_PORT"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Camunda did not start. Log:"
+          tail -n 120 "$CAMUNDA_DIR/camunda.log" 2>/dev/null || true
+          exit 1
+          REMOTE
+
+  deploy-app:
+    needs: [build, deploy-camunda]
+    runs-on: ubuntu-latest
+    env:
+      WAR_NAME: ${{ needs.build.outputs.war_name }}
+      APP_SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
+      APP_SSH_USER: ${{ secrets.SSH_USER || vars.SSH_USER }}
+      APP_SSH_PORT: ${{ secrets.SSH_PORT || vars.SSH_PORT || '2222' }}
+      APP_SSH_KEY: ${{ secrets.SSH_KEY }}
+      CAMUNDA_SSH_HOST: ${{ secrets.WORKER_SSH_HOST || vars.WORKER_SSH_HOST }}
+      CAMUNDA_SSH_USER: ${{ secrets.WORKER_SSH_USER || vars.WORKER_SSH_USER }}
+      CAMUNDA_SSH_PORT: ${{ secrets.WORKER_SSH_PORT || vars.WORKER_SSH_PORT || '2222' }}
+      CAMUNDA_SSH_KEY: ${{ secrets.WORKER_SSH_KEY || secrets.SSH_KEY }}
+      CAMUNDA_HTTP_PORT: ${{ vars.CAMUNDA_PORT || vars.WORKER_SERVER_PORT || '18082' }}
+      APP_HTTP_PORT: ${{ vars.SERVER_PORT || '18081' }}
+      APP_MGMT_PORT: ${{ vars.WILDFLY_MANAGEMENT_HTTP_PORT || '19081' }}
+      POSTGRES_HOST: ${{ vars.POSTGRES_HOST || 'localhost' }}
+      POSTGRES_PORT: ${{ vars.POSTGRES_PORT || '15432' }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB || vars.POSTGRES_DB || 'postgres' }}
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER || vars.POSTGRES_USER || 'postgres' }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || vars.POSTGRES_PASSWORD || 'postgres' }}
+      POSTGRES_SCHEMA: ${{ secrets.POSTGRES_SCHEMA || vars.POSTGRES_SCHEMA || 'public' }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET || vars.JWT_SECRET || 'change-me' }}
+      CAMUNDA_USERNAME: ${{ secrets.CAMUNDA_USERNAME || vars.CAMUNDA_USERNAME || 'demo' }}
+      CAMUNDA_PASSWORD: ${{ secrets.CAMUNDA_PASSWORD || vars.CAMUNDA_PASSWORD || 'demo' }}
+      CAMUNDA_IDENTITY_SYNC_INITIAL_PASSWORD: ${{ secrets.CAMUNDA_IDENTITY_SYNC_INITIAL_PASSWORD || vars.CAMUNDA_IDENTITY_SYNC_INITIAL_PASSWORD || 'camunda' }}
+      API_HEALTHCHECK_TIMEOUT_SEC: ${{ vars.API_HEALTHCHECK_TIMEOUT_SEC || '180' }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          sparse-checkout: |
+            infra/helios-split/wildflyctl.sh
+            infra/helios-split/app.env.example
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: app-war
+          path: artifact
+      - name: Prepare SSH to App Helios
+        run: |
+          set -eu
+          mkdir -p ~/.ssh
+          printf '%s\n' "$APP_SSH_KEY" > ~/.ssh/id_app
+          chmod 600 ~/.ssh/id_app
+          ssh-keyscan -p "$APP_SSH_PORT" -H "$APP_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Stop previous WildFly app and tunnels on App Helios
+        run: |
+          set -eu
+          REM="$APP_SSH_USER@$APP_SSH_HOST"
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app -o BatchMode=yes "$REM" \
+            "env APP_HTTP_PORT='$APP_HTTP_PORT' APP_MGMT_PORT='$APP_MGMT_PORT' CAMUNDA_HTTP_PORT='$CAMUNDA_HTTP_PORT' bash -s" <<'REMOTE_STOP_APP'
+          set +e
+          echo "Stopping previous WildFly app and SSH tunnels..."
+          if [ -x "$HOME/apps/hh-process/wildflyctl.sh" ]; then
+            WF_HOME="$HOME/apps/wildfly/wildfly-40.0.0.Final" \
+            APP_DIR="$HOME/apps/hh-process" \
+            "$HOME/apps/hh-process/wildflyctl.sh" stop || true
+          fi
+          pkill -f '[w]ildfly.*standalone' 2>/dev/null || true
+          pkill -f '[s]tandalone.sh' 2>/dev/null || true
+          pkill -f '[j]boss-modules' 2>/dev/null || true
+          pkill -f '[s]sh .* -L '"$CAMUNDA_HTTP_PORT"':127.0.0.1:'"$CAMUNDA_HTTP_PORT" 2>/dev/null || true
+          pkill -f '[s]sh .*-R .*:' 2>/dev/null || true
+          rm -f "$HOME/apps/hh-process/wildfly.pid" 2>/dev/null || true
+          rm -f "$HOME/apps/wildfly/wildfly-40.0.0.Final/standalone/deployments/ROOT.war."* 2>/dev/null || true
+          sleep 2
+          echo "Previous WildFly/tunnel tasks stopped."
+          REMOTE_STOP_APP
+
+      - name: Generate app.env for WildFly host
+        run: |
+          set -eu
+          # The app host connects to Camunda through SSH local tunnel created below.
+          cat > app.env <<EOF_ENV
+          APP_ROLE=api
+          APP_INSTANCE_NAME=hh-api-wildfly
+          SERVER_PORT=$APP_HTTP_PORT
+          APP_HTTP_PORT=$APP_HTTP_PORT
+          APP_MGMT_PORT=$APP_MGMT_PORT
+          POSTGRES_HOST=$POSTGRES_HOST
+          POSTGRES_PORT=$POSTGRES_PORT
+          POSTGRES_DB=$POSTGRES_DB
+          POSTGRES_USER=$POSTGRES_USER
+          POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+          POSTGRES_SCHEMA=$POSTGRES_SCHEMA
+          JWT_SECRET=$JWT_SECRET
+          CAMUNDA_ENABLED=true
+          CAMUNDA_BASE_URL=http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest
+          CAMUNDA_USERNAME=$CAMUNDA_USERNAME
+          CAMUNDA_PASSWORD=$CAMUNDA_PASSWORD
+          CAMUNDA_FAIL_ON_ERROR=true
+          CAMUNDA_WORKER_ENABLED=true
+          CAMUNDA_IDENTITY_SYNC_INITIAL_PASSWORD=$CAMUNDA_IDENTITY_SYNC_INITIAL_PASSWORD
+          APP_HOME=\${HOME}/apps/hh-process
+          NARAYANA_LOG_DIR=\${HOME}/apps/hh-process/transaction-logs
+          NARAYANA_NODE_IDENTIFIER=hh-process-helios
+          APP_SECURITY_USERS_XML=\${HOME}/apps/hh-process/data/users.xml
+          WS_ALLOWED_ORIGINS=*
+          JAVA_OPTS="-Xms128m -Xmx768m -Dorg.springframework.boot.logging.LoggingSystem=none"
+          EOF_ENV
+          sed -i 's/^          //' app.env
+      - name: Optional DB reverse tunnel from VPS to App Helios
+        if: ${{ env.POSTGRES_HOST == 'localhost' || env.POSTGRES_HOST == '127.0.0.1' }}
+        env:
+          VPS_SSH_HOST: ${{ secrets.VPS_SSH_HOST || vars.VPS_SSH_HOST }}
+          VPS_SSH_USER: ${{ secrets.VPS_SSH_USER || vars.VPS_SSH_USER }}
+          VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT || vars.VPS_SSH_PORT || '22' }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          HELIOS_TUNNEL_PRIVATE_KEY: ${{ secrets.HELIOS_TUNNEL_PRIVATE_KEY }}
+          DB_TUNNEL_REMOTE_HOST: ${{ secrets.DB_TUNNEL_REMOTE_HOST || vars.DB_TUNNEL_REMOTE_HOST || '127.0.0.1' }}
+          DB_TUNNEL_REMOTE_PORT: ${{ secrets.DB_TUNNEL_REMOTE_PORT || vars.DB_TUNNEL_REMOTE_PORT || '5432' }}
+        run: |
+          set -eu
+          if [ -z "$VPS_SSH_HOST" ] || [ -z "$VPS_SSH_USER" ] || [ -z "$VPS_SSH_KEY" ] || [ -z "$HELIOS_TUNNEL_PRIVATE_KEY" ]; then
+            echo "DB tunnel secrets are incomplete; assuming $POSTGRES_HOST:$POSTGRES_PORT is already reachable on app Helios."
+            exit 0
+          fi
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_vps
+          chmod 600 ~/.ssh/id_vps
+          ssh-keyscan -p "$VPS_SSH_PORT" -H "$VPS_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Upload the private key that VPS uses to open reverse tunnel to app Helios.
+          printf '%s\n' "$HELIOS_TUNNEL_PRIVATE_KEY" > helios_tunnel_key
+          chmod 600 helios_tunnel_key
+          ssh -p "$VPS_SSH_PORT" -i ~/.ssh/id_vps "$VPS_SSH_USER@$VPS_SSH_HOST" "umask 077; mkdir -p ~/.ssh; cat > ~/.ssh/id_helios_tunnel" < helios_tunnel_key
+          ssh -p "$VPS_SSH_PORT" -i ~/.ssh/id_vps "$VPS_SSH_USER@$VPS_SSH_HOST" \
+            "pkill -f '[s]sh .*-R ${POSTGRES_PORT}:${DB_TUNNEL_REMOTE_HOST}:${DB_TUNNEL_REMOTE_PORT}' 2>/dev/null || true; \
+             ssh-keyscan -p '$APP_SSH_PORT' -H '$APP_SSH_HOST' >> ~/.ssh/known_hosts 2>/dev/null || true; \
+             ssh -f -N -i ~/.ssh/id_helios_tunnel -p '$APP_SSH_PORT' -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -R '${POSTGRES_PORT}:${DB_TUNNEL_REMOTE_HOST}:${DB_TUNNEL_REMOTE_PORT}' '$APP_SSH_USER@$APP_SSH_HOST'"
+      - name: Install WildFly and deploy WAR to App Helios
+        run: |
+          set -eu
+          REM="$APP_SSH_USER@$APP_SSH_HOST"
+          WAR="artifact/$WAR_NAME"
+          test -f "$WAR"
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "mkdir -p \$HOME/apps/hh-process \$HOME/apps/wildfly"
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "cat > \$HOME/apps/hh-process/app.env" < app.env
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "umask 077; mkdir -p \$HOME/.ssh; cat > \$HOME/.ssh/id_camunda_tunnel" <<< "$CAMUNDA_SSH_KEY"
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "cat > \$HOME/apps/hh-process/wildflyctl.sh" < infra/helios-split/wildflyctl.sh
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "chmod +x \$HOME/apps/hh-process/wildflyctl.sh"
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "cat > \$HOME/apps/hh-process/ROOT.war.new" < "$WAR"
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" \
+            "env WILDFLY_VERSION='${{ env.WILDFLY_VERSION }}' WILDFLY_ZIP_URL='${{ env.WILDFLY_ZIP_URL }}' APP_HTTP_PORT='$APP_HTTP_PORT' APP_MGMT_PORT='$APP_MGMT_PORT' CAMUNDA_SSH_HOST='$CAMUNDA_SSH_HOST' CAMUNDA_SSH_USER='$CAMUNDA_SSH_USER' CAMUNDA_SSH_PORT='$CAMUNDA_SSH_PORT' CAMUNDA_HTTP_PORT='$CAMUNDA_HTTP_PORT' bash -s" <<'REMOTE'
+          set -eu
+          APP_DIR="$HOME/apps/hh-process"
+          WF_BASE="$HOME/apps/wildfly"
+          WF_HOME="$WF_BASE/wildfly-$WILDFLY_VERSION"
+          ZIP="$WF_BASE/wildfly.zip"
+          cd "$WF_BASE"
+          if [ ! -d "$WF_HOME" ]; then
+            rm -rf "$WF_HOME"
+            if command -v curl >/dev/null 2>&1; then
+              curl -L --fail --retry 3 --retry-delay 5 -o "$ZIP" "$WILDFLY_ZIP_URL"
+            else
+              fetch -o "$ZIP" "$WILDFLY_ZIP_URL"
+            fi
+            unzip -o "$ZIP" -d "$WF_BASE"
+            rm -f "$ZIP"
+          fi
+          mkdir -p "$WF_HOME/standalone/deployments" "$APP_DIR/data" "$APP_DIR/transaction-logs"
+          rm -f "$WF_HOME/standalone/deployments/ROOT.war" "$WF_HOME/standalone/deployments/ROOT.war."*
+          mv -f "$APP_DIR/ROOT.war.new" "$WF_HOME/standalone/deployments/ROOT.war"
+          touch "$WF_HOME/standalone/deployments/ROOT.war.dodeploy"
+          # Local SSH tunnel from app Helios to Camunda Helios. The app always calls 127.0.0.1:${CAMUNDA_HTTP_PORT}.
+          pkill -f "[s]sh .* -L ${CAMUNDA_HTTP_PORT}:127.0.0.1:${CAMUNDA_HTTP_PORT} .*${CAMUNDA_SSH_HOST}" 2>/dev/null || true
+          ssh-keyscan -p "$CAMUNDA_SSH_PORT" -H "$CAMUNDA_SSH_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
+          # Reuse normal SSH identity on app host. If unavailable, configure direct CAMUNDA_BASE_URL instead.
+          if [ -f "$HOME/.ssh/id_camunda_tunnel" ]; then
+            chmod 600 "$HOME/.ssh/id_camunda_tunnel"
+            ssh -f -N -i "$HOME/.ssh/id_camunda_tunnel" -p "$CAMUNDA_SSH_PORT" -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L "${CAMUNDA_HTTP_PORT}:127.0.0.1:${CAMUNDA_HTTP_PORT}" "$CAMUNDA_SSH_USER@$CAMUNDA_SSH_HOST"
+          else
+            echo "WARNING: no Camunda tunnel key on app host; ensure Camunda is reachable by CAMUNDA_BASE_URL."
+          fi
+          WF_HOME="$WF_HOME" APP_DIR="$APP_DIR" "$APP_DIR/wildflyctl.sh" restart
+          REMOTE
+      - name: Healthcheck App and Camunda from App Helios
+        run: |
+          set -eu
+          REM="$APP_SSH_USER@$APP_SSH_HOST"
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" \
+            "env APP_HTTP_PORT='$APP_HTTP_PORT' CAMUNDA_HTTP_PORT='$CAMUNDA_HTTP_PORT' TIMEOUT='$API_HEALTHCHECK_TIMEOUT_SEC' bash -s" <<'REMOTE'
+          set -eu
+          for i in $(seq 1 "$TIMEOUT"); do
+            if curl -fsS "http://127.0.0.1:$APP_HTTP_PORT/actuator/health" >/dev/null 2>&1 || wget -qO - "http://127.0.0.1:$APP_HTTP_PORT/actuator/health" >/dev/null 2>&1; then
+              echo "App health OK"
+              break
+            fi
+            sleep 1
+            if [ "$i" = "$TIMEOUT" ]; then
+              echo "App health failed"
+              tail -n 160 "$HOME/apps/hh-process/wildfly.log" 2>/dev/null || true
+              exit 1
+            fi
+          done
+          if curl -fsS "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1 || wget -qO - "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1; then
+            echo "Camunda tunnel/API OK from app host"
+          else
+            echo "WARNING: Camunda is not reachable from app host on 127.0.0.1:$CAMUNDA_HTTP_PORT"
+          fi
+          REMOTE
+      - name: Fetch WildFly log
+        if: always()
+        run: |
+          mkdir -p logs
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$APP_SSH_USER@$APP_SSH_HOST" "cat \$HOME/apps/hh-process/wildfly.log 2>/dev/null || true" > logs/wildfly.log || true
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: helios-wildfly-log-${{ github.run_id }}
+          path: logs/wildfly.log

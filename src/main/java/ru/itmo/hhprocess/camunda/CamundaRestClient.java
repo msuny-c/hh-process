@@ -14,10 +14,13 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.util.UriUtils;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.Optional;
 
@@ -73,6 +76,216 @@ public class CamundaRestClient {
         }
     }
 
+    public boolean ensureGroupExists(String groupId, String groupName) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        try {
+            camundaRestTemplate.getForEntity(url("/group/" + groupId), Map.class);
+            return true;
+        } catch (HttpStatusCodeException e) {
+            if (!e.getStatusCode().is4xxClientError()) {
+                handle("read Camunda group " + groupId, e);
+                return false;
+            }
+        } catch (RuntimeException e) {
+            handle("read Camunda group " + groupId, e);
+            return false;
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("id", groupId);
+        body.put("name", groupName);
+        body.put("type", "WORKFLOW");
+        try {
+            camundaRestTemplate.postForEntity(url("/group/create"), body, Void.class);
+            return true;
+        } catch (RuntimeException e) {
+            handle("create Camunda group " + groupId, e);
+            return false;
+        }
+    }
+
+    public boolean ensureProcessStartAuthorization(String groupId, String processDefinitionKey) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        try {
+            String uri = UriComponentsBuilder.fromHttpUrl(url("/authorization"))
+                    .queryParam("type", 1)
+                    .queryParam("groupIdIn", groupId)
+                    .queryParam("resourceType", 6)
+                    .queryParam("resourceId", processDefinitionKey)
+                    .toUriString();
+            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
+            List<?> raw = response.getBody();
+            if (raw != null && !raw.isEmpty()) {
+                return true;
+            }
+        } catch (RuntimeException e) {
+            handle("check Camunda start authorization group=" + groupId + " process=" + processDefinitionKey, e);
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", 1);
+        body.put("groupId", groupId);
+        body.put("resourceType", 6);
+        body.put("resourceId", processDefinitionKey);
+        body.put("permissions", List.of("CREATE_INSTANCE", "READ"));
+        try {
+            camundaRestTemplate.postForEntity(url("/authorization/create"), body, Map.class);
+            return true;
+        } catch (RuntimeException e) {
+            handle("create Camunda start authorization group=" + groupId + " process=" + processDefinitionKey, e);
+            return false;
+        }
+    }
+
+
+
+    public boolean ensureUserExists(String userId, String email, String firstName, String lastName, String initialPassword) {
+        return ensureUserExists(userId, email, firstName, lastName, initialPassword, false);
+    }
+
+    public boolean ensureUserExists(String userId, String email, String firstName, String lastName,
+                                    String initialPassword, boolean updatePasswordWhenExists) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        String encodedUserId = encodePath(userId);
+        boolean exists = false;
+        try {
+            camundaRestTemplate.getForEntity(url("/user/" + encodedUserId + "/profile"), Map.class);
+            exists = true;
+        } catch (HttpStatusCodeException e) {
+            if (!e.getStatusCode().is4xxClientError()) {
+                handle("read Camunda user " + userId, e);
+                return false;
+            }
+        } catch (RuntimeException e) {
+            handle("read Camunda user " + userId, e);
+            return false;
+        }
+
+        Map<String, Object> profile = new LinkedHashMap<>();
+        profile.put("id", userId);
+        profile.put("firstName", firstName == null ? "" : firstName);
+        profile.put("lastName", lastName == null ? "" : lastName);
+        profile.put("email", email == null ? userId : email);
+
+        if (!exists) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("profile", profile);
+            body.put("credentials", Map.of("password", initialPassword == null || initialPassword.isBlank()
+                    ? "camunda" : initialPassword));
+            try {
+                camundaRestTemplate.postForEntity(url("/user/create"), body, Void.class);
+                return true;
+            } catch (RuntimeException e) {
+                handle("create Camunda user " + userId, e);
+                return false;
+            }
+        }
+
+        try {
+            camundaRestTemplate.put(url("/user/" + encodedUserId + "/profile"), profile);
+            if (updatePasswordWhenExists) {
+                updateUserPassword(userId, initialPassword);
+            }
+            return true;
+        } catch (RuntimeException e) {
+            handle("update Camunda user profile " + userId, e);
+            return false;
+        }
+    }
+
+    public boolean updateUserPassword(String userId, String password) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        if (password == null || password.isBlank()) {
+            return false;
+        }
+        Map<String, Object> body = Map.of("password", password);
+        try {
+            camundaRestTemplate.put(url("/user/" + encodePath(userId) + "/credentials"), body);
+            return true;
+        } catch (RuntimeException e) {
+            handle("update Camunda user credentials " + userId, e);
+            return false;
+        }
+    }
+
+    public boolean ensureMembershipExists(String userId, String groupId) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        String encodedUserId = encodePath(userId);
+        String encodedGroupId = encodePath(groupId);
+        try {
+            String uri = UriComponentsBuilder.fromHttpUrl(url("/group"))
+                    .queryParam("member", userId)
+                    .queryParam("id", groupId)
+                    .toUriString();
+            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
+            List<?> raw = response.getBody();
+            if (raw != null && !raw.isEmpty()) {
+                return true;
+            }
+        } catch (RuntimeException e) {
+            handle("check Camunda group membership user=" + userId + " group=" + groupId, e);
+        }
+
+        try {
+            camundaRestTemplate.put(url("/group/" + encodedGroupId + "/members/" + encodedUserId), null);
+            return true;
+        } catch (RuntimeException e) {
+            handle("create Camunda group membership user=" + userId + " group=" + groupId, e);
+            return false;
+        }
+    }
+
+
+
+    public Set<String> findMembershipGroupIds(String userId) {
+        if (!properties.isEnabled()) {
+            return Set.of();
+        }
+        try {
+            String uri = UriComponentsBuilder.fromHttpUrl(url("/group"))
+                    .queryParam("member", userId)
+                    .toUriString();
+            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
+            List<?> raw = response.getBody();
+            if (raw == null || raw.isEmpty()) {
+                return Set.of();
+            }
+            Set<String> result = new LinkedHashSet<>();
+            for (Object item : raw) {
+                if (item instanceof Map<?, ?> map && map.get("id") != null) {
+                    result.add(String.valueOf(map.get("id")));
+                }
+            }
+            return result;
+        } catch (RuntimeException e) {
+            handle("read Camunda memberships for user=" + userId, e);
+            return Set.of();
+        }
+    }
+
+    public boolean removeMembershipIfExists(String userId, String groupId) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        try {
+            camundaRestTemplate.delete(url("/group/" + encodePath(groupId) + "/members/" + encodePath(userId)));
+            return true;
+        } catch (RuntimeException e) {
+            handle("remove Camunda group membership user=" + userId + " group=" + groupId, e);
+            return false;
+        }
+    }
+
     public Optional<String> startProcessByKey(String processKey, String businessKey, Map<String, ?> variables) {
         if (!properties.isEnabled()) {
             return Optional.empty();
@@ -88,6 +301,21 @@ public class CamundaRestClient {
         } catch (RuntimeException e) {
             handle("start Camunda process " + processKey + " businessKey=" + businessKey, e);
             return Optional.empty();
+        }
+    }
+
+    public boolean updateProcessInstanceBusinessKey(String processInstanceId, String businessKey) {
+        if (!properties.isEnabled() || processInstanceId == null || processInstanceId.isBlank()
+                || businessKey == null || businessKey.isBlank()) {
+            return false;
+        }
+        Map<String, Object> body = Map.of("businessKey", businessKey);
+        try {
+            camundaRestTemplate.put(url("/process-instance/" + encodePath(processInstanceId) + "/business-key"), body);
+            return true;
+        } catch (RuntimeException e) {
+            handle("update Camunda process businessKey processInstanceId=" + processInstanceId, e);
+            return false;
         }
     }
 
@@ -210,14 +438,24 @@ public class CamundaRestClient {
                         "lockDuration", properties.getWorker().getLockDurationMs(),
                         "variables", List.of(
                                 "applicationId",
+                                "expiredApplicationId",
                                 "interviewId",
+                                "scheduleSlotId",
+                                "oldApplicationStatus",
+                                "formErrorMessage",
                                 "vacancyId",
                                 "candidateUserId",
                                 "recruiterUserId",
                                 "adminUserId",
                                 "vacancyTitle",
+                                "starterUserId",
+                                "title",
+                                "description",
+                                "requiredSkills",
+                                "screeningThreshold",
                                 "screeningPassed",
                                 "status",
+                                "action",
                                 "decision",
                                 "recruiterComment",
                                 "invitationMessage",
@@ -288,6 +526,10 @@ public class CamundaRestClient {
         } catch (RuntimeException e) {
             handle("fail Camunda external task " + externalTaskId, e);
         }
+    }
+
+    private String encodePath(String value) {
+        return UriUtils.encodePathSegment(value, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private String url(String path) {
