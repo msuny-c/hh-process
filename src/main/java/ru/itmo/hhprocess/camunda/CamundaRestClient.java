@@ -453,6 +453,8 @@ public class CamundaRestClient {
                                 "description",
                                 "requiredSkills",
                                 "screeningThreshold",
+                                "resumeText",
+                                "coverLetter",
                                 "screeningPassed",
                                 "status",
                                 "action",

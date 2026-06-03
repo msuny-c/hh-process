@@ -12,14 +12,13 @@ from api_test_utils import (
     admin_session,
     apply_to_vacancy,
     create_vacancy,
-    find_notification,
     future_slot,
     get_candidate_application_json,
     get_recruiter_application_json,
     invite_json,
-    notifications,
     recruiter_session,
     register_candidate,
+    wait_for_notification,
 )
 
 
@@ -54,7 +53,17 @@ def main() -> None:
     if recruiter_view.get('interview') is not None:
         raise CheckError(f'Recruiter must not see reset interview: {recruiter_view}')
 
-    db_state = fetch_reset_db_state(application_id, interview_id)
+    db_state = wait_for_condition(
+        lambda: fetch_reset_db_state(application_id, interview_id),
+        lambda state: (
+            state['application_status'] == 'ON_RECRUITER_REVIEW'
+            and state['interview_status'] == 'CANCELLED'
+            and state['slot_status'] == 'RELEASED'
+            and state['candidate_notifications'] >= 1
+            and state['recruiter_notifications'] >= 1
+        ),
+        'admin reset DB state',
+    )
     if db_state['application_status'] != 'ON_RECRUITER_REVIEW':
         raise CheckError(f'Application status was not reset in DB: {db_state}')
     if db_state['interview_status'] != 'CANCELLED':
@@ -64,10 +73,8 @@ def main() -> None:
     if db_state['candidate_notifications'] < 1 or db_state['recruiter_notifications'] < 1:
         raise CheckError(f'Admin reset notifications missing in DB: {db_state}')
 
-    if not find_notification(notifications(api, candidate), application_id, 'INTERVIEW_CANCELLED'):
-        raise CheckError('Candidate admin reset notification missing in API')
-    if not find_notification(notifications(api, recruiter), application_id, 'INTERVIEW_CANCELLED'):
-        raise CheckError('Recruiter admin reset notification missing in API')
+    wait_for_notification(api, candidate, application_id, 'INTERVIEW_CANCELLED')
+    wait_for_notification(api, recruiter, application_id, 'INTERVIEW_CANCELLED')
 
     print('OK admin interview reset completed')
 

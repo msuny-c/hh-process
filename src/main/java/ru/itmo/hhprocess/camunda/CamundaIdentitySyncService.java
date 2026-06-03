@@ -98,8 +98,16 @@ public class CamundaIdentitySyncService {
         return "CANDIDATE".equals(groupId) || "RECRUITER".equals(groupId) || "ADMIN".equals(groupId);
     }
 
-    private String camundaUserId(UserEntity user) {
-        return user.getEmail() == null ? String.valueOf(user.getId()) : user.getEmail().trim().toLowerCase(Locale.ROOT);
+    static String camundaUserId(UserEntity user) {
+        if (user.getEmail() == null || user.getEmail().isBlank()) {
+            return "user" + user.getId().toString().replace("-", "");
+        }
+        String normalizedEmail = user.getEmail().trim().toLowerCase(Locale.ROOT);
+        String candidate = normalizedEmail.replaceAll("[^a-z0-9]", "");
+        if (candidate.isBlank()) {
+            return "user" + user.getId().toString().replace("-", "");
+        }
+        return candidate;
     }
 
     private String normalizeGroup(String roleCode) {

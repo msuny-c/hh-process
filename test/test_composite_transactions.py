@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
@@ -58,7 +59,7 @@ def week_offset_for(dt: datetime) -> int:
     target_week_start = (dt - timedelta(days=dt.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     return int((target_week_start - current_week_start).days / 7)
 
-def invite_with_retry(api: API, app_id: str, recruiter: SessionCtx, start_at: datetime, duration_minutes: int, attempts: int = 6):
+def invite_with_retry(api: API, app_id: str, recruiter: SessionCtx, start_at: datetime, duration_minutes: int, attempts: int = 24):
     scheduled_at = start_at
     last_error = None
     for _ in range(attempts):
@@ -66,11 +67,26 @@ def invite_with_retry(api: API, app_id: str, recruiter: SessionCtx, start_at: da
         r = api.req('POST', f'/api/v1/recruiters/applications/{app_id}/invite', auth=recruiter.auth, expected=(200, 409), payload=payload)
         if r.status_code == 200:
             return r.json()
+        if ('Application is not in ON_RECRUITER_REVIEW status' in r.text
+                or 'Camunda recruiter invitation task is not active' in r.text):
+            last_error = CheckError(r.text)
+            time.sleep(0.5)
+            continue
         if 'SCHEDULE_SLOT_CONFLICT' not in r.text:
             raise CheckError(f'Invite failed: {r.status_code} {r.text}')
         last_error = CheckError('SCHEDULE_SLOT_CONFLICT')
         scheduled_at = scheduled_at + timedelta(hours=2)
     raise last_error or CheckError('Invite failed after retries')
+
+def schedule_with_retry(api: API, recruiter: SessionCtx, week_offset: int, attempts: int = 24):
+    last_week = None
+    for _ in range(attempts):
+        week = api.j('GET', '/api/v1/recruiters/schedule', auth=recruiter.auth, expected=(200,), params={'weekOffset': week_offset})
+        last_week = week
+        if week.get('items'):
+            return week
+        time.sleep(0.5)
+    raise CheckError(f'schedule week returned no items: {last_week}')
 
 def me(api, auth):
     data = api.j('GET', '/api/v1/me', auth=auth, expected=(200,))
@@ -98,9 +114,7 @@ def main():
 
     scheduled_at = datetime.fromisoformat(invite.get('scheduled_at', iso_utc(base_time)).replace('Z', '+00:00'))
     week_offset = week_offset_for(scheduled_at)
-    week = api.j('GET', '/api/v1/recruiters/schedule', auth=recruiter.auth, expected=(200,), params={'weekOffset': week_offset})
-    if not week.get('items'):
-        raise CheckError(f'schedule week returned no items: {week}')
+    schedule_with_retry(api, recruiter, week_offset)
 
     api.j('POST', f"/api/v1/recruiters/interviews/{invite['interview_id']}/cancel", auth=recruiter.auth, expected=(200,), payload={'reason': 'Need to reschedule'})
     details2 = api.j('GET', f'/api/v1/recruiters/applications/{app_id}', auth=recruiter.auth, expected=(200,))

@@ -1009,8 +1009,12 @@ public class CamundaProcessAdapterService {
         if (starterUserId == null || starterUserId.isBlank()) {
             throw new CamundaFormValidationException("Camunda process starter is not available. Start the process as a synced RECRUITER user.");
         }
-        UserEntity user = userRepository.findWithRolesByEmail(starterUserId.trim().toLowerCase(java.util.Locale.ROOT))
-                .orElseThrow(() -> new CamundaFormValidationException("Application user is not synced for Camunda user: " + starterUserId));
+        String normalizedStarter = starterUserId.trim().toLowerCase(java.util.Locale.ROOT);
+        UserEntity user = userRepository.findWithRolesByEmail(normalizedStarter)
+                .orElseGet(() -> userRepository.findAll().stream()
+                        .filter(candidate -> normalizedStarter.equals(CamundaIdentitySyncService.camundaUserId(candidate)))
+                        .findFirst()
+                        .orElseThrow(() -> new CamundaFormValidationException("Application user is not synced for Camunda user: " + starterUserId)));
         boolean recruiter = user.getRoles().stream().anyMatch(role -> "RECRUITER".equalsIgnoreCase(role.getCode()));
         if (!recruiter) {
             throw new CamundaFormValidationException("Only RECRUITER users can create vacancies from Camunda Tasklist");

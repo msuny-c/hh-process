@@ -4,10 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 from api_test_utils import (
     API,
-    CheckError,
     create_vacancy,
     expect_status,
-    find_notification,
     future_slot,
     invite,
     invite_json,
@@ -16,6 +14,7 @@ from api_test_utils import (
     register_candidate,
     respond_to_invitation,
     update_vacancy_status,
+    wait_for_notification,
 )
 
 
@@ -133,10 +132,7 @@ def main() -> int:
     )
     expect_status(recruiter_schedule_too_high, 400, 'weekOffset 53 must be rejected')
 
-    candidate_notifications = api.json('GET', '/api/v1/notifications', auth=candidate.auth, expected=[200])
-    invitation_notification = find_notification(candidate_notifications, invite_app['application_id'], 'INVITATION')
-    if invitation_notification is None:
-        raise CheckError(f'invitation notification not found after valid invite: {candidate_notifications}')
+    invitation_notification = wait_for_notification(api, candidate, invite_app['application_id'], 'INVITATION')
 
     first_mark = mark_notification_read(api, candidate, invitation_notification['id'], expected=[204])
     expect_status(first_mark, 204, 'first mark-as-read must succeed')

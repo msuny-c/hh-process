@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
@@ -105,7 +106,7 @@ def week_offset_for(dt: datetime) -> int:
     target_week_start = (dt - timedelta(days=dt.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     return int((target_week_start - current_week_start).days / 7)
 
-def invite_with_retry(api: API, recruiter: SessionCtx, app_id: str, start_at: datetime, attempts: int = 6) -> Dict[str, Any]:
+def invite_with_retry(api: API, recruiter: SessionCtx, app_id: str, start_at: datetime, attempts: int = 24) -> Dict[str, Any]:
     scheduled_at = start_at
     last_error = None
     for _ in range(attempts):
@@ -113,7 +114,11 @@ def invite_with_retry(api: API, recruiter: SessionCtx, app_id: str, start_at: da
             return invite(api, recruiter, app_id, iso_utc(scheduled_at))
         except CheckError as e:
             last_error = e
-            if str(e) != 'SCHEDULE_SLOT_CONFLICT':
+            message = str(e)
+            if 'Application is not in ON_RECRUITER_REVIEW status' in message:
+                time.sleep(0.5)
+                continue
+            if message != 'SCHEDULE_SLOT_CONFLICT':
                 raise
             scheduled_at = scheduled_at + timedelta(hours=2)
     raise last_error or CheckError('Invite failed after retries')
@@ -129,6 +134,16 @@ def notifications(api: API, ctx: SessionCtx) -> List[Dict[str, Any]]:
 
 def close_expired(api: API, admin: SessionCtx) -> Dict[str, Any]:
     return api.json('POST', '/api/v1/admin/jobs/close-expired-invitations', auth=admin.auth, expected=[200])
+
+def recruiter_schedule_with_retry(api: API, recruiter: SessionCtx, week_offset: int, attempts: int = 24) -> Dict[str, Any]:
+    last_schedule = None
+    for _ in range(attempts):
+        schedule = api.json('GET', '/api/v1/recruiters/schedule', auth=recruiter.auth, expected=[200], params={'weekOffset': week_offset})
+        last_schedule = schedule
+        if schedule.get('items'):
+            return schedule
+        time.sleep(0.5)
+    raise CheckError(f'Empty schedule: {last_schedule}')
 
 def main() -> int:
     api = API(BASE_URL)
@@ -183,10 +198,8 @@ def main() -> int:
     def case6():
         scheduled_at = datetime.fromisoformat(state['scheduled_at'].replace('Z', '+00:00'))
         week_offset = week_offset_for(scheduled_at)
-        schedule = api.json('GET', '/api/v1/recruiters/schedule', auth=state['recruiter'].auth, expected=[200], params={'weekOffset': week_offset})
+        schedule = recruiter_schedule_with_retry(api, state['recruiter'], week_offset)
         items = schedule.get('items') or []
-        if not items:
-            raise CheckError(f'Empty schedule: {schedule}')
         ok('6. Просмотр расписания', str(len(items)))
     run_case('6. Просмотр расписания', case6)
 

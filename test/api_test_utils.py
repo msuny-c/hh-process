@@ -227,15 +227,20 @@ def invite(api: API, recruiter: SessionCtx, application_id: str, when: datetime,
 
 
 def invite_json(api: API, recruiter: SessionCtx, application_id: str, when: datetime, duration_minutes: int = 60, message: str = 'Interview') -> Dict[str, Any]:
+    candidate_time = when
     last_response: Optional[requests.Response] = None
     for _ in range(24):
-        resp = invite(api, recruiter, application_id, when, duration_minutes, message)
+        resp = invite(api, recruiter, application_id, candidate_time, duration_minutes, message)
         if resp.status_code == 200:
             return resp.json()
         last_response = resp
-        if 'Application is not in ON_RECRUITER_REVIEW status' not in resp.text:
-            break
-        time.sleep(0.5)
+        if 'Application is not in ON_RECRUITER_REVIEW status' in resp.text:
+            time.sleep(0.5)
+            continue
+        if 'SCHEDULE_SLOT_CONFLICT' in resp.text:
+            candidate_time += timedelta(hours=2)
+            continue
+        break
     raise CheckError(f'Invite failed: {last_response.status_code} {last_response.text}')
 
 
@@ -328,6 +333,18 @@ def find_notification(items: Iterable[Dict[str, Any]], application_id: str, noti
         if str(item.get('application_id')) == str(application_id) and item.get('type') == notif_type:
             return item
     return None
+
+
+def wait_for_notification(api: API, ctx: SessionCtx, application_id: str, notif_type: str,
+                          attempts: int = 24) -> Dict[str, Any]:
+    last_items = []
+    for _ in range(attempts):
+        last_items = notifications(api, ctx)
+        found = find_notification(last_items, application_id, notif_type)
+        if found is not None:
+            return found
+        time.sleep(0.5)
+    raise CheckError(f'notification {notif_type} for application {application_id} not found: {last_items}')
 
 
 def filter_schedule_items_for_application(schedule: Dict[str, Any], application_id: str) -> List[Dict[str, Any]]:

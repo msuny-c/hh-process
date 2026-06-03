@@ -19,6 +19,7 @@ from api_test_utils import (
     register_candidate,
     reject_application,
     schedule_for_week,
+    wait_for_notification,
 )
 
 
@@ -121,9 +122,7 @@ def assert_reject_with_interview_releases_slot() -> None:
     if not any(item.get('interview_id') == invite_data['interview_id'] and item.get('status') == 'RELEASED' and item.get('interview_status') == 'CANCELLED' for item in app_slots):
         raise CheckError(f'reject must release slot and cancel interview: {app_slots}')
 
-    candidate_notifications = notifications(api, candidate)
-    if find_notification(candidate_notifications, app['application_id'], 'APPLICATION_REJECTED') is None:
-        raise CheckError(f'candidate did not get rejection notification: {candidate_notifications}')
+    wait_for_notification(api, candidate, app['application_id'], 'APPLICATION_REJECTED')
 
 
 

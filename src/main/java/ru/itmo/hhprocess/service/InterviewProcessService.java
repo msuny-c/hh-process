@@ -58,6 +58,7 @@ public class InterviewProcessService {
         scheduleService.ensureAvailable(recruiterUser, scheduledAt, duration);
         Instant expiresAt = now.plus(INVITATION_TTL_HOURS, ChronoUnit.HOURS);
 
+        camundaWorkflowFacade.ensureApplicationProcessActive(application);
         if (!camundaWorkflowFacade.recruiterInvited(application, recruiterUser, request.getMessage(), scheduledAt, duration, expiresAt)) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
                     "Camunda recruiter invitation task is not active");
@@ -65,7 +66,7 @@ public class InterviewProcessService {
 
         application = waitForApplicationStatus(applicationId, ApplicationStatus.INVITED);
         InterviewEntity interview = waitForActiveInterview(applicationId);
-        RecruiterScheduleSlotEntity slot = scheduleService.findByInterviewId(interview);
+        RecruiterScheduleSlotEntity slot = waitForScheduleSlot(interview);
         return InviteResponse.builder()
                 .applicationId(application.getId())
                 .status(ApplicationStatus.INVITED.toExternalStatus())
@@ -172,7 +173,7 @@ public class InterviewProcessService {
     }
 
     private ApplicationEntity waitForApplicationStatus(UUID applicationId, ApplicationStatus expected) {
-        for (int attempt = 0; attempt < 24; attempt++) {
+        for (int attempt = 0; attempt < 60; attempt++) {
             ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
             if (application.getStatus() == expected) {
@@ -185,7 +186,7 @@ public class InterviewProcessService {
     }
 
     private InterviewEntity waitForActiveInterview(UUID applicationId) {
-        for (int attempt = 0; attempt < 24; attempt++) {
+        for (int attempt = 0; attempt < 60; attempt++) {
             var interview = interviewService.findActiveByApplicationId(applicationId);
             if (interview.isPresent()) {
                 return interview.get();
@@ -194,6 +195,18 @@ public class InterviewProcessService {
         }
         throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
                 "Camunda process did not create an active interview in time");
+    }
+
+    private RecruiterScheduleSlotEntity waitForScheduleSlot(InterviewEntity interview) {
+        for (int attempt = 0; attempt < 60; attempt++) {
+            RecruiterScheduleSlotEntity slot = scheduleService.findByInterviewId(interview);
+            if (slot != null) {
+                return slot;
+            }
+            sleep();
+        }
+        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                "Camunda process did not reserve a schedule slot in time");
     }
 
     private InterviewEntity waitForInterviewCancelled(UUID interviewId) {

@@ -8,13 +8,13 @@ from api_test_utils import (
     admin_session,
     create_vacancy,
     expect_status,
-    find_notification,
     future_slot,
     get_candidate_application,
     invite_json,
     mark_notification_read,
     recruiter_session,
     register_candidate,
+    wait_for_notification,
 )
 
 
@@ -113,10 +113,7 @@ def main() -> int:
     foreign_application = get_candidate_application(api, candidate_a, app_b['application_id'], expected=[403])
     expect_status(foreign_application, 403, 'candidate must not read another candidate application')
 
-    candidate_b_notifications = api.json('GET', '/api/v1/notifications', auth=candidate_b.auth, expected=[200])
-    invitation_notification = find_notification(candidate_b_notifications, app_b['application_id'], 'INVITATION')
-    if invitation_notification is None:
-        raise CheckError(f'invitation notification not found for candidate B: {candidate_b_notifications}')
+    invitation_notification = wait_for_notification(api, candidate_b, app_b['application_id'], 'INVITATION')
 
     foreign_notification = mark_notification_read(api, candidate_a, invitation_notification['id'], expected=[403])
     expect_status(foreign_notification, 403, 'candidate must not mark another user notification as read')

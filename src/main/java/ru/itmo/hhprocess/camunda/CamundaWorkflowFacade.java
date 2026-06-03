@@ -73,13 +73,27 @@ public class CamundaWorkflowFacade {
                 applicationBusinessKey(application.getId()),
                 variables
         );
-        processInstanceId.ifPresent(id -> completeApplicationTask(
-                application.getId(),
-                APPLY_TO_VACANCY_TASK,
-                CANDIDATE_GROUP,
-                application.getCandidateUser().getId(),
-                Map.of("action", "APPLY", "submittedAt", Instant.now())));
+        processInstanceId.ifPresent(id -> {
+            Map<String, Object> applyVariables = new LinkedHashMap<>();
+            applyVariables.put("action", "APPLY");
+            applyVariables.put("submittedAt", Instant.now());
+            applyVariables.put("resumeText", safe(application.getResumeText()));
+            applyVariables.put("coverLetter", safe(application.getCoverLetter()));
+            completeApplicationTask(
+                    application.getId(),
+                    APPLY_TO_VACANCY_TASK,
+                    CANDIDATE_GROUP,
+                    application.getCandidateUser().getId(),
+                    applyVariables);
+        });
         return processInstanceId;
+    }
+
+    public void ensureApplicationProcessActive(ApplicationEntity application) {
+        if (camundaRestClient.hasActiveProcessInstance(properties.getApplicationProcessKey(), applicationBusinessKey(application.getId()))) {
+            return;
+        }
+        startApplicationProcess(application);
     }
 
     public boolean recruiterRejected(ApplicationEntity application, UserEntity recruiterUser, String comment) {

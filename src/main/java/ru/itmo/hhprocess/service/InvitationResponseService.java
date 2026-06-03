@@ -70,7 +70,7 @@ public class InvitationResponseService {
     }
 
     private ApplicationEntity waitForApplicationStatus(UUID applicationId, ApplicationStatus expected) {
-        for (int attempt = 0; attempt < 24; attempt++) {
+        for (int attempt = 0; attempt < 60; attempt++) {
             ApplicationEntity application = applicationRepository.findDetailedById(applicationId)
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                             ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
