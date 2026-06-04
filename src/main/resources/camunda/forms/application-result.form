@@ -1,12 +1,21 @@
 {
   "schemaVersion": 11,
-  "exporter": {"name": "Camunda Modeler", "version": "standalone-lab"},
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
   "type": "default",
   "id": "application-result-form",
   "components": [
-    {"type": "textfield", "id": "status", "key": "status", "label": "Итоговый статус отклика", "disabled": true},
-    {"type": "textfield", "id": "vacancyTitle", "key": "vacancyTitle", "label": "Вакансия", "disabled": true},
-    {"type": "textarea", "id": "recruiterComment", "key": "recruiterComment", "label": "Комментарий рекрутера / причина", "disabled": true},
-    {"type": "textarea", "id": "formErrorMessage", "key": "formErrorMessage", "label": "Сообщение процесса", "disabled": true}
+    {
+      "type": "html",
+      "id": "errorBanner",
+      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\">{{formErrorMessage}}</div>",
+      "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
+    },
+    { "type": "text", "id": "resultHeader", "text": "## Результат процесса" },
+    { "type": "textfield", "id": "applicationId", "key": "applicationId", "label": "ID отклика", "readonly": true },
+    { "type": "textfield", "id": "status", "key": "status", "label": "Итоговый статус отклика", "readonly": true },
+    { "type": "textfield", "id": "vacancyTitle", "key": "vacancyTitle", "label": "Вакансия", "readonly": true },
+    { "type": "textarea", "id": "recruiterComment", "key": "recruiterComment", "label": "Комментарий рекрутера / причина", "readonly": true },
+    { "type": "textfield", "id": "interviewId", "key": "interviewId", "label": "ID интервью", "readonly": true },
+    { "type": "textfield", "id": "scheduledAt", "key": "scheduledAt", "label": "Дата интервью", "readonly": true }
   ]
 }

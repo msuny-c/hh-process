@@ -2,7 +2,7 @@
   "schemaVersion": 11,
   "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
   "type": "default",
-  "id": "reset-interview-form",
+  "id": "cancel-interview-form",
   "components": [
     {
       "type": "html",
@@ -11,9 +11,9 @@
       "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
     },
     { "type": "text", "id": "contextHeader", "text": "## Контекст интервью" },
-    { "type": "textfield", "id": "interviewId", "key": "interviewId", "label": "ID интервью", "readonly": true },
     { "type": "textfield", "id": "applicationId", "key": "applicationId", "label": "ID отклика", "readonly": true },
-    { "type": "text", "id": "inputHeader", "text": "## Административный сброс" },
-    { "type": "textarea", "id": "resetReason", "key": "resetReason", "label": "Причина административного сброса интервью", "validate": { "required": true, "maxLength": 5000 } }
+    { "type": "textfield", "id": "interviewId", "key": "interviewId", "label": "ID интервью", "validate": { "required": true } },
+    { "type": "text", "id": "inputHeader", "text": "## Отмена интервью" },
+    { "type": "textarea", "id": "cancelReason", "key": "cancelReason", "label": "Причина отмены", "validate": { "required": true, "maxLength": 5000 } }
   ]
 }

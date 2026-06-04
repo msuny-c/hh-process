@@ -2,6 +2,8 @@ package ru.itmo.hhprocess.camunda;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,7 @@ import ru.itmo.hhprocess.service.InterviewService;
 import ru.itmo.hhprocess.service.NotificationService;
 import ru.itmo.hhprocess.service.ScheduleService;
 import ru.itmo.hhprocess.service.ScreeningService;
+import ru.itmo.hhprocess.service.TimeoutService;
 import ru.itmo.hhprocess.service.VacancyHistoryService;
 
 import java.time.Instant;
@@ -45,6 +48,7 @@ public class CamundaProcessAdapterService {
     private static final int DEFAULT_DURATION_MINUTES = 60;
     private static final long DEFAULT_DELAY_HOURS = 24;
     private static final long INVITATION_TTL_HOURS = 48;
+    private static final int UI_PAYLOAD_MAX_LENGTH = 3500;
 
     private static final List<ApplicationStatus> ACTIVE_APPLICATION_STATUSES = List.of(
             ApplicationStatus.SCREENING_IN_PROGRESS,
@@ -63,7 +67,9 @@ public class CamundaProcessAdapterService {
     private final NotificationService notificationService;
     private final InterviewService interviewService;
     private final ScheduleService scheduleService;
+    private final TimeoutService timeoutService;
     private final CamundaRestClient camundaRestClient;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public Map<String, Object> autoScreen(UUID applicationId) {
@@ -570,7 +576,8 @@ public class CamundaProcessAdapterService {
 
 
     @Transactional(readOnly = true)
-    public Map<String, Object> validateApplyToVacancyForm(UUID applicationId, String resumeText, String coverLetter) {
+    public Map<String, Object> validateApplyToVacancyForm(UUID applicationId, UUID vacancyId, UUID candidateUserId,
+                                                          String starterUserId, String resumeText, String coverLetter) {
         if (resumeText == null || resumeText.isBlank()) {
             throw new CamundaFormValidationException("Resume text must not be blank");
         }
@@ -580,8 +587,98 @@ public class CamundaProcessAdapterService {
         if (coverLetter != null && coverLetter.length() > 10_000) {
             throw new CamundaFormValidationException("Cover letter must be at most 10000 characters");
         }
-        getApplication(applicationId);
-        return Map.of("formValidated", true, "formErrorMessage", "");
+        if (applicationId != null) {
+            getApplication(applicationId);
+            return Map.of("formValidated", true, "formErrorMessage", "", "applicationId", applicationId);
+        }
+
+        VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
+                .orElseThrow(() -> new CamundaFormValidationException("Vacancy not found: " + vacancyId));
+        if (vacancy.getStatus() != VacancyStatus.ACTIVE) {
+            throw new CamundaFormValidationException("Vacancy is not active");
+        }
+        UserEntity candidate = candidateUserId == null
+                ? resolveUserFromCamundaStarter(starterUserId, "CANDIDATE")
+                : userRepository.findById(candidateUserId)
+                .orElseThrow(() -> new CamundaFormValidationException("Candidate user not found: " + candidateUserId));
+        if (!hasRole(candidate, "CANDIDATE")) {
+            throw new CamundaFormValidationException("Only CANDIDATE users can apply to vacancies");
+        }
+        if (applicationRepository.existsByCandidateUserIdAndVacancyId(candidate.getId(), vacancy.getId())) {
+            throw new CamundaFormValidationException("You already have an application for this vacancy");
+        }
+        return Map.of(
+                "formValidated", true,
+                "formErrorMessage", "",
+                "vacancyId", vacancy.getId(),
+                "candidateUserId", candidate.getId(),
+                "recruiterUserId", vacancy.getRecruiterUser().getId(),
+                "vacancyTitle", vacancy.getTitle()
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> createApplicationFromCamundaForm(UUID existingApplicationId, UUID vacancyId, UUID candidateUserId,
+                                                                String starterUserId, String resumeText, String coverLetter,
+                                                                String processInstanceId) {
+        if (existingApplicationId != null) {
+            ApplicationEntity application = getApplication(existingApplicationId);
+            if (application.getCamundaProcessInstanceId() == null || application.getCamundaProcessInstanceId().isBlank()) {
+                application.setCamundaProcessInstanceId(processInstanceId);
+                applicationRepository.save(application);
+            }
+            String businessKey = "application:" + application.getId();
+            camundaRestClient.updateProcessInstanceBusinessKey(processInstanceId, businessKey);
+            return Map.of(
+                    "applicationCreated", true,
+                    "applicationId", application.getId(),
+                    "status", application.getStatus().name(),
+                    "idempotent", true
+            );
+        }
+        if (processInstanceId != null && !processInstanceId.isBlank()) {
+            var existing = applicationRepository.findByCamundaProcessInstanceId(processInstanceId);
+            if (existing.isPresent()) {
+                ApplicationEntity application = existing.get();
+                return Map.of(
+                        "applicationCreated", true,
+                        "applicationId", application.getId(),
+                        "status", application.getStatus().name(),
+                        "idempotent", true
+                );
+            }
+        }
+        validateApplyToVacancyForm(null, vacancyId, candidateUserId, starterUserId, resumeText, coverLetter);
+        VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
+                .orElseThrow(() -> new CamundaFormValidationException("Vacancy not found: " + vacancyId));
+        UserEntity candidate = candidateUserId == null
+                ? resolveUserFromCamundaStarter(starterUserId, "CANDIDATE")
+                : userRepository.findById(candidateUserId)
+                .orElseThrow(() -> new CamundaFormValidationException("Candidate user not found: " + candidateUserId));
+
+        ApplicationEntity application = applicationRepository.save(ApplicationEntity.builder()
+                .vacancy(vacancy)
+                .candidateUser(candidate)
+                .resumeText(resumeText)
+                .coverLetter(coverLetter)
+                .status(ApplicationStatus.SCREENING_IN_PROGRESS)
+                .camundaProcessInstanceId(processInstanceId)
+                .build());
+        historyService.record(application, null, ApplicationStatus.SCREENING_IN_PROGRESS, null);
+
+        String businessKey = "application:" + application.getId();
+        camundaRestClient.updateProcessInstanceBusinessKey(processInstanceId, businessKey);
+
+        return Map.of(
+                "applicationCreated", true,
+                "applicationId", application.getId(),
+                "vacancyId", vacancy.getId(),
+                "candidateUserId", candidate.getId(),
+                "recruiterUserId", vacancy.getRecruiterUser().getId(),
+                "vacancyTitle", vacancy.getTitle(),
+                "status", application.getStatus().name(),
+                "applicationBusinessKey", businessKey
+        );
     }
 
     @Transactional(readOnly = true)
@@ -738,9 +835,9 @@ public class CamundaProcessAdapterService {
 
 
     @Transactional(readOnly = true)
-    public Map<String, Object> validateCreateVacancyForm(String starterUserId, String title, String description,
+    public Map<String, Object> validateCreateVacancyForm(String starterUserId, UUID recruiterUserId, String title, String description,
                                                          Object requiredSkillsRaw, Object screeningThresholdRaw) {
-        UserEntity recruiter = resolveRecruiterFromCamundaStarter(starterUserId);
+        UserEntity recruiter = resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
         String normalizedTitle = normalizeRequiredText(title, "Vacancy title", 255);
         String normalizedDescription = normalizeOptionalText(description, "Vacancy description", 10_000);
         List<String> skills = parseRequiredSkills(requiredSkillsRaw);
@@ -757,10 +854,10 @@ public class CamundaProcessAdapterService {
     }
 
     @Transactional
-    public Map<String, Object> createVacancyFromCamundaForm(String starterUserId, String title, String description,
+    public Map<String, Object> createVacancyFromCamundaForm(String starterUserId, UUID recruiterUserId, String title, String description,
                                                             Object requiredSkillsRaw, Object screeningThresholdRaw,
                                                             String processInstanceId) {
-        UserEntity recruiter = resolveRecruiterFromCamundaStarter(starterUserId);
+        UserEntity recruiter = resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
         String normalizedTitle = normalizeRequiredText(title, "Vacancy title", 255);
         String normalizedDescription = normalizeOptionalText(description, "Vacancy description", 10_000);
         List<String> skills = parseRequiredSkills(requiredSkillsRaw);
@@ -951,6 +1048,214 @@ public class CamundaProcessAdapterService {
                 "applicationStatus", application.getStatus().name());
     }
 
+    @Transactional(readOnly = true)
+    public Map<String, Object> validateVacancyStatusUpdate(UUID vacancyId, UUID recruiterUserId, String starterUserId, String requestedStatus) {
+        VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
+                .orElseThrow(() -> new CamundaFormValidationException("Vacancy not found: " + vacancyId));
+        UserEntity recruiter = resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
+        if (!hasRole(recruiter, "RECRUITER")) {
+            throw new CamundaFormValidationException("Only RECRUITER users can update vacancies");
+        }
+        if (!vacancy.getRecruiterUser().getId().equals(recruiter.getId())) {
+            throw new CamundaFormValidationException("Vacancy does not belong to current recruiter");
+        }
+        parseVacancyStatus(requestedStatus);
+        return Map.of("formValidated", true, "formErrorMessage", "", "oldVacancyStatus", vacancy.getStatus().name());
+    }
+
+    @Transactional
+    public Map<String, Object> applyVacancyStatusUpdate(UUID vacancyId, UUID recruiterUserId, String starterUserId, String requestedStatus) {
+        validateVacancyStatusUpdate(vacancyId, recruiterUserId, starterUserId, requestedStatus);
+        VacancyStatus newStatus = parseVacancyStatus(requestedStatus);
+        VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
+                .orElseThrow(() -> new IllegalArgumentException("Vacancy not found: " + vacancyId));
+        VacancyStatus oldStatus = vacancy.getStatus();
+        if (oldStatus != newStatus) {
+            vacancy.setStatus(newStatus);
+            UserEntity recruiter = resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
+            vacancyHistoryService.record(vacancy, oldStatus, newStatus, recruiter);
+        }
+        return Map.of(
+                "vacancyStatusUpdated", true,
+                "vacancyId", vacancy.getId(),
+                "oldVacancyStatus", oldStatus.name(),
+                "status", vacancy.getStatus().name()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> validateRecruiterCancelInterview(UUID interviewId, UUID recruiterUserId, String starterUserId, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new CamundaFormValidationException("Cancel reason is required");
+        }
+        if (reason.length() > 5_000) {
+            throw new CamundaFormValidationException("Cancel reason must be at most 5000 characters");
+        }
+        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
+        UserEntity recruiter = resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
+        if (interview.getStatus() != InterviewStatus.SCHEDULED) {
+            throw new CamundaFormValidationException("Interview is not active");
+        }
+        if (!interview.getRecruiterUser().getId().equals(recruiter.getId())) {
+            throw new CamundaFormValidationException("Interview does not belong to current recruiter");
+        }
+        return Map.of(
+                "formValidated", true,
+                "formErrorMessage", "",
+                "applicationId", interview.getApplication().getId()
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> cancelInterviewByRecruiter(UUID interviewId, UUID recruiterUserId, String starterUserId, String reason) {
+        validateRecruiterCancelInterview(interviewId, recruiterUserId, starterUserId, reason);
+        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
+        interviewService.cancel(interview, reason);
+        return Map.of(
+                "interviewCancelled", true,
+                "interviewId", interview.getId(),
+                "applicationId", interview.getApplication().getId(),
+                "status", interview.getStatus().name()
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> releaseRecruiterCancelSlot(UUID interviewId) {
+        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
+        scheduleService.releaseForInterview(interview);
+        return Map.of("slotReleased", true, "applicationId", interview.getApplication().getId());
+    }
+
+    @Transactional
+    public Map<String, Object> returnCancelApplicationToReview(UUID interviewId, UUID recruiterUserId, String starterUserId, String reason) {
+        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
+        ApplicationEntity application = interview.getApplication();
+        ApplicationStatus oldStatus = application.getStatus();
+        application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
+        application.setInvitationText(null);
+        application.setInvitationSentAt(null);
+        application.setInvitationExpiresAt(null);
+        application.setResponseReceivedAt(null);
+        application.setRecruiterComment(reason);
+        applicationRepository.save(application);
+        UserEntity recruiter = resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
+        historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW, recruiter);
+        return Map.of("applicationReturnedToReview", true, "applicationId", application.getId(),
+                "oldApplicationStatus", oldStatus.name(), "applicationStatus", application.getStatus().name());
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> recordRecruiterCancelHistory(UUID interviewId, UUID recruiterUserId, String starterUserId) {
+        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
+        resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
+        return Map.of("recruiterCancelHistoryRecorded", true, "applicationId", interview.getApplication().getId());
+    }
+
+    @Transactional
+    public Map<String, Object> notifyRecruiterCancelParticipants(UUID applicationId, String reason) {
+        ApplicationEntity application = getApplication(applicationId);
+        notificationService.create(application.getCandidateUser(), application,
+                NotificationType.INTERVIEW_CANCELLED, "Interview was cancelled: " + reason);
+        return Map.of("recruiterCancelNotificationSent", true, "applicationId", application.getId(),
+                "status", application.getStatus().name());
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> loadCandidateVacancyList(String starterUserId) {
+        resolveUserFromCamundaStarter(starterUserId, "CANDIDATE");
+        List<Map<String, Object>> vacancies = vacancyRepository.findAll().stream()
+                .filter(vacancy -> vacancy.getStatus() == VacancyStatus.ACTIVE)
+                .map(vacancy -> Map.<String, Object>of(
+                        "id", vacancy.getId(),
+                        "title", vacancy.getTitle(),
+                        "description", vacancy.getDescription() == null ? "" : vacancy.getDescription(),
+                        "requiredSkills", vacancy.getRequiredSkills(),
+                        "screeningThreshold", vacancy.getScreeningThreshold(),
+                        "status", vacancy.getStatus().name()
+                ))
+                .toList();
+        return uiPayload("Активные вакансии", vacancies);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> loadCandidateApplicationList(String starterUserId) {
+        UserEntity candidate = resolveUserFromCamundaStarter(starterUserId, "CANDIDATE");
+        List<Map<String, Object>> applications = applicationRepository.findByCandidateUserId(candidate.getId()).stream()
+                .map(application -> Map.<String, Object>of(
+                        "applicationId", application.getId(),
+                        "vacancyId", application.getVacancy().getId(),
+                        "vacancyTitle", application.getVacancy().getTitle(),
+                        "status", application.getStatus().toExternalStatus(),
+                        "createdAt", application.getCreatedAt()
+                ))
+                .toList();
+        return uiPayload("Мои отклики", applications);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> loadCandidateApplicationView(String starterUserId, String applicationIdText) {
+        UserEntity candidate = resolveUserFromCamundaStarter(starterUserId, "CANDIDATE");
+        ApplicationEntity application = getApplication(parseUuidText(applicationIdText, "applicationId"));
+        if (!application.getCandidateUser().getId().equals(candidate.getId())) {
+            throw new CamundaFormValidationException("Not your application");
+        }
+        return uiPayload("Отклик кандидата", applicationSummary(application));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> loadRecruiterVacancyList(String starterUserId) {
+        UserEntity recruiter = resolveUserFromCamundaStarter(starterUserId, "RECRUITER");
+        List<Map<String, Object>> vacancies = vacancyRepository.findByRecruiterUserId(recruiter.getId()).stream()
+                .map(vacancy -> Map.<String, Object>of(
+                        "id", vacancy.getId(),
+                        "title", vacancy.getTitle(),
+                        "status", vacancy.getStatus().name(),
+                        "requiredSkills", vacancy.getRequiredSkills(),
+                        "screeningThreshold", vacancy.getScreeningThreshold()
+                ))
+                .toList();
+        return uiPayload("Вакансии рекрутера", vacancies);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> loadRecruiterApplicationList(String starterUserId) {
+        UserEntity recruiter = resolveUserFromCamundaStarter(starterUserId, "RECRUITER");
+        List<Map<String, Object>> applications = applicationRepository.findByRecruiterUserId(recruiter.getId()).stream()
+                .map(this::applicationSummary)
+                .toList();
+        return uiPayload("Отклики по моим вакансиям", applications);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> loadRecruiterApplicationView(String starterUserId, String applicationIdText) {
+        UserEntity recruiter = resolveUserFromCamundaStarter(starterUserId, "RECRUITER");
+        ApplicationEntity application = getApplication(parseUuidText(applicationIdText, "applicationId"));
+        if (!application.getVacancy().getRecruiterUser().getId().equals(recruiter.getId())) {
+            throw new CamundaFormValidationException("Application does not belong to your vacancy");
+        }
+        return uiPayload("Отклик для рекрутера", applicationSummary(application));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> loadRecruiterSchedule(String starterUserId, Object weekOffsetRaw) {
+        UserEntity recruiter = resolveUserFromCamundaStarter(starterUserId, "RECRUITER");
+        int weekOffset = parseWeekOffset(weekOffsetRaw);
+        return uiPayload("Расписание рекрутера", scheduleService.getRecruiterWeekSchedule(recruiter, weekOffset));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> loadNotificationList(String starterUserId) {
+        UserEntity user = resolveUserFromCamundaStarter(starterUserId, null);
+        return uiPayload("Уведомления", notificationService.getNotificationsForUser(user.getId()));
+    }
+
+    @Transactional
+    public Map<String, Object> runTimeoutReview(String starterUserId) {
+        resolveUserFromCamundaStarter(starterUserId, "ADMIN");
+        int closedCount = timeoutService.runCloseExpired();
+        return uiPayload("Ручная проверка таймаутов", Map.of("closedCount", closedCount));
+    }
+
 
     public Instant requiredScheduledAt(Object value) {
         if (value == null || String.valueOf(value).isBlank()) {
@@ -1006,8 +1311,27 @@ public class CamundaProcessAdapterService {
 
 
     private UserEntity resolveRecruiterFromCamundaStarter(String starterUserId) {
+        return resolveUserFromCamundaStarter(starterUserId, "RECRUITER");
+    }
+
+    private UserEntity resolveRecruiterForVacancyCommand(String starterUserId, UUID recruiterUserId) {
+        if (recruiterUserId != null) {
+            UserEntity recruiter = userRepository.findById(recruiterUserId)
+                    .orElseThrow(() -> new CamundaFormValidationException("Recruiter user not found: " + recruiterUserId));
+            if (!hasRole(recruiter, "RECRUITER")) {
+                throw new CamundaFormValidationException("Only RECRUITER users can create vacancies");
+            }
+            if (!recruiter.isEnabled()) {
+                throw new CamundaFormValidationException("User is disabled: " + recruiterUserId);
+            }
+            return recruiter;
+        }
+        return resolveRecruiterFromCamundaStarter(starterUserId);
+    }
+
+    private UserEntity resolveUserFromCamundaStarter(String starterUserId, String requiredRole) {
         if (starterUserId == null || starterUserId.isBlank()) {
-            throw new CamundaFormValidationException("Camunda process starter is not available. Start the process as a synced RECRUITER user.");
+            throw new CamundaFormValidationException("Camunda process starter is not available. Start the process as a synced application user.");
         }
         String normalizedStarter = starterUserId.trim().toLowerCase(java.util.Locale.ROOT);
         UserEntity user = userRepository.findWithRolesByEmail(normalizedStarter)
@@ -1015,14 +1339,17 @@ public class CamundaProcessAdapterService {
                         .filter(candidate -> normalizedStarter.equals(CamundaIdentitySyncService.camundaUserId(candidate)))
                         .findFirst()
                         .orElseThrow(() -> new CamundaFormValidationException("Application user is not synced for Camunda user: " + starterUserId)));
-        boolean recruiter = user.getRoles().stream().anyMatch(role -> "RECRUITER".equalsIgnoreCase(role.getCode()));
-        if (!recruiter) {
-            throw new CamundaFormValidationException("Only RECRUITER users can create vacancies from Camunda Tasklist");
+        if (requiredRole != null && !hasRole(user, requiredRole)) {
+            throw new CamundaFormValidationException("Only " + requiredRole + " users can run this Camunda process");
         }
         if (!user.isEnabled()) {
             throw new CamundaFormValidationException("User is disabled: " + starterUserId);
         }
         return user;
+    }
+
+    private boolean hasRole(UserEntity user, String roleCode) {
+        return user.getRoles().stream().anyMatch(role -> roleCode.equalsIgnoreCase(role.getCode()));
     }
 
     private String normalizeRequiredText(String value, String fieldName, int maxLength) {
@@ -1056,7 +1383,11 @@ public class CamundaProcessAdapterService {
                 }
             }
         } else if (raw != null) {
-            for (String item : String.valueOf(raw).split(",")) {
+            String rawText = String.valueOf(raw).trim();
+            if (rawText.startsWith("[") && rawText.endsWith("]")) {
+                rawText = rawText.substring(1, rawText.length() - 1);
+            }
+            for (String item : rawText.split(",")) {
                 if (!item.isBlank()) {
                     result.add(item.trim());
                 }
@@ -1094,6 +1425,89 @@ public class CamundaProcessAdapterService {
             throw new CamundaFormValidationException("Screening threshold must be between 0 and 100");
         }
         return value;
+    }
+
+    private VacancyStatus parseVacancyStatus(String requestedStatus) {
+        if (requestedStatus == null || requestedStatus.isBlank()) {
+            throw new CamundaFormValidationException("Vacancy status is required");
+        }
+        try {
+            return VacancyStatus.valueOf(requestedStatus);
+        } catch (IllegalArgumentException e) {
+            throw new CamundaFormValidationException("Unsupported vacancy status: " + requestedStatus);
+        }
+    }
+
+    private UUID parseUuidText(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new CamundaFormValidationException(fieldName + " is required");
+        }
+        try {
+            return UUID.fromString(value.trim());
+        } catch (IllegalArgumentException e) {
+            throw new CamundaFormValidationException(fieldName + " must be a valid UUID");
+        }
+    }
+
+    private int parseWeekOffset(Object raw) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return 0;
+        }
+        try {
+            int value = raw instanceof Number number ? number.intValue() : Integer.parseInt(String.valueOf(raw));
+            if (value < -52 || value > 52) {
+                throw new CamundaFormValidationException("weekOffset must be between -52 and 52");
+            }
+            return value;
+        } catch (NumberFormatException e) {
+            throw new CamundaFormValidationException("weekOffset must be an integer");
+        }
+    }
+
+    private Map<String, Object> applicationSummary(ApplicationEntity application) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("applicationId", application.getId());
+        result.put("vacancyId", application.getVacancy().getId());
+        result.put("vacancyTitle", application.getVacancy().getTitle());
+        result.put("candidateId", application.getCandidateUser().getId());
+        result.put("candidateEmail", application.getCandidateUser().getEmail());
+        result.put("status", application.getStatus().name());
+        result.put("resumeText", application.getResumeText());
+        result.put("coverLetter", application.getCoverLetter() == null ? "" : application.getCoverLetter());
+        result.put("invitationText", application.getInvitationText() == null ? "" : application.getInvitationText());
+        result.put("invitationExpiresAt", application.getInvitationExpiresAt());
+        result.put("createdAt", application.getCreatedAt());
+        result.put("updatedAt", application.getUpdatedAt());
+        interviewService.findActiveByApplicationId(application.getId()).ifPresent(interview -> {
+            result.put("interviewId", interview.getId());
+            result.put("interviewStatus", interview.getStatus().name());
+            result.put("scheduledAt", interview.getScheduledAt());
+            result.put("durationMinutes", interview.getDurationMinutes());
+        });
+        return result;
+    }
+
+    private Map<String, Object> uiPayload(String title, Object payload) {
+        return Map.of(
+                "uiTitle", title,
+                "uiPayload", toCamundaUiJson(payload),
+                "loadedAt", Instant.now().toString()
+        );
+    }
+
+    private String toCamundaUiJson(Object payload) {
+        try {
+            return truncateUiPayload(objectMapper.writeValueAsString(payload));
+        } catch (JsonProcessingException e) {
+            return truncateUiPayload(String.valueOf(payload));
+        }
+    }
+
+    private String truncateUiPayload(String value) {
+        if (value == null || value.length() <= UI_PAYLOAD_MAX_LENGTH) {
+            return value;
+        }
+        return value.substring(0, UI_PAYLOAD_MAX_LENGTH) + "\n... truncated for Camunda Tasklist form ...";
     }
 
 

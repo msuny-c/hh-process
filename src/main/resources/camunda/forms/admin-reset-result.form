@@ -1,11 +1,20 @@
 {
   "schemaVersion": 11,
-  "exporter": {"name": "Camunda Modeler", "version": "standalone-lab"},
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
   "type": "default",
   "id": "admin-reset-result-form",
   "components": [
-    {"type": "textfield", "id": "status", "key": "status", "label": "Статус интервью", "disabled": true},
-    {"type": "textfield", "id": "applicationStatus", "key": "applicationStatus", "label": "Статус отклика", "disabled": true},
-    {"type": "textarea", "id": "resetReason", "key": "resetReason", "label": "Причина сброса", "disabled": true}
+    {
+      "type": "html",
+      "id": "errorBanner",
+      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\">{{formErrorMessage}}</div>",
+      "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
+    },
+    { "type": "text", "id": "resultHeader", "text": "## Результат административного сброса" },
+    { "type": "textfield", "id": "interviewId", "key": "interviewId", "label": "ID интервью", "readonly": true },
+    { "type": "textfield", "id": "applicationId", "key": "applicationId", "label": "ID отклика", "readonly": true },
+    { "type": "textfield", "id": "status", "key": "status", "label": "Статус интервью", "readonly": true },
+    { "type": "textfield", "id": "applicationStatus", "key": "applicationStatus", "label": "Статус отклика", "readonly": true },
+    { "type": "textarea", "id": "resetReason", "key": "resetReason", "label": "Причина сброса", "readonly": true }
   ]
 }

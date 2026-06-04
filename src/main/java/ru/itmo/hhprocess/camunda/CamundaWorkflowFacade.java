@@ -10,9 +10,11 @@ import ru.itmo.hhprocess.entity.VacancyEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.enums.ErrorCode;
 import ru.itmo.hhprocess.enums.ResponseType;
+import ru.itmo.hhprocess.enums.VacancyStatus;
 import ru.itmo.hhprocess.exception.ApiException;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -26,17 +28,51 @@ public class CamundaWorkflowFacade {
 
     private static final String APPLY_TO_VACANCY_TASK = "ApplyToVacancyTask";
     private static final String CREATE_VACANCY_TASK = "CreateVacancyTask";
+    private static final String VACANCY_CREATED_RESULT_TASK = "VacancyCreatedResultTask";
     private static final String RECRUITER_DECISION_TASK = "RecruiterDecisionTask";
     private static final String WRITE_INVITATION_TASK = "WriteInvitationTask";
     private static final String CANDIDATE_RESPONSE_TASK = "CandidateInvitationResponseTask";
     private static final String MANAGE_VACANCY_TASK = "ManageVacancyTask";
     private static final String ADMIN_RESET_APPROVAL_TASK = "AdminResetApprovalTask";
+    private static final String UPDATE_VACANCY_STATUS_TASK = "UpdateVacancyStatusTask";
+    private static final String CANCEL_INTERVIEW_TASK = "CancelInterviewTask";
     private static final String RECRUITER_GROUP = "RECRUITER";
     private static final String CANDIDATE_GROUP = "CANDIDATE";
     private static final String ADMIN_GROUP = "ADMIN";
 
     private final CamundaRestClient camundaRestClient;
     private final CamundaProperties properties;
+
+    public Optional<String> startVacancyCreateFromRequest(UserEntity recruiterUser, String title, String description,
+                                                          List<String> requiredSkills, int screeningThreshold) {
+        String requestBusinessKey = "vacancy-request:" + UUID.randomUUID();
+        Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
+                properties.getVacancyProcessKey(),
+                requestBusinessKey,
+                Map.of(
+                        "recruiterUserId", recruiterUser.getId(),
+                        "title", safe(title),
+                        "description", safe(description),
+                        "requiredSkills", requiredSkills == null ? "" : String.join(", ", requiredSkills),
+                        "screeningThreshold", screeningThreshold,
+                        "startedAt", Instant.now()
+                )
+        );
+        processInstanceId.ifPresent(id -> completeTask(
+                requestBusinessKey,
+                CREATE_VACANCY_TASK,
+                RECRUITER_GROUP,
+                recruiterUser.getId(),
+                Map.of(
+                        "action", "CREATE",
+                        "title", safe(title),
+                        "description", safe(description),
+                        "requiredSkills", requiredSkills == null ? "" : String.join(", ", requiredSkills),
+                        "screeningThreshold", screeningThreshold,
+                        "createdAt", Instant.now()
+                )));
+        return processInstanceId;
+    }
 
     public Optional<String> startVacancyProcess(VacancyEntity vacancy) {
         Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
@@ -86,6 +122,36 @@ public class CamundaWorkflowFacade {
                     application.getCandidateUser().getId(),
                     applyVariables);
         });
+        return processInstanceId;
+    }
+
+    public Optional<String> startApplicationCreateFromRequest(VacancyEntity vacancy, UserEntity candidateUser,
+                                                             String resumeText, String coverLetter) {
+        String requestBusinessKey = "application-request:" + UUID.randomUUID();
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("vacancyId", vacancy.getId());
+        variables.put("candidateUserId", candidateUser.getId());
+        variables.put("recruiterUserId", vacancy.getRecruiterUser().getId());
+        variables.put("vacancyTitle", vacancy.getTitle());
+        variables.put("resumeText", safe(resumeText));
+        variables.put("coverLetter", safe(coverLetter));
+        variables.put("status", ApplicationStatus.SCREENING_IN_PROGRESS.name());
+        Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
+                properties.getApplicationProcessKey(),
+                requestBusinessKey,
+                variables
+        );
+        processInstanceId.ifPresent(id -> completeTask(
+                requestBusinessKey,
+                APPLY_TO_VACANCY_TASK,
+                CANDIDATE_GROUP,
+                candidateUser.getId(),
+                Map.of(
+                        "action", "APPLY",
+                        "submittedAt", Instant.now(),
+                        "resumeText", safe(resumeText),
+                        "coverLetter", safe(coverLetter)
+                )));
         return processInstanceId;
     }
 
@@ -149,6 +215,18 @@ public class CamundaWorkflowFacade {
         ));
     }
 
+    public boolean returnInvitationToRecruiterReview(ApplicationEntity application, String reason, String responseType) {
+        Map<String, Object> variables = Map.of(
+                "responseType", responseType,
+                "cancelReason", safe(reason),
+                "returnedToRecruiterReviewAt", Instant.now()
+        );
+        if (completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, variables)) {
+            return true;
+        }
+        return !camundaRestClient.findActiveTasks(applicationBusinessKey(application.getId()), RECRUITER_DECISION_TASK).isEmpty();
+    }
+
     public boolean applicationClosedByVacancy(ApplicationEntity application, String reason) {
         Map<String, Object> variables = Map.of(
                 "decision", "VACANCY_CLOSED",
@@ -167,11 +245,41 @@ public class CamundaWorkflowFacade {
 
     public boolean closeVacancy(VacancyEntity vacancy, UserEntity recruiterUser, String reason) {
         assertVacancyRecruiterCanComplete(vacancy, recruiterUser);
+        completeTaskIfActive(vacancyBusinessKey(vacancy.getId()), VACANCY_CREATED_RESULT_TASK, RECRUITER_GROUP,
+                recruiterUser.getId(), Map.of(
+                        "resultAcknowledged", true,
+                        "acknowledgedAt", Instant.now()
+                ));
         return completeVacancyTask(vacancy.getId(), MANAGE_VACANCY_TASK, RECRUITER_GROUP, recruiterUser.getId(), Map.of(
                 "action", "CLOSE",
                 "closeReason", safe(reason),
                 "closedAt", Instant.now()
         ));
+    }
+
+    public Optional<String> updateVacancyStatus(VacancyEntity vacancy, UserEntity recruiterUser, VacancyStatus status) {
+        assertVacancyRecruiterCanComplete(vacancy, recruiterUser);
+        String businessKey = "vacancy-status:" + vacancy.getId() + ":" + UUID.randomUUID();
+        Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
+                properties.getVacancyStatusUpdateProcessKey(),
+                businessKey,
+                Map.of(
+                        "vacancyId", vacancy.getId(),
+                        "recruiterUserId", recruiterUser.getId(),
+                        "requestedStatus", status.name(),
+                        "requestedAt", Instant.now()
+                )
+        );
+        processInstanceId.ifPresent(id -> completeTask(
+                businessKey,
+                UPDATE_VACANCY_STATUS_TASK,
+                RECRUITER_GROUP,
+                recruiterUser.getId(),
+                Map.of(
+                        "requestedStatus", status.name(),
+                        "updatedAt", Instant.now()
+                )));
+        return processInstanceId;
     }
 
     public void startTimeoutSchedulerIfNeeded() {
@@ -211,6 +319,36 @@ public class CamundaWorkflowFacade {
         ));
     }
 
+    public Optional<String> recruiterCancelInterview(InterviewEntity interview, UserEntity recruiterUser, String reason) {
+        ApplicationEntity application = interview.getApplication();
+        assertRecruiterCanComplete(application, recruiterUser);
+        String businessKey = "interview-cancel:" + interview.getId() + ":" + UUID.randomUUID();
+        Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
+                properties.getRecruiterInterviewCancelProcessKey(),
+                businessKey,
+                Map.of(
+                        "interviewId", interview.getId(),
+                        "applicationId", application.getId(),
+                        "vacancyId", application.getVacancy().getId(),
+                        "candidateUserId", application.getCandidateUser().getId(),
+                        "recruiterUserId", recruiterUser.getId(),
+                        "cancelReason", safe(reason),
+                        "requestedAt", Instant.now()
+                )
+        );
+        processInstanceId.ifPresent(id -> completeTask(
+                businessKey,
+                CANCEL_INTERVIEW_TASK,
+                RECRUITER_GROUP,
+                recruiterUser.getId(),
+                Map.of(
+                        "cancelReason", safe(reason),
+                        "cancelledByRecruiterUserId", recruiterUser.getId(),
+                        "cancelledAt", Instant.now()
+                )));
+        return processInstanceId;
+    }
+
     private boolean completeApplicationTask(UUID applicationId, String taskDefinitionKey, Map<String, ?> variables) {
         return completeApplicationTask(applicationId, taskDefinitionKey, null, null, variables);
     }
@@ -223,6 +361,35 @@ public class CamundaWorkflowFacade {
     private boolean completeVacancyTask(UUID vacancyId, String taskDefinitionKey, String expectedGroup,
                                         UUID actorUserId, Map<String, ?> variables) {
         return completeTask(vacancyBusinessKey(vacancyId), taskDefinitionKey, expectedGroup, actorUserId, variables);
+    }
+
+    private boolean completeTaskIfActive(String businessKey, String taskDefinitionKey, String expectedGroup,
+                                         UUID actorUserId, Map<String, ?> variables) {
+        var tasks = camundaRestClient.findActiveTasks(businessKey, taskDefinitionKey);
+        if (tasks.isEmpty()) {
+            return false;
+        }
+        Object id = tasks.get(0).get("id");
+        if (id == null) {
+            return false;
+        }
+        String taskId = String.valueOf(id);
+        if (expectedGroup != null && !camundaRestClient.taskHasCandidateGroup(taskId, expectedGroup)) {
+            log.warn("Camunda task {} for businessKey={} does not expose candidate group {}", taskDefinitionKey, businessKey, expectedGroup);
+            return false;
+        }
+        Map<String, Object> completedVariables = new LinkedHashMap<>(variables);
+        if (actorUserId != null) {
+            completedVariables.put("completedByUserId", actorUserId);
+        }
+        if (expectedGroup != null) {
+            completedVariables.put("completedByGroup", expectedGroup);
+        }
+        boolean completed = camundaRestClient.completeTask(taskId, completedVariables);
+        if (completed) {
+            log.info("Completed Camunda task {}; businessKey={}; taskId={}", taskDefinitionKey, businessKey, taskId);
+        }
+        return completed;
     }
 
     private boolean completeTask(String businessKey, String taskDefinitionKey, String expectedGroup,

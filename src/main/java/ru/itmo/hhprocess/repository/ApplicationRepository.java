@@ -22,6 +22,8 @@ public interface ApplicationRepository extends JpaRepository<ApplicationEntity, 
 
     boolean existsByCandidateUserIdAndVacancyIdAndStatusNotIn(UUID candidateUserId, UUID vacancyId, List<ApplicationStatus> terminalStatuses);
 
+    Optional<ApplicationEntity> findByCamundaProcessInstanceId(String camundaProcessInstanceId);
+
     @EntityGraph(attributePaths = {"vacancy", "candidateUser", "vacancy.recruiterUser"})
     @Query("SELECT a FROM ApplicationEntity a WHERE a.vacancy.recruiterUser.id = :recruiterUserId")
     List<ApplicationEntity> findByRecruiterUserId(@Param("recruiterUserId") UUID recruiterUserId);

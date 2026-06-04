@@ -1,44 +1,29 @@
 {
   "schemaVersion": 11,
-  "exporter": {
-    "name": "Camunda Modeler",
-    "version": "standalone-lab"
-  },
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
   "type": "default",
   "id": "close-vacancy-form",
   "components": [
     {
-      "type": "textfield",
-      "id": "formErrorMessage",
-      "key": "formErrorMessage",
-      "label": "Ошибка предыдущей отправки формы",
-      "disabled": true
+      "type": "html",
+      "id": "errorBanner",
+      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\">{{formErrorMessage}}</div>",
+      "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
     },
+    { "type": "text", "id": "contextHeader", "text": "## Контекст вакансии" },
+    { "type": "textfield", "id": "vacancyId", "key": "vacancyId", "label": "ID вакансии", "readonly": true },
+    { "type": "textfield", "id": "vacancyTitle", "key": "vacancyTitle", "label": "Вакансия", "readonly": true },
+    { "type": "textfield", "id": "status", "key": "status", "label": "Текущий статус", "readonly": true },
+    { "type": "text", "id": "inputHeader", "text": "## Закрытие вакансии" },
     {
       "type": "select",
       "id": "action",
       "key": "action",
       "label": "Действие",
-      "values": [
-        {
-          "label": "Закрыть вакансию",
-          "value": "CLOSE"
-        }
-      ],
+      "values": [{ "label": "Закрыть вакансию", "value": "CLOSE" }],
       "defaultValue": "CLOSE",
-      "validate": {
-        "required": true
-      }
+      "validate": { "required": true }
     },
-    {
-      "type": "textarea",
-      "id": "closeReason",
-      "key": "closeReason",
-      "label": "Причина закрытия",
-      "validate": {
-        "required": true,
-        "maxLength": 5000
-      }
-    }
+    { "type": "textarea", "id": "closeReason", "key": "closeReason", "label": "Причина закрытия", "validate": { "required": true, "maxLength": 5000 } }
   ]
 }

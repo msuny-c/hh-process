@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_hh_recruiter_interview_cancel" targetNamespace="http://itmo.ru/hhprocess/camunda">
+  <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED"/>
+  <bpmn:error id="Error_ApplicationTxFailed" name="APPLICATION_TX_FAILED" errorCode="APPLICATION_TX_FAILED"/>
+  <bpmn:process id="hhRecruiterInterviewCancelProcess" name="HH recruiter interview cancel" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="RecruiterCancelStart" name="Рекрутер запросил отмену интервью" camunda:initiator="starterUserId"/>
+    <bpmn:userTask id="CancelInterviewTask" name="Подтвердить отмену интервью" camunda:formRef="cancel-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER"/>
+    <bpmn:serviceTask id="ValidateRecruiterCancelInterview" name="Проверить отмену интервью" camunda:type="external" camunda:topic="interview-cancel"/>
+    <bpmn:boundaryEvent id="RecruiterCancelValidationError" attachedToRef="ValidateRecruiterCancelInterview">
+      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed"/>
+    </bpmn:boundaryEvent>
+    <bpmn:transaction id="Transaction_RecruiterCancelInterview" name="TX: отмена интервью рекрутером">
+      <bpmn:startEvent id="Transaction_RecruiterCancelInterview_Start"/>
+      <bpmn:serviceTask id="CancelInterviewByRecruiter" name="Отменить интервью" camunda:type="external" camunda:topic="interview-cancel"/>
+      <bpmn:serviceTask id="ReleaseRecruiterCancelSlot" name="Освободить слот расписания" camunda:type="external" camunda:topic="interview-cancel"/>
+      <bpmn:serviceTask id="ReturnCancelApplicationToReview" name="Вернуть отклик на рассмотрение" camunda:type="external" camunda:topic="interview-cancel"/>
+      <bpmn:serviceTask id="RecordRecruiterCancelHistory" name="Записать историю отмены" camunda:type="external" camunda:topic="interview-cancel"/>
+      <bpmn:endEvent id="Transaction_RecruiterCancelInterview_End"/>
+      <bpmn:sequenceFlow id="RC_TX1" sourceRef="Transaction_RecruiterCancelInterview_Start" targetRef="CancelInterviewByRecruiter"/>
+      <bpmn:sequenceFlow id="RC_TX2" sourceRef="CancelInterviewByRecruiter" targetRef="ReleaseRecruiterCancelSlot"/>
+      <bpmn:sequenceFlow id="RC_TX3" sourceRef="ReleaseRecruiterCancelSlot" targetRef="ReturnCancelApplicationToReview"/>
+      <bpmn:sequenceFlow id="RC_TX4" sourceRef="ReturnCancelApplicationToReview" targetRef="RecordRecruiterCancelHistory"/>
+      <bpmn:sequenceFlow id="RC_TX5" sourceRef="RecordRecruiterCancelHistory" targetRef="Transaction_RecruiterCancelInterview_End"/>
+    </bpmn:transaction>
+    <bpmn:boundaryEvent id="RecruiterCancelTxError" attachedToRef="Transaction_RecruiterCancelInterview">
+      <bpmn:errorEventDefinition errorRef="Error_ApplicationTxFailed"/>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="NotifyRecruiterCancelParticipants" name="Уведомить кандидата об отмене интервью" camunda:type="external" camunda:topic="interview-cancel"/>
+    <bpmn:serviceTask id="RollbackRecruiterCancel" name="Выполнить recovery отмены интервью" camunda:type="external" camunda:topic="transaction-rollback"/>
+    <bpmn:userTask id="RecruiterCancelResultTask" name="Показать результат отмены интервью" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN"/>
+    <bpmn:endEvent id="RecruiterCancelEnd" name="Интервью отменено"/>
+    <bpmn:endEvent id="RecruiterCancelRollbackEnd" name="Отмена не выполнена"/>
+    <bpmn:sequenceFlow id="RC1" sourceRef="RecruiterCancelStart" targetRef="CancelInterviewTask"/>
+    <bpmn:sequenceFlow id="RC2" sourceRef="CancelInterviewTask" targetRef="ValidateRecruiterCancelInterview"/>
+    <bpmn:sequenceFlow id="RC2e" sourceRef="RecruiterCancelValidationError" targetRef="CancelInterviewTask"/>
+    <bpmn:sequenceFlow id="RC3" sourceRef="ValidateRecruiterCancelInterview" targetRef="Transaction_RecruiterCancelInterview"/>
+    <bpmn:sequenceFlow id="RC4" sourceRef="Transaction_RecruiterCancelInterview" targetRef="NotifyRecruiterCancelParticipants"/>
+    <bpmn:sequenceFlow id="RC5" sourceRef="NotifyRecruiterCancelParticipants" targetRef="RecruiterCancelResultTask"/>
+    <bpmn:sequenceFlow id="RC6" sourceRef="RecruiterCancelResultTask" targetRef="RecruiterCancelEnd"/>
+    <bpmn:sequenceFlow id="RC_ERR1" sourceRef="RecruiterCancelTxError" targetRef="RollbackRecruiterCancel"/>
+    <bpmn:sequenceFlow id="RC_ERR2" sourceRef="RollbackRecruiterCancel" targetRef="RecruiterCancelRollbackEnd"/>
+  </bpmn:process>
+</bpmn:definitions>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_hh_ui_notification_list" targetNamespace="http://itmo.ru/hhprocess/camunda">
+  <bpmn:process id="hhUiNotificationList" name="HH UI notification list" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId"/>
+    <bpmn:serviceTask id="LoadNotificationList" name="Загрузить уведомления" camunda:type="external" camunda:topic="ui-query"/>
+    <bpmn:userTask id="DisplayNotificationList" name="Уведомления" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE,RECRUITER,ADMIN"/>
+    <bpmn:endEvent id="End"/>
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadNotificationList"/>
+    <bpmn:sequenceFlow id="F2" sourceRef="LoadNotificationList" targetRef="DisplayNotificationList"/>
+    <bpmn:sequenceFlow id="F3" sourceRef="DisplayNotificationList" targetRef="End"/>
+  </bpmn:process>
+</bpmn:definitions>

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 11,
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "type": "default",
+  "id": "ui-json-display-form",
+  "components": [
+    {
+      "type": "html",
+      "id": "errorBanner",
+      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\">{{formErrorMessage}}</div>",
+      "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
+    },
+    { "type": "text", "id": "screenHeader", "text": "## Camunda UI экран" },
+    { "type": "textfield", "id": "uiTitle", "key": "uiTitle", "label": "Экран", "readonly": true },
+    { "type": "textfield", "id": "loadedAt", "key": "loadedAt", "label": "Загружено", "readonly": true },
+    { "type": "textarea", "id": "uiPayload", "key": "uiPayload", "label": "Данные", "readonly": true }
+  ]
+}

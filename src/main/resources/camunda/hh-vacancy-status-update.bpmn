@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_hh_vacancy_status_update" targetNamespace="http://itmo.ru/hhprocess/camunda">
+  <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED"/>
+  <bpmn:process id="hhVacancyStatusUpdateProcess" name="HH vacancy status update" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="VacancyStatusUpdateStart" name="Запрошено изменение статуса" camunda:initiator="starterUserId"/>
+    <bpmn:userTask id="UpdateVacancyStatusTask" name="Изменить статус вакансии" camunda:formRef="vacancy-status-update-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER"/>
+    <bpmn:serviceTask id="ValidateVacancyStatusUpdate" name="Проверить изменение статуса" camunda:type="external" camunda:topic="vacancy-status-update"/>
+    <bpmn:boundaryEvent id="VacancyStatusValidationError" attachedToRef="ValidateVacancyStatusUpdate">
+      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed"/>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="ApplyVacancyStatusUpdate" name="Сохранить статус вакансии" camunda:type="external" camunda:topic="vacancy-status-update"/>
+    <bpmn:userTask id="VacancyStatusResultTask" name="Показать результат изменения статуса" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN"/>
+    <bpmn:endEvent id="VacancyStatusUpdateEnd" name="Статус обновлён"/>
+    <bpmn:sequenceFlow id="VS1" sourceRef="VacancyStatusUpdateStart" targetRef="UpdateVacancyStatusTask"/>
+    <bpmn:sequenceFlow id="VS2" sourceRef="UpdateVacancyStatusTask" targetRef="ValidateVacancyStatusUpdate"/>
+    <bpmn:sequenceFlow id="VS2e" sourceRef="VacancyStatusValidationError" targetRef="UpdateVacancyStatusTask"/>
+    <bpmn:sequenceFlow id="VS3" sourceRef="ValidateVacancyStatusUpdate" targetRef="ApplyVacancyStatusUpdate"/>
+    <bpmn:sequenceFlow id="VS4" sourceRef="ApplyVacancyStatusUpdate" targetRef="VacancyStatusResultTask"/>
+    <bpmn:sequenceFlow id="VS5" sourceRef="VacancyStatusResultTask" targetRef="VacancyStatusUpdateEnd"/>
+  </bpmn:process>
+</bpmn:definitions>

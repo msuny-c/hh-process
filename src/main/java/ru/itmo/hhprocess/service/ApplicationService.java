@@ -52,9 +52,15 @@ public class ApplicationService {
                                         "You already have an application for this vacancy");
                 }
 
-                ApplicationEntity application = saveNewApplication(vacancy, candidateUser, request);
-                camundaWorkflowFacade.startApplicationProcess(application)
-                                .ifPresent(application::setCamundaProcessInstanceId);
+                String processInstanceId = camundaWorkflowFacade.startApplicationCreateFromRequest(
+                                vacancy,
+                                candidateUser,
+                                request.getResumeText(),
+                                request.getCoverLetter())
+                                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
+                                                ErrorCode.INVALID_APPLICATION_STATE,
+                                                "Camunda application process was not started"));
+                ApplicationEntity application = waitForApplicationCreated(processInstanceId);
 
                 return CreateApplicationResponse.builder()
                                 .applicationId(application.getId())
@@ -91,22 +97,26 @@ public class ApplicationService {
                                                 ErrorCode.APPLICATION_NOT_FOUND, "Application not found"));
         }
 
-        private ApplicationEntity saveNewApplication(VacancyEntity vacancy, UserEntity candidateUser,
-                        CreateApplicationRequest request) {
-                ApplicationEntity application = ApplicationEntity.builder()
-                                .vacancy(vacancy)
-                                .candidateUser(candidateUser)
-                                .resumeText(request.getResumeText())
-                                .coverLetter(request.getCoverLetter())
-                                .status(ApplicationStatus.SCREENING_IN_PROGRESS)
-                                .build();
-                application = applicationRepository.save(application);
+        private ApplicationEntity waitForApplicationCreated(String processInstanceId) {
+                for (int attempt = 0; attempt < 60; attempt++) {
+                        var application = applicationRepository.findByCamundaProcessInstanceId(processInstanceId);
+                        if (application.isPresent()) {
+                                return application.get();
+                        }
+                        sleep();
+                }
+                throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                                "Camunda process did not create application in time");
+        }
 
-                historyService.record(application, null,
-                                ApplicationStatus.SCREENING_IN_PROGRESS,
-                                null);
-
-                return application;
+        private static void sleep() {
+                try {
+                        Thread.sleep(500);
+                } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                                        "Interrupted while waiting for Camunda process");
+                }
         }
 
 }

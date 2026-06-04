@@ -28,13 +28,35 @@ public class CamundaAuthorizationService {
         ensureGroup(GROUP_ADMIN, "Administrators");
 
         grantStart(GROUP_CANDIDATE, properties.getApplicationProcessKey());
+        grantStart(GROUP_CANDIDATE, "hhUiCandidateVacancyList");
+        grantStart(GROUP_CANDIDATE, "hhUiCandidateApplicationList");
+        grantStart(GROUP_CANDIDATE, "hhUiCandidateApplicationView");
+        grantStart(GROUP_CANDIDATE, "hhUiNotificationList");
         grantStart(GROUP_RECRUITER, properties.getVacancyProcessKey());
+        grantStart(GROUP_RECRUITER, properties.getVacancyStatusUpdateProcessKey());
+        grantStart(GROUP_RECRUITER, properties.getRecruiterInterviewCancelProcessKey());
+        grantStart(GROUP_RECRUITER, "hhUiRecruiterVacancyList");
+        grantStart(GROUP_RECRUITER, "hhUiRecruiterApplicationList");
+        grantStart(GROUP_RECRUITER, "hhUiRecruiterApplicationView");
+        grantStart(GROUP_RECRUITER, "hhUiRecruiterSchedule");
+        grantStart(GROUP_RECRUITER, "hhUiNotificationList");
 
         for (String processKey : List.of(
                 properties.getApplicationProcessKey(),
                 properties.getVacancyProcessKey(),
                 properties.getAdminInterviewResetProcessKey(),
-                properties.getTimeoutSchedulerProcessKey())) {
+                properties.getTimeoutSchedulerProcessKey(),
+                properties.getVacancyStatusUpdateProcessKey(),
+                properties.getRecruiterInterviewCancelProcessKey(),
+                "hhUiCandidateVacancyList",
+                "hhUiCandidateApplicationList",
+                "hhUiCandidateApplicationView",
+                "hhUiRecruiterVacancyList",
+                "hhUiRecruiterApplicationList",
+                "hhUiRecruiterApplicationView",
+                "hhUiRecruiterSchedule",
+                "hhUiNotificationList",
+                "hhUiAdminTimeoutReview")) {
             grantStart(GROUP_ADMIN, processKey);
         }
     }

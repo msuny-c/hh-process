@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 11,
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "type": "default",
+  "id": "vacancy-status-update-form",
+  "components": [
+    {
+      "type": "html",
+      "id": "errorBanner",
+      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\">{{formErrorMessage}}</div>",
+      "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
+    },
+    { "type": "text", "id": "contextHeader", "text": "## Контекст вакансии" },
+    { "type": "textfield", "id": "oldVacancyStatus", "key": "oldVacancyStatus", "label": "Текущий статус", "readonly": true },
+    { "type": "textfield", "id": "vacancyId", "key": "vacancyId", "label": "ID вакансии", "validate": { "required": true } },
+    { "type": "text", "id": "inputHeader", "text": "## Изменение статуса" },
+    {
+      "type": "select",
+      "id": "requestedStatus",
+      "key": "requestedStatus",
+      "label": "Новый статус",
+      "values": [
+        { "value": "ACTIVE", "label": "ACTIVE" },
+        { "value": "CLOSED", "label": "CLOSED" }
+      ],
+      "validate": { "required": true }
+    }
+  ]
+}

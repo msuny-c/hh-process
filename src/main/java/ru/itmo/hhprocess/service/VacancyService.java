@@ -32,15 +32,15 @@ public class VacancyService {
     @Transactional
     public VacancyResponse create(CreateVacancyRequest request) {
         UserEntity recruiterUser = getRecruiterUserForCurrentUser();
-        VacancyEntity vacancy = vacancyRepository.save(VacancyEntity.builder()
-                .recruiterUser(recruiterUser)
-                .title(request.getTitle())
-                .description(request.getDescription())
-                .status(ru.itmo.hhprocess.enums.VacancyStatus.ACTIVE)
-                .requiredSkills(request.getRequiredSkills())
-                .screeningThreshold(request.getScreeningThreshold())
-                .build());
-        camundaWorkflowFacade.startVacancyProcess(vacancy).ifPresent(vacancy::setCamundaProcessInstanceId);
+        String processInstanceId = camundaWorkflowFacade.startVacancyCreateFromRequest(
+                        recruiterUser,
+                        request.getTitle(),
+                        request.getDescription(),
+                        request.getRequiredSkills(),
+                        request.getScreeningThreshold())
+                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_VACANCY_STATE,
+                        "Camunda vacancy create process was not started"));
+        VacancyEntity vacancy = waitForVacancyCreated(processInstanceId);
         return vacancyMapper.toResponse(vacancy);
     }
 
@@ -57,7 +57,10 @@ public class VacancyService {
         UserEntity recruiterUser = getRecruiterUserForCurrentUser();
         VacancyEntity vacancy = findByIdForUpdate(vacancyId);
         ensureOwnership(vacancy, recruiterUser);
-        vacancy.setStatus(request.getStatus());
+        camundaWorkflowFacade.updateVacancyStatus(vacancy, recruiterUser, request.getStatus())
+                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_VACANCY_STATE,
+                        "Camunda vacancy status update process was not started"));
+        vacancy = waitForVacancyStatus(vacancyId, request.getStatus());
         return vacancyMapper.toResponse(vacancy);
     }
 
@@ -90,5 +93,39 @@ public class VacancyService {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCESS_DENIED, "Recruiter access required");
         }
         return user;
+    }
+
+    private VacancyEntity waitForVacancyCreated(String processInstanceId) {
+        for (int attempt = 0; attempt < 60; attempt++) {
+            var vacancy = vacancyRepository.findByCamundaProcessInstanceId(processInstanceId);
+            if (vacancy.isPresent()) {
+                return vacancy.get();
+            }
+            sleep();
+        }
+        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_VACANCY_STATE,
+                "Camunda process did not create vacancy in time");
+    }
+
+    private VacancyEntity waitForVacancyStatus(UUID vacancyId, ru.itmo.hhprocess.enums.VacancyStatus expected) {
+        for (int attempt = 0; attempt < 60; attempt++) {
+            VacancyEntity vacancy = findById(vacancyId);
+            if (vacancy.getStatus() == expected) {
+                return vacancy;
+            }
+            sleep();
+        }
+        throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_VACANCY_STATE,
+                "Camunda process did not update vacancy status in time");
+    }
+
+    private static void sleep() {
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_VACANCY_STATE,
+                    "Interrupted while waiting for Camunda process");
+        }
     }
 }

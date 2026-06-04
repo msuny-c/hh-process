@@ -17,6 +17,8 @@ public interface VacancyRepository extends JpaRepository<VacancyEntity, UUID> {
 
     List<VacancyEntity> findByRecruiterUserIdAndStatus(UUID recruiterUserId, VacancyStatus status);
 
+    Optional<VacancyEntity> findByCamundaProcessInstanceId(String camundaProcessInstanceId);
+
     @Query("select v from VacancyEntity v where v.id = :id")
     Optional<VacancyEntity> findByIdForUpdate(@Param("id") UUID id);
 }

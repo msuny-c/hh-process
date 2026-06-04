@@ -74,6 +74,8 @@ app:
     vacancy-process-key: hhVacancyProcess
     timeout-scheduler-process-key: hhTimeoutSchedulerProcess
     admin-interview-reset-process-key: hhAdminInterviewResetProcess
+    vacancy-status-update-process-key: hhVacancyStatusUpdateProcess
+    recruiter-interview-cancel-process-key: hhRecruiterInterviewCancelProcess
     identity-sync-initial-password: ${CAMUNDA_IDENTITY_SYNC_INITIAL_PASSWORD:camunda}
     worker:
       enabled: ${CAMUNDA_WORKER_ENABLED:true}

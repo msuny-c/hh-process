@@ -25,6 +25,8 @@ public class CamundaProperties {
     private String vacancyProcessKey = "hhVacancyProcess";
     private String timeoutSchedulerProcessKey = "hhTimeoutSchedulerProcess";
     private String adminInterviewResetProcessKey = "hhAdminInterviewResetProcess";
+    private String vacancyStatusUpdateProcessKey = "hhVacancyStatusUpdateProcess";
+    private String recruiterInterviewCancelProcessKey = "hhRecruiterInterviewCancelProcess";
 
     /** Initial password used only when the application creates a Camunda user for Tasklist access. */
     private String identitySyncInitialPassword = "camunda";

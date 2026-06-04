@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_hh_ui_recruiter_application_view" targetNamespace="http://itmo.ru/hhprocess/camunda">
+  <bpmn:process id="hhUiRecruiterApplicationView" name="HH UI recruiter application view" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId"/>
+    <bpmn:userTask id="EnterRecruiterApplicationId" name="Выбрать отклик" camunda:formRef="application-id-input-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN"/>
+    <bpmn:serviceTask id="LoadRecruiterApplicationView" name="Загрузить отклик рекрутера" camunda:type="external" camunda:topic="ui-query"/>
+    <bpmn:userTask id="DisplayRecruiterApplicationView" name="Просмотр отклика рекрутера" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN"/>
+    <bpmn:endEvent id="End"/>
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="EnterRecruiterApplicationId"/>
+    <bpmn:sequenceFlow id="F2" sourceRef="EnterRecruiterApplicationId" targetRef="LoadRecruiterApplicationView"/>
+    <bpmn:sequenceFlow id="F3" sourceRef="LoadRecruiterApplicationView" targetRef="DisplayRecruiterApplicationView"/>
+    <bpmn:sequenceFlow id="F4" sourceRef="DisplayRecruiterApplicationView" targetRef="End"/>
+  </bpmn:process>
+</bpmn:definitions>

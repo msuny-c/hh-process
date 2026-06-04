@@ -121,6 +121,9 @@ curl -X POST http://localhost:8080/api/v1/auth/register/candidate \
 | `hh-application-process.bpmn` | `hhApplicationProcess` | да | отклик кандидата, автоскрининг, решение рекрутера, приглашение, ответ кандидата |
 | `hh-timeout-scheduler.bpmn` | `hhTimeoutSchedulerProcess` | да | периодическое закрытие просроченных приглашений |
 | `hh-admin-interview-reset.bpmn` | `hhAdminInterviewResetProcess` | да | административный сброс интервью |
+| `hh-vacancy-status-update.bpmn` | `hhVacancyStatusUpdateProcess` | да | изменение статуса вакансии через BPMN |
+| `hh-recruiter-interview-cancel.bpmn` | `hhRecruiterInterviewCancelProcess` | да | отмена интервью рекрутером |
+| `hh-ui-*.bpmn` | `hhUi...` | да | Camunda Forms экраны списков/просмотров вакансий, откликов, расписания, уведомлений и ручного timeout review |
 | `hh-process-overview.bpmn` | `hhProcessOverview` | нет | обзорная схема с ролями, только для отчёта/защиты |
 
 ## 6. Как запускать процессы через Camunda Tasklist
@@ -538,6 +541,8 @@ RollbackAdminReset
 12. Отдельно показать `hhTimeoutSchedulerProcess` и `hhAdminInterviewResetProcess` как процессы для периодической задачи и административной операции.
 13. Закрыть вакансию и показать `MSG_VACANCY_CLOSED` / переход активных application process в ветку закрытия вакансии.
 
+Сценарий без Swagger/Postman, только через Camunda Tasklist и Forms: `docs/CAMUNDA_TASKLIST_DEMO.md`.
+
 ## 11. Соответствие требованиям лабораторной
 
 | Требование | Где реализовано |
@@ -545,13 +550,13 @@ RollbackAdminReset
 | Camunda как BPM-движок | standalone container `camunda` в `docker-compose.yml` |
 | BPMN 2.0 | `src/main/resources/camunda/*.bpmn` |
 | Camunda Forms | `src/main/resources/camunda/forms/*.form` |
-| UI через Camunda forms | Tasklist user tasks: vacancy, application, invitation, response, admin reset, result forms |
-| Роли | `candidateGroups` в BPMN + `CamundaIdentitySyncService` + Spring Security |
+| UI через Camunda forms | Tasklist user tasks: vacancy, application, invitation, response, admin reset, result forms, `hh-ui-*.bpmn` query screens |
+| Роли | `candidateStarterGroups` / `candidateGroups` в BPMN + `CamundaIdentitySyncService` + Spring Security |
 | Транзакции | `bpmn:transaction` + `@Transactional` + Narayana/JTA |
 | Асинхронная обработка | Camunda external tasks и worker |
 | Периодические задачи | `hh-timeout-scheduler.bpmn` с timer start event |
 | Межпроцессное сообщение | `MSG_VACANCY_CLOSED` между vacancy process и application process |
-| Backend API адаптирован под Camunda | REST facade стартует/двигает процессы, а бизнес-переходы описаны в BPMN |
+| Backend API адаптирован под Camunda | REST facade стартует/двигает процессы; создание вакансии, создание отклика, изменение статуса и отмена интервью выполняются worker/delegate-логикой из BPMN |
 | WildFly | сервис `app` в Dockerfile/docker-compose, сборка WAR через Maven |
 
 ## 12. Что важно проверить перед сдачей

@@ -74,11 +74,79 @@ status() {
   fi
 }
 
+cleanup_demo() {
+  echo "Cleaning Camunda default demo deployments and forms..."
+  python3 - "$CAMUNDA_HTTP_PORT" <<'PY'
+import json
+import sys
+from urllib.parse import quote
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+
+port = sys.argv[1]
+base = f"http://127.0.0.1:{port}/engine-rest"
+demo_process_keys = ("invoice", "ReviewInvoice")
+demo_filter_names = (
+    "Accounting",
+    "All Tasks",
+    "All tasks",
+    "John's Tasks",
+    "Mary's Tasks",
+    "My Group Tasks",
+    "My Tasks",
+    "Peter's Tasks",
+)
+
+
+def request(method, path):
+    req = Request(f"{base}{path}", method=method)
+    try:
+        with urlopen(req, timeout=20) as resp:
+            raw = resp.read().decode("utf-8")
+            return json.loads(raw) if raw else None
+    except HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise
+    except URLError as exc:
+        raise SystemExit(f"Camunda REST is unavailable for cleanup: {exc}") from exc
+
+
+deleted_deployments = set()
+for key in demo_process_keys:
+    definitions = request("GET", f"/process-definition?key={quote(key)}") or []
+    for definition in definitions:
+        deployment_id = definition.get("deploymentId")
+        if deployment_id and deployment_id not in deleted_deployments:
+            request("DELETE", f"/deployment/{quote(deployment_id)}?cascade=true&skipCustomListeners=true&skipIoMappings=true")
+            deleted_deployments.add(deployment_id)
+            print(f"Deleted default Camunda demo deployment: processKey={key} deploymentId={deployment_id}")
+
+for name in demo_filter_names:
+    filters = request("GET", f"/filter?name={quote(name)}") or []
+    for item in filters:
+        filter_id = item.get("id")
+        if filter_id:
+            request("DELETE", f"/filter/{quote(filter_id)}")
+            print(f"Deleted default Camunda demo Tasklist filter: name={name} filterId={filter_id}")
+
+demo_owner_filters = request("GET", "/filter?owner=demo") or []
+for item in demo_owner_filters:
+    filter_id = item.get("id")
+    if filter_id:
+        request("DELETE", f"/filter/{quote(filter_id)}")
+        print(f"Deleted default Camunda demo Tasklist filter: owner=demo filterId={filter_id}")
+
+print("Camunda default demo cleanup finished.")
+PY
+}
+
 case "${1:-status}" in
   start) start ;;
   stop) stop ;;
   restart) stop; start ;;
   status) status ;;
+  cleanup-demo) cleanup_demo ;;
   log) tail -n 200 "$LOG_FILE" ;;
-  *) echo "Usage: $0 {start|stop|restart|status|log}" >&2; exit 2 ;;
+  *) echo "Usage: $0 {start|stop|restart|status|cleanup-demo|log}" >&2; exit 2 ;;
 esac

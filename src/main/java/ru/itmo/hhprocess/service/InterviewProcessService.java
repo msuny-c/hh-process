@@ -108,6 +108,7 @@ public class InterviewProcessService {
         }
 
         interview = waitForInterviewCancelled(interviewId);
+        camundaWorkflowFacade.returnInvitationToRecruiterReview(interview.getApplication(), request.getReason(), "ADMIN_RESET");
         return ResetInterviewResponse.builder()
                 .interviewId(interview.getId())
                 .applicationId(interview.getApplication().getId())
@@ -116,7 +117,6 @@ public class InterviewProcessService {
                 .build();
     }
 
-    @Transactional
     public InterviewActionResponse cancelInterview(UUID interviewId, CancelInterviewRequest request) {
         UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
         InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
@@ -128,25 +128,13 @@ public class InterviewProcessService {
         }
 
         ApplicationEntity application = interview.getApplication();
-        ApplicationStatus oldStatus = application.getStatus();
-        Instant now = Instant.now();
+        camundaWorkflowFacade.recruiterCancelInterview(interview, recruiterUser, request.getReason())
+                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
+                        "Camunda recruiter interview cancel process was not started"));
 
-        interview.setStatus(ru.itmo.hhprocess.enums.InterviewStatus.CANCELLED);
-        interview.setCancelReason(request.getReason());
-        interview.setCancelledAt(now);
-
-        scheduleService.releaseForInterview(interview);
-
-        application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
-        application.setInvitationText(null);
-        application.setInvitationSentAt(null);
-        application.setInvitationExpiresAt(null);
-        application.setResponseReceivedAt(null);
-        application.setRecruiterComment(request.getReason());
-
-        historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW, recruiterUser);
-        notificationService.create(application.getCandidateUser(), application, NotificationType.INTERVIEW_CANCELLED,
-                "Interview was cancelled: " + request.getReason());
+        interview = waitForInterviewCancelled(interviewId);
+        application = waitForApplicationStatus(application.getId(), ApplicationStatus.ON_RECRUITER_REVIEW);
+        camundaWorkflowFacade.returnInvitationToRecruiterReview(application, request.getReason(), "RECRUITER_CANCEL");
 
         return InterviewActionResponse.builder()
                 .interviewId(interview.getId())

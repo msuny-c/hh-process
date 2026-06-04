@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_hh_ui_recruiter_schedule" targetNamespace="http://itmo.ru/hhprocess/camunda">
+  <bpmn:process id="hhUiRecruiterSchedule" name="HH UI recruiter schedule" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId"/>
+    <bpmn:userTask id="EnterScheduleWeek" name="Выбрать неделю расписания" camunda:formRef="schedule-week-input-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN"/>
+    <bpmn:serviceTask id="LoadRecruiterSchedule" name="Загрузить расписание" camunda:type="external" camunda:topic="ui-query"/>
+    <bpmn:userTask id="DisplayRecruiterSchedule" name="Расписание рекрутера" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN"/>
+    <bpmn:endEvent id="End"/>
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="EnterScheduleWeek"/>
+    <bpmn:sequenceFlow id="F2" sourceRef="EnterScheduleWeek" targetRef="LoadRecruiterSchedule"/>
+    <bpmn:sequenceFlow id="F3" sourceRef="LoadRecruiterSchedule" targetRef="DisplayRecruiterSchedule"/>
+    <bpmn:sequenceFlow id="F4" sourceRef="DisplayRecruiterSchedule" targetRef="End"/>
+  </bpmn:process>
+</bpmn:definitions>

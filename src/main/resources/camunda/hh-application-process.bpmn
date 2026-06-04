@@ -3,7 +3,7 @@
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED"/>
   <bpmn:error id="Error_ApplicationTxFailed" name="APPLICATION_TX_FAILED" errorCode="APPLICATION_TX_FAILED"/>
   <bpmn:message id="Message_VacancyClosed" name="MSG_VACANCY_CLOSED"/>
-  <bpmn:process id="hhApplicationProcess" name="HH application process with roles" isExecutable="true" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhApplicationProcess" name="HH application process with roles" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_Application">
       <bpmn:lane id="Lane_Candidate" name="CANDIDATE">
         <bpmn:flowNodeRef>ApplyToVacancyTask</bpmn:flowNodeRef>
@@ -26,6 +26,7 @@
       <bpmn:lane id="Lane_System" name="SYSTEM">
         <bpmn:flowNodeRef>ApplicationStart</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ValidateApplyToVacancyForm</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CreateApplicationFromForm</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>AutoScreenApplication</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ScreeningGateway</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>NotifyScreeningFailed</bpmn:flowNodeRef>
@@ -58,17 +59,18 @@
         <bpmn:flowNodeRef>ClosedByVacancyEnd</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="ApplicationStart" name="Отклик создан"/>
+    <bpmn:startEvent id="ApplicationStart" name="Отклик создан" camunda:initiator="starterUserId"/>
     <bpmn:userTask id="ApplyToVacancyTask" name="Заполнить форму отклика" camunda:formRef="apply-to-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE"/>
     <bpmn:serviceTask id="ValidateApplyToVacancyForm" name="Проверить данные формы отклика" camunda:type="external" camunda:topic="form-validation"/>
     <bpmn:boundaryEvent id="ApplyFormValidationError" attachedToRef="ValidateApplyToVacancyForm">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed"/>
     </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="CreateApplicationFromForm" name="Создать отклик в БД" camunda:type="external" camunda:topic="application-persistence"/>
     <bpmn:serviceTask id="AutoScreenApplication" name="Выполнить автоскрининг отклика" camunda:type="external" camunda:topic="application-auto-screening"/>
     <bpmn:exclusiveGateway id="ScreeningGateway" name="Скрининг пройден?"/>
-    <bpmn:serviceTask id="NotifyScreeningFailed" name="Уведомить кандидата об отказе по скринингу" camunda:type="external" camunda:topic="notification-send"/>
+    <bpmn:serviceTask id="NotifyScreeningFailed" name="Уведомить кандидата об отказе по скринингу" camunda:type="external" camunda:topic="application-notification"/>
     <bpmn:endEvent id="ScreeningFailedEnd" name="Отклик закрыт после скрининга"/>
-    <bpmn:serviceTask id="NotifyRecruiter" name="Уведомить рекрутера о новом отклике" camunda:type="external" camunda:topic="notification-send"/>
+    <bpmn:serviceTask id="NotifyRecruiter" name="Уведомить рекрутера о новом отклике" camunda:type="external" camunda:topic="application-notification"/>
     <bpmn:userTask id="RecruiterDecisionTask" name="Рассмотреть отклик рекрутером" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER"/>
     <bpmn:serviceTask id="ValidateRecruiterDecisionForm" name="Проверить решение рекрутера" camunda:type="external" camunda:topic="form-validation"/>
     <bpmn:boundaryEvent id="RecruiterDecisionFormError" attachedToRef="ValidateRecruiterDecisionForm">
@@ -77,10 +79,10 @@
     <bpmn:exclusiveGateway id="RecruiterDecisionGateway" name="Решение рекрутера"/>
     <bpmn:transaction id="Transaction_Rejection" name="TX: отказ рекрутера">
       <bpmn:startEvent id="Transaction_Rejection_Start" name="Начать транзакционный блок"/>
-      <bpmn:serviceTask id="ValidateRejectionAllowed" name="Проверить возможность отказа" camunda:type="external" camunda:topic="notification-send"/>
-      <bpmn:serviceTask id="CancelRejectionInterviewIfAny" name="Отменить активное интервью при отказе" camunda:type="external" camunda:topic="notification-send"/>
-      <bpmn:serviceTask id="MarkApplicationRejected" name="Перевести отклик в статус отказа" camunda:type="external" camunda:topic="notification-send"/>
-      <bpmn:serviceTask id="RecordRejectionHistory" name="Записать историю отказа" camunda:type="external" camunda:topic="notification-send"/>
+      <bpmn:serviceTask id="ValidateRejectionAllowed" name="Проверить возможность отказа" camunda:type="external" camunda:topic="application-persistence"/>
+      <bpmn:serviceTask id="CancelRejectionInterviewIfAny" name="Отменить активное интервью при отказе" camunda:type="external" camunda:topic="application-persistence"/>
+      <bpmn:serviceTask id="MarkApplicationRejected" name="Перевести отклик в статус отказа" camunda:type="external" camunda:topic="application-persistence"/>
+      <bpmn:serviceTask id="RecordRejectionHistory" name="Записать историю отказа" camunda:type="external" camunda:topic="application-persistence"/>
       <bpmn:endEvent id="Transaction_Rejection_End" name="Завершить транзакционный блок"/>
       <bpmn:sequenceFlow id="Transaction_Rejection_SF_Start" sourceRef="Transaction_Rejection_Start" targetRef="ValidateRejectionAllowed"/>
       <bpmn:sequenceFlow id="R1" sourceRef="ValidateRejectionAllowed" targetRef="CancelRejectionInterviewIfAny"/>
@@ -91,7 +93,7 @@
     <bpmn:boundaryEvent id="RejectionTxError" attachedToRef="Transaction_Rejection">
       <bpmn:errorEventDefinition errorRef="Error_ApplicationTxFailed"/>
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="NotifyRejection" name="Уведомить кандидата об отказе" camunda:type="external" camunda:topic="notification-send"/>
+    <bpmn:serviceTask id="NotifyRejection" name="Уведомить кандидата об отказе" camunda:type="external" camunda:topic="application-notification"/>
     <bpmn:endEvent id="RejectedEnd" name="Отклик отклонён"/>
     <bpmn:userTask id="WriteInvitationTask" name="Подготовить приглашение на интервью" camunda:formRef="invitation-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER"/>
     <bpmn:serviceTask id="ValidateInvitationForm" name="Проверить данные формы приглашения" camunda:type="external" camunda:topic="form-validation"/>
@@ -100,10 +102,10 @@
     </bpmn:boundaryEvent>
     <bpmn:transaction id="Transaction_Invitation" name="TX: оформление приглашения">
       <bpmn:startEvent id="Transaction_Invitation_Start" name="Начать транзакционный блок"/>
-      <bpmn:serviceTask id="PersistInvitationToDb" name="Сохранить текст приглашения" camunda:type="external" camunda:topic="notification-send"/>
-      <bpmn:serviceTask id="CreateInvitationInterview" name="Создать интервью" camunda:type="external" camunda:topic="notification-send"/>
-      <bpmn:serviceTask id="ReserveInvitationSlot" name="Зарезервировать слот рекрутера" camunda:type="external" camunda:topic="notification-send"/>
-      <bpmn:serviceTask id="RecordInvitationHistory" name="Записать историю приглашения" camunda:type="external" camunda:topic="notification-send"/>
+      <bpmn:serviceTask id="PersistInvitationToDb" name="Сохранить текст приглашения" camunda:type="external" camunda:topic="application-persistence"/>
+      <bpmn:serviceTask id="CreateInvitationInterview" name="Создать интервью" camunda:type="external" camunda:topic="application-persistence"/>
+      <bpmn:serviceTask id="ReserveInvitationSlot" name="Зарезервировать слот рекрутера" camunda:type="external" camunda:topic="application-persistence"/>
+      <bpmn:serviceTask id="RecordInvitationHistory" name="Записать историю приглашения" camunda:type="external" camunda:topic="application-persistence"/>
       <bpmn:endEvent id="Transaction_Invitation_End" name="Завершить транзакционный блок"/>
       <bpmn:sequenceFlow id="Transaction_Invitation_SF_Start" sourceRef="Transaction_Invitation_Start" targetRef="PersistInvitationToDb"/>
       <bpmn:sequenceFlow id="I1" sourceRef="PersistInvitationToDb" targetRef="CreateInvitationInterview"/>
@@ -114,7 +116,7 @@
     <bpmn:boundaryEvent id="PersistInvitationErrorBoundary" attachedToRef="Transaction_Invitation">
       <bpmn:errorEventDefinition errorRef="Error_ApplicationTxFailed"/>
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="NotifyInvitation" name="Уведомить кандидата о приглашении" camunda:type="external" camunda:topic="notification-send"/>
+    <bpmn:serviceTask id="NotifyInvitation" name="Уведомить кандидата о приглашении" camunda:type="external" camunda:topic="application-notification"/>
     <bpmn:userTask id="CandidateInvitationResponseTask" name="Ответить на приглашение" camunda:formRef="invitation-response-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE"/>
     <bpmn:boundaryEvent id="InvitationTimeoutBoundary" attachedToRef="CandidateInvitationResponseTask" cancelActivity="true">
       <bpmn:timerEventDefinition>
@@ -128,10 +130,10 @@
     </bpmn:boundaryEvent>
     <bpmn:transaction id="Transaction_Response" name="TX: сохранение ответа кандидата">
       <bpmn:startEvent id="Transaction_Response_Start" name="Начать транзакционный блок"/>
-      <bpmn:serviceTask id="CheckInvitationStillActive" name="Проверить активность приглашения" camunda:type="external" camunda:topic="notification-send"/>
-      <bpmn:serviceTask id="SaveCandidateResponse" name="Сохранить ответ кандидата" camunda:type="external" camunda:topic="notification-send"/>
-      <bpmn:serviceTask id="MarkCandidateResponseReceived" name="Обновить статус отклика" camunda:type="external" camunda:topic="notification-send"/>
-      <bpmn:serviceTask id="RecordCandidateResponseHistory" name="Записать историю ответа кандидата" camunda:type="external" camunda:topic="notification-send"/>
+      <bpmn:serviceTask id="CheckInvitationStillActive" name="Проверить активность приглашения" camunda:type="external" camunda:topic="application-persistence"/>
+      <bpmn:serviceTask id="SaveCandidateResponse" name="Сохранить ответ кандидата" camunda:type="external" camunda:topic="application-persistence"/>
+      <bpmn:serviceTask id="MarkCandidateResponseReceived" name="Обновить статус отклика" camunda:type="external" camunda:topic="application-persistence"/>
+      <bpmn:serviceTask id="RecordCandidateResponseHistory" name="Записать историю ответа кандидата" camunda:type="external" camunda:topic="application-persistence"/>
       <bpmn:endEvent id="Transaction_Response_End" name="Завершить транзакционный блок"/>
       <bpmn:sequenceFlow id="Transaction_Response_SF_Start" sourceRef="Transaction_Response_Start" targetRef="CheckInvitationStillActive"/>
       <bpmn:sequenceFlow id="C1" sourceRef="CheckInvitationStillActive" targetRef="SaveCandidateResponse"/>
@@ -142,7 +144,7 @@
     <bpmn:boundaryEvent id="PersistCandidateResponseErrorBoundary" attachedToRef="Transaction_Response">
       <bpmn:errorEventDefinition errorRef="Error_ApplicationTxFailed"/>
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="NotifyCandidateResponse" name="Уведомить рекрутера об ответе кандидата" camunda:type="external" camunda:topic="notification-send"/>
+    <bpmn:serviceTask id="NotifyCandidateResponse" name="Уведомить рекрутера об ответе кандидата" camunda:type="external" camunda:topic="application-notification"/>
     <bpmn:endEvent id="ResponseEnd" name="Ответ кандидата обработан"/>
     <bpmn:serviceTask id="CloseByTimeout" name="Закрыть отклик по таймауту приглашения" camunda:type="external" camunda:topic="timeout-close-expired"/>
     <bpmn:endEvent id="TimeoutEnd" name="Отклик закрыт по таймауту"/>
@@ -157,7 +159,7 @@
     <bpmn:boundaryEvent id="VacancyClosedAtCandidateResponse" attachedToRef="CandidateInvitationResponseTask">
       <bpmn:messageEventDefinition messageRef="Message_VacancyClosed"/>
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="HandleVacancyClosedMessage" name="Закрыть отклик по сообщению о закрытии вакансии" camunda:type="external" camunda:topic="notification-send"/>
+    <bpmn:serviceTask id="HandleVacancyClosedMessage" name="Закрыть отклик по сообщению о закрытии вакансии" camunda:type="external" camunda:topic="application-message"/>
     <bpmn:userTask id="ScreeningResultTask" name="Показать результат скрининга" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE"/>
     <bpmn:userTask id="RejectionResultTask" name="Показать результат отказа" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE"/>
     <bpmn:userTask id="CandidateResponseResultTask" name="Показать результат ответа кандидата" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE"/>
@@ -167,7 +169,8 @@
     <bpmn:sequenceFlow id="F1" sourceRef="ApplicationStart" targetRef="ApplyToVacancyTask"/>
     <bpmn:sequenceFlow id="F2" sourceRef="ApplyToVacancyTask" targetRef="ValidateApplyToVacancyForm"/>
     <bpmn:sequenceFlow id="F2e" sourceRef="ApplyFormValidationError" targetRef="ApplyToVacancyTask"/>
-    <bpmn:sequenceFlow id="F3" sourceRef="ValidateApplyToVacancyForm" targetRef="AutoScreenApplication"/>
+    <bpmn:sequenceFlow id="F3" sourceRef="ValidateApplyToVacancyForm" targetRef="CreateApplicationFromForm"/>
+    <bpmn:sequenceFlow id="F3_CreateApplication" sourceRef="CreateApplicationFromForm" targetRef="AutoScreenApplication"/>
     <bpmn:sequenceFlow id="F4" sourceRef="AutoScreenApplication" targetRef="ScreeningGateway"/>
     <bpmn:sequenceFlow id="F5" sourceRef="ScreeningGateway" targetRef="NotifyRecruiter">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${screeningPassed == true}</bpmn:conditionExpression>
@@ -200,8 +203,11 @@
     <bpmn:sequenceFlow id="F21" sourceRef="CandidateResponseGateway" targetRef="Transaction_Rejection">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType == 'RECRUITER_REJECT'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F21b" sourceRef="CandidateResponseGateway" targetRef="RecruiterDecisionTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType == 'RECRUITER_CANCEL' || responseType == 'ADMIN_RESET'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F22" sourceRef="CandidateResponseGateway" targetRef="ValidateCandidateResponseForm">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType != 'TIMEOUT' &amp;&amp; responseType != 'RECRUITER_REJECT'}</bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType != 'TIMEOUT' &amp;&amp; responseType != 'RECRUITER_REJECT' &amp;&amp; responseType != 'RECRUITER_CANCEL' &amp;&amp; responseType != 'ADMIN_RESET'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F22e" sourceRef="CandidateResponseFormError" targetRef="CandidateInvitationResponseTask"/>
     <bpmn:sequenceFlow id="F23" sourceRef="ValidateCandidateResponseForm" targetRef="Transaction_Response"/>

@@ -1,13 +1,21 @@
 {
   "schemaVersion": 11,
-  "exporter": {"name": "Camunda Modeler", "version": "standalone-lab"},
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
   "type": "default",
   "id": "vacancy-result-form",
   "components": [
-    {"type": "textfield", "id": "status", "key": "status", "label": "Итоговый статус вакансии", "disabled": true},
-    {"type": "textfield", "id": "vacancyTitle", "key": "vacancyTitle", "label": "Вакансия", "disabled": true},
-    {"type": "number", "id": "closedApplicationsCount", "key": "closedApplicationsCount", "label": "Закрыто откликов", "disabled": true},
-    {"type": "number", "id": "correlatedApplications", "key": "correlatedApplications", "label": "Оповещено application-процессов", "disabled": true},
-    {"type": "textarea", "id": "closeReason", "key": "closeReason", "label": "Причина закрытия", "disabled": true}
+    {
+      "type": "html",
+      "id": "errorBanner",
+      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\">{{formErrorMessage}}</div>",
+      "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
+    },
+    { "type": "text", "id": "resultHeader", "text": "## Результат процесса вакансии" },
+    { "type": "textfield", "id": "vacancyId", "key": "vacancyId", "label": "ID вакансии", "readonly": true },
+    { "type": "textfield", "id": "status", "key": "status", "label": "Итоговый статус вакансии", "readonly": true },
+    { "type": "textfield", "id": "vacancyTitle", "key": "vacancyTitle", "label": "Вакансия", "readonly": true },
+    { "type": "number", "id": "closedApplicationsCount", "key": "closedApplicationsCount", "label": "Закрыто откликов", "readonly": true },
+    { "type": "number", "id": "correlatedApplications", "key": "correlatedApplications", "label": "Оповещено application-процессов", "readonly": true },
+    { "type": "textarea", "id": "closeReason", "key": "closeReason", "label": "Причина закрытия", "readonly": true }
   ]
 }

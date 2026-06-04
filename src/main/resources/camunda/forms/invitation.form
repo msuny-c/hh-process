@@ -1,49 +1,21 @@
 {
   "schemaVersion": 11,
-  "exporter": {
-    "name": "Camunda Modeler",
-    "version": "standalone-lab"
-  },
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
   "type": "default",
   "id": "invitation-form",
   "components": [
     {
-      "type": "textfield",
-      "id": "formErrorMessage",
-      "key": "formErrorMessage",
-      "label": "Ошибка предыдущей отправки формы",
-      "disabled": true
+      "type": "html",
+      "id": "errorBanner",
+      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\">{{formErrorMessage}}</div>",
+      "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
     },
-    {
-      "type": "textarea",
-      "id": "invitationMessage",
-      "key": "invitationMessage",
-      "label": "Текст приглашения",
-      "validate": {
-        "required": true,
-        "maxLength": 5000
-      }
-    },
-    {
-      "type": "textfield",
-      "id": "scheduledAt",
-      "key": "scheduledAt",
-      "label": "Дата интервью ISO-8601",
-      "validate": {
-        "required": true
-      }
-    },
-    {
-      "type": "number",
-      "id": "durationMinutes",
-      "key": "durationMinutes",
-      "label": "Длительность, минут",
-      "defaultValue": 60,
-      "validate": {
-        "required": true,
-        "min": 15,
-        "max": 480
-      }
-    }
+    { "type": "text", "id": "contextHeader", "text": "## Контекст приглашения" },
+    { "type": "textfield", "id": "applicationId", "key": "applicationId", "label": "ID отклика", "readonly": true },
+    { "type": "textfield", "id": "vacancyTitle", "key": "vacancyTitle", "label": "Вакансия", "readonly": true },
+    { "type": "text", "id": "inputHeader", "text": "## Интервью" },
+    { "type": "textarea", "id": "invitationMessage", "key": "invitationMessage", "label": "Текст приглашения", "validate": { "required": true, "maxLength": 5000 } },
+    { "type": "textfield", "id": "scheduledAt", "key": "scheduledAt", "label": "Дата интервью ISO-8601", "validate": { "required": true } },
+    { "type": "number", "id": "durationMinutes", "key": "durationMinutes", "label": "Длительность, минут", "defaultValue": 60, "validate": { "required": true, "min": 15, "max": 480 } }
   ]
 }

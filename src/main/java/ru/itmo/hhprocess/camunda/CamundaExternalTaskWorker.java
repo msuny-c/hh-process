@@ -22,12 +22,18 @@ public class CamundaExternalTaskWorker {
 
     private static final String TOPIC_AUTO_SCREEN = "application-auto-screening";
     private static final String TOPIC_NOTIFY = "notification-send";
+    private static final String TOPIC_APPLICATION_PERSISTENCE = "application-persistence";
+    private static final String TOPIC_APPLICATION_NOTIFICATION = "application-notification";
+    private static final String TOPIC_APPLICATION_MESSAGE = "application-message";
     private static final String TOPIC_FORM_VALIDATION = "form-validation";
     private static final String TOPIC_TIMEOUT = "timeout-close-expired";
     private static final String TOPIC_VACANCY_CREATE = "vacancy-create";
     private static final String TOPIC_VACANCY_CLOSE = "vacancy-close-applications";
+    private static final String TOPIC_VACANCY_STATUS_UPDATE = "vacancy-status-update";
+    private static final String TOPIC_INTERVIEW_CANCEL = "interview-cancel";
     private static final String TOPIC_ROLLBACK = "transaction-rollback";
     private static final String TOPIC_ADMIN_INTERVIEW_RESET = "admin-interview-reset";
+    private static final String TOPIC_UI_QUERY = "ui-query";
     private static final String APPLICATION_TRANSACTION_FAILED = "APPLICATION_TX_FAILED";
     private static final String VACANCY_TRANSACTION_FAILED = "VACANCY_TX_FAILED";
     private static final String ADMIN_RESET_FAILED = "ADMIN_RESET_FAILED";
@@ -44,8 +50,9 @@ public class CamundaExternalTaskWorker {
             return;
         }
         List<Map<String, Object>> tasks = camundaRestClient.fetchAndLockExternalTasks(
-                List.of(TOPIC_AUTO_SCREEN, TOPIC_NOTIFY, TOPIC_FORM_VALIDATION, TOPIC_TIMEOUT, TOPIC_VACANCY_CREATE, TOPIC_VACANCY_CLOSE, TOPIC_ROLLBACK,
-                        TOPIC_ADMIN_INTERVIEW_RESET)
+                List.of(TOPIC_AUTO_SCREEN, TOPIC_NOTIFY, TOPIC_APPLICATION_PERSISTENCE, TOPIC_APPLICATION_NOTIFICATION, TOPIC_APPLICATION_MESSAGE,
+                        TOPIC_FORM_VALIDATION, TOPIC_TIMEOUT, TOPIC_VACANCY_CREATE, TOPIC_VACANCY_CLOSE,
+                        TOPIC_VACANCY_STATUS_UPDATE, TOPIC_INTERVIEW_CANCEL, TOPIC_ROLLBACK, TOPIC_ADMIN_INTERVIEW_RESET, TOPIC_UI_QUERY)
         );
         for (Map<String, Object> task : tasks) {
             handleTask(task);
@@ -59,13 +66,17 @@ public class CamundaExternalTaskWorker {
         try {
             Map<String, Object> variables = switch (topic) {
                 case TOPIC_AUTO_SCREEN -> adapterService.autoScreen(readRequiredUuid(task, "applicationId"));
-                case TOPIC_NOTIFY -> handleNotificationBackedTask(activityId, task);
+                case TOPIC_NOTIFY, TOPIC_APPLICATION_PERSISTENCE, TOPIC_APPLICATION_NOTIFICATION, TOPIC_APPLICATION_MESSAGE ->
+                        handleNotificationBackedTask(activityId, task);
                 case TOPIC_FORM_VALIDATION -> handleFormValidationTask(activityId, task);
                 case TOPIC_TIMEOUT -> handleTimeoutTask(activityId, task);
                 case TOPIC_VACANCY_CREATE -> handleVacancyCreateTask(activityId, task);
                 case TOPIC_VACANCY_CLOSE -> handleVacancyCloseTask(activityId, task);
+                case TOPIC_VACANCY_STATUS_UPDATE -> handleVacancyStatusUpdateTask(activityId, task);
+                case TOPIC_INTERVIEW_CANCEL -> handleInterviewCancelTask(activityId, task);
                 case TOPIC_ROLLBACK -> handleRollbackTask(activityId, task);
                 case TOPIC_ADMIN_INTERVIEW_RESET -> handleAdminInterviewResetTask(activityId, task);
+                case TOPIC_UI_QUERY -> handleUiQueryTask(activityId, task);
                 default -> Map.of("ignored", true, "topic", topic);
             };
             camundaRestClient.completeExternalTask(taskId, variables);
@@ -86,26 +97,29 @@ public class CamundaExternalTaskWorker {
     }
 
     private Map<String, Object> handleFormValidationTask(String activityId, Map<String, Object> task) {
-        UUID applicationId = readRequiredUuid(task, "applicationId");
+        UUID applicationId = readUuid(task, "applicationId");
         return switch (activityId) {
             case "ValidateApplyToVacancyForm" -> adapterService.validateApplyToVacancyForm(
                     applicationId,
+                    readUuid(task, "vacancyId"),
+                    readUuid(task, "candidateUserId"),
+                    stringValue(task, "starterUserId"),
                     stringValue(task, "resumeText"),
                     stringValue(task, "coverLetter")
             );
             case "ValidateRecruiterDecisionForm" -> adapterService.validateRecruiterDecisionForm(
-                    applicationId,
+                    required(applicationId, "applicationId"),
                     stringValue(task, "decision"),
                     stringValue(task, "recruiterComment")
             );
             case "ValidateInvitationForm" -> adapterService.validateInvitationForm(
-                    applicationId,
+                    required(applicationId, "applicationId"),
                     stringValue(task, "invitationMessage"),
                     adapterService.requiredScheduledAt(readValue(task, "scheduledAt")),
                     adapterService.requiredDurationMinutes(readValue(task, "durationMinutes"))
             );
             case "ValidateCandidateResponseForm" -> adapterService.validateCandidateResponseForm(
-                    applicationId,
+                    required(applicationId, "applicationId"),
                     stringValue(task, "responseType"),
                     stringValue(task, "responseMessage")
             );
@@ -114,8 +128,17 @@ public class CamundaExternalTaskWorker {
     }
 
     private Map<String, Object> handleNotificationBackedTask(String activityId, Map<String, Object> task) {
-        UUID applicationId = readRequiredUuid(task, "applicationId");
+        UUID applicationId = readUuid(task, "applicationId");
         return switch (activityId) {
+            case "CreateApplicationFromForm" -> adapterService.createApplicationFromCamundaForm(
+                    readUuid(task, "applicationId"),
+                    readRequiredUuid(task, "vacancyId"),
+                    readUuid(task, "candidateUserId"),
+                    stringValue(task, "starterUserId"),
+                    stringValue(task, "resumeText"),
+                    stringValue(task, "coverLetter"),
+                    task.get("processInstanceId") == null ? "" : String.valueOf(task.get("processInstanceId"))
+            );
             case "NotifyScreeningFailed" -> adapterService.notifyScreeningFailed(applicationId);
             case "NotifyRecruiter" -> adapterService.notifyRecruiter(applicationId);
             case "PersistRejection" -> {
@@ -250,6 +273,7 @@ public class CamundaExternalTaskWorker {
         return switch (activityId) {
             case "ValidateCreateVacancyForm" -> adapterService.validateCreateVacancyForm(
                     stringValue(task, "starterUserId"),
+                    readUuid(task, "recruiterUserId"),
                     stringValue(task, "title"),
                     stringValue(task, "description"),
                     readValue(task, "requiredSkills"),
@@ -257,6 +281,7 @@ public class CamundaExternalTaskWorker {
             );
             case "CreateVacancyFromForm" -> adapterService.createVacancyFromCamundaForm(
                     stringValue(task, "starterUserId"),
+                    readUuid(task, "recruiterUserId"),
                     stringValue(task, "title"),
                     stringValue(task, "description"),
                     readValue(task, "requiredSkills"),
@@ -284,6 +309,51 @@ public class CamundaExternalTaskWorker {
         };
     }
 
+    private Map<String, Object> handleVacancyStatusUpdateTask(String activityId, Map<String, Object> task) {
+        UUID vacancyId = readRequiredUuid(task, "vacancyId");
+        UUID recruiterUserId = readUuid(task, "recruiterUserId");
+        String requestedStatus = stringValue(task, "requestedStatus");
+        return switch (activityId) {
+            case "ValidateVacancyStatusUpdate" -> adapterService.validateVacancyStatusUpdate(vacancyId, recruiterUserId, stringValue(task, "starterUserId"), requestedStatus);
+            case "ApplyVacancyStatusUpdate" -> adapterService.applyVacancyStatusUpdate(vacancyId, recruiterUserId, stringValue(task, "starterUserId"), requestedStatus);
+            default -> Map.of("vacancyStatusUpdateIgnored", true, "activityId", activityId);
+        };
+    }
+
+    private Map<String, Object> handleInterviewCancelTask(String activityId, Map<String, Object> task) {
+        UUID interviewId = readRequiredUuid(task, "interviewId");
+        UUID recruiterUserId = readUuid(task, "recruiterUserId");
+        String cancelReason = stringValue(task, "cancelReason");
+        return switch (activityId) {
+            case "ValidateRecruiterCancelInterview" -> adapterService.validateRecruiterCancelInterview(interviewId, recruiterUserId, stringValue(task, "starterUserId"), cancelReason);
+            case "CancelInterviewByRecruiter" -> adapterService.cancelInterviewByRecruiter(interviewId, recruiterUserId, stringValue(task, "starterUserId"), cancelReason);
+            case "ReleaseRecruiterCancelSlot" -> adapterService.releaseRecruiterCancelSlot(interviewId);
+            case "ReturnCancelApplicationToReview" -> adapterService.returnCancelApplicationToReview(interviewId, recruiterUserId, stringValue(task, "starterUserId"), cancelReason);
+            case "RecordRecruiterCancelHistory" -> adapterService.recordRecruiterCancelHistory(interviewId, recruiterUserId, stringValue(task, "starterUserId"));
+            case "NotifyRecruiterCancelParticipants" -> adapterService.notifyRecruiterCancelParticipants(
+                    readRequiredUuid(task, "applicationId"), cancelReason);
+            default -> Map.of("interviewCancelIgnored", true, "activityId", activityId);
+        };
+    }
+
+    private Map<String, Object> handleUiQueryTask(String activityId, Map<String, Object> task) {
+        return switch (activityId) {
+            case "LoadCandidateVacancyList" -> adapterService.loadCandidateVacancyList(stringValue(task, "starterUserId"));
+            case "LoadCandidateApplicationList" -> adapterService.loadCandidateApplicationList(stringValue(task, "starterUserId"));
+            case "LoadCandidateApplicationView" -> adapterService.loadCandidateApplicationView(
+                    stringValue(task, "starterUserId"), stringValue(task, "applicationIdText"));
+            case "LoadRecruiterVacancyList" -> adapterService.loadRecruiterVacancyList(stringValue(task, "starterUserId"));
+            case "LoadRecruiterApplicationList" -> adapterService.loadRecruiterApplicationList(stringValue(task, "starterUserId"));
+            case "LoadRecruiterApplicationView" -> adapterService.loadRecruiterApplicationView(
+                    stringValue(task, "starterUserId"), stringValue(task, "applicationIdText"));
+            case "LoadRecruiterSchedule" -> adapterService.loadRecruiterSchedule(
+                    stringValue(task, "starterUserId"), readValue(task, "weekOffset"));
+            case "LoadNotificationList" -> adapterService.loadNotificationList(stringValue(task, "starterUserId"));
+            case "RunTimeoutReview" -> adapterService.runTimeoutReview(stringValue(task, "starterUserId"));
+            default -> Map.of("uiQueryIgnored", true, "activityId", activityId);
+        };
+    }
+
     private Map<String, Object> handleRollbackTask(String activityId, Map<String, Object> task) {
         return switch (activityId) {
             case "RollbackApplicationTransaction" -> adapterService.rollbackApplicationTransaction(
@@ -291,6 +361,8 @@ public class CamundaExternalTaskWorker {
             case "RollbackVacancyTransaction" -> adapterService.rollbackVacancyTransaction(
                     readRequiredUuid(task, "vacancyId"), stringValue(task, "rollbackReason"));
             case "RollbackAdminReset" -> adapterService.rollbackApplicationTransaction(
+                    readRequiredUuid(task, "applicationId"), stringValue(task, "rollbackReason"));
+            case "RollbackRecruiterCancel" -> adapterService.rollbackApplicationTransaction(
                     readRequiredUuid(task, "applicationId"), stringValue(task, "rollbackReason"));
             default -> Map.of("rollbackIgnored", true, "activityId", activityId);
         };
@@ -316,6 +388,8 @@ public class CamundaExternalTaskWorker {
             case "ResetInterviewTransaction", "ResetInterviewToDb", "NotifyAdminResetParticipants",
                  "ValidateInterviewCanBeReset", "CancelInterviewByAdmin", "ReleaseAdminResetSlot",
                  "ReturnApplicationToReview", "RecordAdminResetHistory" -> ADMIN_RESET_FAILED;
+            case "CancelInterviewByRecruiter", "ReleaseRecruiterCancelSlot", "ReturnCancelApplicationToReview",
+                 "RecordRecruiterCancelHistory", "NotifyRecruiterCancelParticipants" -> APPLICATION_TRANSACTION_FAILED;
             default -> APPLICATION_TRANSACTION_FAILED;
         };
         Object applicationId = readValue(task, "applicationId");
@@ -337,6 +411,10 @@ public class CamundaExternalTaskWorker {
 
     private UUID readRequiredUuid(Map<String, Object> task, String name) {
         UUID value = readUuid(task, name);
+        return required(value, name);
+    }
+
+    private UUID required(UUID value, String name) {
         if (value == null) {
             throw new IllegalArgumentException("Camunda external task variable is required: " + name);
         }

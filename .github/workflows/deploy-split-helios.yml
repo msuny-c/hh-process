@@ -263,6 +263,7 @@ jobs:
           for i in $(seq 1 90); do
             if curl -fsS "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1 || wget -qO - "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1; then
               echo "Camunda REST OK on $CAMUNDA_HTTP_PORT"
+              CAMUNDA_DIR="$CAMUNDA_DIR" CAMUNDA_HOME="$CAMUNDA_HOME" CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" "$CAMUNDA_DIR/camundactl.sh" cleanup-demo
               exit 0
             fi
             sleep 2
@@ -365,6 +366,7 @@ jobs:
           CAMUNDA_FAIL_ON_ERROR=true
           CAMUNDA_WORKER_ENABLED=true
           CAMUNDA_IDENTITY_SYNC_INITIAL_PASSWORD=$CAMUNDA_IDENTITY_SYNC_INITIAL_PASSWORD
+          APP_TIMEOUT_LOCAL_SCHEDULER_ENABLED=false
           APP_HOME=\${HOME}/apps/hh-process
           NARAYANA_LOG_DIR=\${HOME}/apps/hh-process/transaction-logs
           NARAYANA_NODE_IDENTIFIER=hh-process-helios

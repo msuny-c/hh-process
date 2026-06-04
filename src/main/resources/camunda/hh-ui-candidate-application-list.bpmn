@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_hh_ui_candidate_application_list" targetNamespace="http://itmo.ru/hhprocess/camunda">
+  <bpmn:process id="hhUiCandidateApplicationList" name="HH UI candidate application list" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId"/>
+    <bpmn:serviceTask id="LoadCandidateApplicationList" name="Загрузить отклики кандидата" camunda:type="external" camunda:topic="ui-query"/>
+    <bpmn:userTask id="DisplayCandidateApplicationList" name="Список откликов кандидата" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE,ADMIN"/>
+    <bpmn:endEvent id="End"/>
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadCandidateApplicationList"/>
+    <bpmn:sequenceFlow id="F2" sourceRef="LoadCandidateApplicationList" targetRef="DisplayCandidateApplicationList"/>
+    <bpmn:sequenceFlow id="F3" sourceRef="DisplayCandidateApplicationList" targetRef="End"/>
+  </bpmn:process>
+</bpmn:definitions>
