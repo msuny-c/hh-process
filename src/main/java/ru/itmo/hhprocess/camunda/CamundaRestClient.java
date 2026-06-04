@@ -473,7 +473,7 @@ public class CamundaRestClient {
             camundaRestTemplate.put(url("/process-instance/" + encodePath(processInstanceId) + "/business-key"), body);
             return true;
         } catch (RuntimeException e) {
-            handle("update Camunda process businessKey processInstanceId=" + processInstanceId, e);
+            logSoftFailure("update Camunda process businessKey processInstanceId=" + processInstanceId, e);
             return false;
         }
     }
@@ -786,13 +786,17 @@ public class CamundaRestClient {
     }
 
     private void handle(String action, RuntimeException e) {
+        logSoftFailure(action, e);
+        if (properties.isFailOnError()) {
+            throw e;
+        }
+    }
+
+    private void logSoftFailure(String action, RuntimeException e) {
         if (e instanceof HttpStatusCodeException statusCodeException) {
             log.warn("Cannot {}: status={}, body={}", action, statusCodeException.getStatusCode(), statusCodeException.getResponseBodyAsString());
         } else {
             log.warn("Cannot {}: {}", action, e.getMessage());
-        }
-        if (properties.isFailOnError()) {
-            throw e;
         }
     }
 }
