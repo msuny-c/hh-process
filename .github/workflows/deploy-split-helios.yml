@@ -92,8 +92,9 @@ jobs:
       CAMUNDA_ADMIN_PASSWORD: admin
       CAMUNDA_ENABLED: "true"
       CAMUNDA_WORKER_ENABLED: "true"
+      CAMUNDA_WORKER_INITIAL_DELAY_MS: "1000"
       CAMUNDA_FAIL_ON_ERROR: "true"
-      REQUEST_TIMEOUT: "60"
+      REQUEST_TIMEOUT: "90"
       REQUEST_RETRIES: "2"
       ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL || 'admin@example.com' }}
       RECRUITER_EMAIL: ${{ vars.RECRUITER_EMAIL || 'recruiter@example.com' }}
@@ -137,6 +138,74 @@ jobs:
           echo "Camunda REST did not become healthy"
           docker compose logs --no-color --tail=250 camunda || true
           exit 1
+
+      - name: Wait for Camunda deployment and worker
+        run: |
+          set -eu
+          echo "Waiting for hhVacancyProcess deployment..."
+          for i in $(seq 1 120); do
+            if curl -fsS "http://127.0.0.1:8081/engine-rest/process-definition/key/hhVacancyProcess" >/dev/null 2>&1; then
+              echo "hhVacancyProcess is deployed."
+              break
+            fi
+            if [ "$i" -eq 120 ]; then
+              echo "hhVacancyProcess was not deployed"
+              docker compose logs --no-color --tail=300 app camunda || true
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "Waiting until the app worker can create a vacancy through Camunda..."
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import time
+          import uuid
+          from urllib.error import HTTPError, URLError
+          from urllib.request import Request, urlopen
+
+          base = "http://127.0.0.1:8080"
+          auth_user = os.environ["RECRUITER_EMAIL"]
+          auth_password = os.environ["RECRUITER_PASSWORD"]
+          payload_template = {
+              "description": "CI readiness vacancy created before the full Camunda suite",
+              "required_skills": ["python", "spring"],
+              "screening_threshold": 1,
+          }
+
+          try:
+              import base64
+              token = base64.b64encode(f"{auth_user}:{auth_password}".encode("utf-8")).decode("ascii")
+              for attempt in range(1, 7):
+                  payload = dict(payload_template)
+                  payload["title"] = f"CI Camunda readiness {uuid.uuid4().hex[:8]}"
+                  req = Request(
+                      f"{base}/api/v1/recruiters/vacancies",
+                      data=json.dumps(payload).encode("utf-8"),
+                      headers={
+                          "Content-Type": "application/json",
+                          "Authorization": f"Basic {token}",
+                      },
+                      method="POST",
+                  )
+                  try:
+                      with urlopen(req, timeout=90) as resp:
+                          body = resp.read().decode("utf-8")
+                          if resp.status in (200, 201):
+                              print(f"Camunda worker readiness OK on attempt {attempt}: {body}")
+                              sys.exit(0)
+                          print(f"Unexpected readiness status {resp.status}: {body}")
+                  except HTTPError as exc:
+                      body = exc.read().decode("utf-8", errors="replace")
+                      print(f"Readiness attempt {attempt} failed: HTTP {exc.code}: {body}")
+                  except URLError as exc:
+                      print(f"Readiness attempt {attempt} failed: {exc}")
+                  time.sleep(10)
+          except Exception as exc:
+              print(f"Readiness probe failed unexpectedly: {exc}")
+          sys.exit(1)
+          PY
 
       - name: Build Docker image for tests from test/ folder
         run: docker build -t hh-process-api-tests ./test
@@ -365,6 +434,7 @@ jobs:
           CAMUNDA_PASSWORD=$CAMUNDA_PASSWORD
           CAMUNDA_FAIL_ON_ERROR=true
           CAMUNDA_WORKER_ENABLED=true
+          CAMUNDA_WORKER_INITIAL_DELAY_MS=1000
           CAMUNDA_IDENTITY_SYNC_INITIAL_PASSWORD=$CAMUNDA_IDENTITY_SYNC_INITIAL_PASSWORD
           APP_TIMEOUT_LOCAL_SCHEDULER_ENABLED=false
           APP_HOME=\${HOME}/apps/hh-process

@@ -58,8 +58,8 @@ public class CamundaWorkflowFacade {
                         "startedAt", Instant.now()
                 )
         );
-        processInstanceId.ifPresent(id -> completeTask(
-                requestBusinessKey,
+        processInstanceId.ifPresent(id -> completeTaskInProcessInstance(
+                id,
                 CREATE_VACANCY_TASK,
                 RECRUITER_GROUP,
                 recruiterUser.getId(),
@@ -141,8 +141,8 @@ public class CamundaWorkflowFacade {
                 requestBusinessKey,
                 variables
         );
-        processInstanceId.ifPresent(id -> completeTask(
-                requestBusinessKey,
+        processInstanceId.ifPresent(id -> completeTaskInProcessInstance(
+                id,
                 APPLY_TO_VACANCY_TASK,
                 CANDIDATE_GROUP,
                 candidateUser.getId(),
@@ -270,8 +270,8 @@ public class CamundaWorkflowFacade {
                         "requestedAt", Instant.now()
                 )
         );
-        processInstanceId.ifPresent(id -> completeTask(
-                businessKey,
+        processInstanceId.ifPresent(id -> completeTaskInProcessInstance(
+                id,
                 UPDATE_VACANCY_STATUS_TASK,
                 RECRUITER_GROUP,
                 recruiterUser.getId(),
@@ -312,7 +312,7 @@ public class CamundaWorkflowFacade {
                 )
         );
         return processInstanceId.isPresent()
-                && completeTask(businessKey, ADMIN_RESET_APPROVAL_TASK, ADMIN_GROUP, adminUser.getId(), Map.of(
+                && completeTaskInProcessInstance(processInstanceId.get(), ADMIN_RESET_APPROVAL_TASK, ADMIN_GROUP, adminUser.getId(), Map.of(
                 "approvedByAdminUserId", adminUser.getId(),
                 "resetReason", safe(reason),
                 "approvedAt", Instant.now()
@@ -336,8 +336,8 @@ public class CamundaWorkflowFacade {
                         "requestedAt", Instant.now()
                 )
         );
-        processInstanceId.ifPresent(id -> completeTask(
-                businessKey,
+        processInstanceId.ifPresent(id -> completeTaskInProcessInstance(
+                id,
                 CANCEL_INTERVIEW_TASK,
                 RECRUITER_GROUP,
                 recruiterUser.getId(),
@@ -426,6 +426,45 @@ public class CamundaWorkflowFacade {
             }
         }
         log.warn("Camunda task {} for businessKey={} was not found", taskDefinitionKey, businessKey);
+        return false;
+    }
+
+    private boolean completeTaskInProcessInstance(String processInstanceId, String taskDefinitionKey, String expectedGroup,
+                                                  UUID actorUserId, Map<String, ?> variables) {
+        for (int attempt = 1; attempt <= 20; attempt++) {
+            var tasks = camundaRestClient.findActiveTasksByProcessInstanceId(processInstanceId, taskDefinitionKey);
+            if (!tasks.isEmpty()) {
+                Object id = tasks.get(0).get("id");
+                if (id != null) {
+                    String taskId = String.valueOf(id);
+                    if (expectedGroup != null && !camundaRestClient.taskHasCandidateGroup(taskId, expectedGroup)) {
+                        log.warn("Camunda task {} for processInstanceId={} does not expose candidate group {}",
+                                taskDefinitionKey, processInstanceId, expectedGroup);
+                        return false;
+                    }
+                    Map<String, Object> completedVariables = new LinkedHashMap<>(variables);
+                    if (actorUserId != null) {
+                        completedVariables.put("completedByUserId", actorUserId);
+                    }
+                    if (expectedGroup != null) {
+                        completedVariables.put("completedByGroup", expectedGroup);
+                    }
+                    boolean completed = camundaRestClient.completeTask(taskId, completedVariables);
+                    if (completed) {
+                        log.info("Completed Camunda task {}; processInstanceId={}; taskId={}",
+                                taskDefinitionKey, processInstanceId, taskId);
+                    }
+                    return completed;
+                }
+            }
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        log.warn("Camunda task {} for processInstanceId={} was not found", taskDefinitionKey, processInstanceId);
         return false;
     }
 

@@ -547,6 +547,19 @@ public class CamundaRestClient {
                 "find Camunda task " + taskDefinitionKey + " variable=" + fallbackQuery);
     }
 
+    public List<Map<String, Object>> findActiveTasksByProcessInstanceId(String processInstanceId, String taskDefinitionKey) {
+        if (!properties.isEnabled()) {
+            return List.of();
+        }
+        String uri = UriComponentsBuilder.fromHttpUrl(url("/task"))
+                .queryParam("processInstanceId", processInstanceId)
+                .queryParam("taskDefinitionKey", taskDefinitionKey)
+                .queryParam("active", true)
+                .toUriString();
+        return findActiveTasksByUri(uri,
+                "find Camunda task " + taskDefinitionKey + " processInstanceId=" + processInstanceId);
+    }
+
     private boolean hasActiveProcessInstanceByUri(String uri, String operation) {
         try {
             ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);

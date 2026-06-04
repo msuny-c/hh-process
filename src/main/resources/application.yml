@@ -84,6 +84,7 @@ app:
       lock-duration-ms: ${CAMUNDA_WORKER_LOCK_DURATION_MS:30000}
       async-response-timeout-ms: ${CAMUNDA_WORKER_ASYNC_RESPONSE_TIMEOUT_MS:2000}
       poll-interval-ms: ${CAMUNDA_WORKER_POLL_INTERVAL_MS:3000}
+      initial-delay-ms: ${CAMUNDA_WORKER_INITIAL_DELAY_MS:10000}
 
 
 logging:

@@ -42,5 +42,6 @@ public class CamundaProperties {
         private long asyncResponseTimeoutMs = 2000;
         private long lockDurationMs = 30000;
         private long pollIntervalMs = 3000;
+        private long initialDelayMs = 10000;
     }
 }
