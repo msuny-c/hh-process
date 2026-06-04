@@ -31,7 +31,7 @@
     </bpmn:laneSet>
     <bpmn:startEvent id="VacancyStart" name="Процесс вакансии запущен" camunda:initiator="starterUserId"/>
     <bpmn:userTask id="CreateVacancyTask" name="Заполнить форму вакансии" camunda:formRef="create-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER"/>
-    <bpmn:exclusiveGateway id="VacancyCreationModeGateway" name="Вакансия уже создана через REST?" default="VF2b"/>
+    <bpmn:exclusiveGateway id="VacancyCreationModeGateway" name="Способ запуска вакансии" default="VF1b"/>
     <bpmn:serviceTask id="ValidateCreateVacancyForm" name="Проверить форму создания вакансии" camunda:type="external" camunda:topic="vacancy-create"/>
     <bpmn:boundaryEvent id="CreateVacancyFormError" attachedToRef="ValidateCreateVacancyForm">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed"/>
@@ -70,12 +70,15 @@
     <bpmn:endEvent id="VacancyRollbackEnd" name="Recovery вакансии завершён"/>
     <bpmn:serviceTask id="CorrelateVacancyClosedApplications" name="Отправить MSG_VACANCY_CLOSED процессам откликов" camunda:type="external" camunda:topic="vacancy-close-applications"/>
     <bpmn:userTask id="VacancyClosedResultTask" name="Показать результат закрытия вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN"/>
-    <bpmn:sequenceFlow id="VF1" sourceRef="VacancyStart" targetRef="CreateVacancyTask"/>
-    <bpmn:sequenceFlow id="VF2" sourceRef="CreateVacancyTask" targetRef="VacancyCreationModeGateway"/>
+    <bpmn:sequenceFlow id="VF1" sourceRef="VacancyStart" targetRef="VacancyCreationModeGateway"/>
+    <bpmn:sequenceFlow id="VF1b" sourceRef="VacancyCreationModeGateway" targetRef="CreateVacancyTask"/>
     <bpmn:sequenceFlow id="VF2a" sourceRef="VacancyCreationModeGateway" targetRef="ManageVacancyTask">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${execution.hasVariable('vacancyId')}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="VF2b" sourceRef="VacancyCreationModeGateway" targetRef="ValidateCreateVacancyForm"/>
+    <bpmn:sequenceFlow id="VF2b" sourceRef="VacancyCreationModeGateway" targetRef="ValidateCreateVacancyForm">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${execution.hasVariable('restAutoSubmit') &amp;&amp; restAutoSubmit == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="VF2" sourceRef="CreateVacancyTask" targetRef="ValidateCreateVacancyForm"/>
     <bpmn:sequenceFlow id="VF2c" sourceRef="CreateVacancyFormError" targetRef="CreateVacancyTask"/>
     <bpmn:sequenceFlow id="VF2d" sourceRef="ValidateCreateVacancyForm" targetRef="CreateVacancyFromForm"/>
     <bpmn:sequenceFlow id="VF2e" sourceRef="CreateVacancyPersistError" targetRef="CreateVacancyTask"/>

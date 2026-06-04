@@ -142,6 +142,17 @@ jobs:
       - name: Wait for Camunda deployment and worker
         run: |
           set -eu
+          dump_readiness_logs() {
+            echo "==== Camunda readiness diagnostics ===="
+            curl -fsS "http://127.0.0.1:8081/engine-rest/task?taskDefinitionKey=CreateVacancyTask&active=true" || true
+            echo
+            curl -fsS "http://127.0.0.1:8081/engine-rest/external-task?topicName=vacancy-create" || true
+            echo
+            curl -fsS "http://127.0.0.1:8081/engine-rest/incident" || true
+            echo
+            docker compose logs --no-color --tail=350 app camunda || true
+          }
+          trap dump_readiness_logs ERR
           echo "Waiting for hhVacancyProcess deployment..."
           for i in $(seq 1 120); do
             if curl -fsS "http://127.0.0.1:8081/engine-rest/process-definition/key/hhVacancyProcess" >/dev/null 2>&1; then

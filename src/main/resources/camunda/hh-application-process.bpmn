@@ -25,6 +25,7 @@
       </bpmn:lane>
       <bpmn:lane id="Lane_System" name="SYSTEM">
         <bpmn:flowNodeRef>ApplicationStart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ApplicationSubmissionModeGateway</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ValidateApplyToVacancyForm</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>CreateApplicationFromForm</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>AutoScreenApplication</bpmn:flowNodeRef>
@@ -60,6 +61,7 @@
       </bpmn:lane>
     </bpmn:laneSet>
     <bpmn:startEvent id="ApplicationStart" name="Отклик создан" camunda:initiator="starterUserId"/>
+    <bpmn:exclusiveGateway id="ApplicationSubmissionModeGateway" name="Способ подачи отклика" default="F1b"/>
     <bpmn:userTask id="ApplyToVacancyTask" name="Заполнить форму отклика" camunda:formRef="apply-to-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE"/>
     <bpmn:serviceTask id="ValidateApplyToVacancyForm" name="Проверить данные формы отклика" camunda:type="external" camunda:topic="form-validation"/>
     <bpmn:boundaryEvent id="ApplyFormValidationError" attachedToRef="ValidateApplyToVacancyForm">
@@ -166,7 +168,11 @@
     <bpmn:userTask id="TimeoutResultTask" name="Показать результат таймаута" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE"/>
     <bpmn:userTask id="VacancyClosedApplicationResultTask" name="Показать результат закрытия вакансии" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE"/>
     <bpmn:endEvent id="ClosedByVacancyEnd" name="Отклик закрыт из-за закрытия вакансии"/>
-    <bpmn:sequenceFlow id="F1" sourceRef="ApplicationStart" targetRef="ApplyToVacancyTask"/>
+    <bpmn:sequenceFlow id="F1" sourceRef="ApplicationStart" targetRef="ApplicationSubmissionModeGateway"/>
+    <bpmn:sequenceFlow id="F1b" sourceRef="ApplicationSubmissionModeGateway" targetRef="ApplyToVacancyTask"/>
+    <bpmn:sequenceFlow id="F1c" sourceRef="ApplicationSubmissionModeGateway" targetRef="ValidateApplyToVacancyForm">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${execution.hasVariable('restAutoSubmit') &amp;&amp; restAutoSubmit == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F2" sourceRef="ApplyToVacancyTask" targetRef="ValidateApplyToVacancyForm"/>
     <bpmn:sequenceFlow id="F2e" sourceRef="ApplyFormValidationError" targetRef="ApplyToVacancyTask"/>
     <bpmn:sequenceFlow id="F3" sourceRef="ValidateApplyToVacancyForm" targetRef="CreateApplicationFromForm"/>

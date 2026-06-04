@@ -26,8 +26,6 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public class CamundaWorkflowFacade {
 
-    private static final String APPLY_TO_VACANCY_TASK = "ApplyToVacancyTask";
-    private static final String CREATE_VACANCY_TASK = "CreateVacancyTask";
     private static final String VACANCY_CREATED_RESULT_TASK = "VacancyCreatedResultTask";
     private static final String RECRUITER_DECISION_TASK = "RecruiterDecisionTask";
     private static final String WRITE_INVITATION_TASK = "WriteInvitationTask";
@@ -55,22 +53,10 @@ public class CamundaWorkflowFacade {
                         "description", safe(description),
                         "requiredSkills", requiredSkills == null ? "" : String.join(", ", requiredSkills),
                         "screeningThreshold", screeningThreshold,
+                        "restAutoSubmit", true,
                         "startedAt", Instant.now()
                 )
         );
-        processInstanceId.ifPresent(id -> completeTaskInProcessInstance(
-                id,
-                CREATE_VACANCY_TASK,
-                RECRUITER_GROUP,
-                recruiterUser.getId(),
-                Map.of(
-                        "action", "CREATE",
-                        "title", safe(title),
-                        "description", safe(description),
-                        "requiredSkills", requiredSkills == null ? "" : String.join(", ", requiredSkills),
-                        "screeningThreshold", screeningThreshold,
-                        "createdAt", Instant.now()
-                )));
         return processInstanceId;
     }
 
@@ -82,15 +68,10 @@ public class CamundaWorkflowFacade {
                         "vacancyId", vacancy.getId(),
                         "recruiterUserId", vacancy.getRecruiterUser().getId(),
                         "title", vacancy.getTitle(),
+                        "restAutoSubmit", true,
                         "status", vacancy.getStatus().name()
                 )
         );
-        processInstanceId.ifPresent(id -> completeVacancyTask(
-                vacancy.getId(),
-                CREATE_VACANCY_TASK,
-                RECRUITER_GROUP,
-                vacancy.getRecruiterUser().getId(),
-                Map.of("action", "CREATE", "createdAt", Instant.now())));
         return processInstanceId;
     }
 
@@ -104,24 +85,12 @@ public class CamundaWorkflowFacade {
         variables.put("vacancyTitle", application.getVacancy().getTitle());
         variables.put("screeningPassed", screeningPassed);
         variables.put("status", application.getStatus().name());
+        variables.put("restAutoSubmit", true);
         Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
                 properties.getApplicationProcessKey(),
                 applicationBusinessKey(application.getId()),
                 variables
         );
-        processInstanceId.ifPresent(id -> {
-            Map<String, Object> applyVariables = new LinkedHashMap<>();
-            applyVariables.put("action", "APPLY");
-            applyVariables.put("submittedAt", Instant.now());
-            applyVariables.put("resumeText", safe(application.getResumeText()));
-            applyVariables.put("coverLetter", safe(application.getCoverLetter()));
-            completeApplicationTask(
-                    application.getId(),
-                    APPLY_TO_VACANCY_TASK,
-                    CANDIDATE_GROUP,
-                    application.getCandidateUser().getId(),
-                    applyVariables);
-        });
         return processInstanceId;
     }
 
@@ -136,22 +105,12 @@ public class CamundaWorkflowFacade {
         variables.put("resumeText", safe(resumeText));
         variables.put("coverLetter", safe(coverLetter));
         variables.put("status", ApplicationStatus.SCREENING_IN_PROGRESS.name());
+        variables.put("restAutoSubmit", true);
         Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
                 properties.getApplicationProcessKey(),
                 requestBusinessKey,
                 variables
         );
-        processInstanceId.ifPresent(id -> completeTaskInProcessInstance(
-                id,
-                APPLY_TO_VACANCY_TASK,
-                CANDIDATE_GROUP,
-                candidateUser.getId(),
-                Map.of(
-                        "action", "APPLY",
-                        "submittedAt", Instant.now(),
-                        "resumeText", safe(resumeText),
-                        "coverLetter", safe(coverLetter)
-                )));
         return processInstanceId;
     }
 
