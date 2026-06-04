@@ -17,6 +17,7 @@ echo "Camunda tests CAMUNDA_URL=${CAMUNDA_URL}"
 echo "DB tests POSTGRES=${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?schema=${POSTGRES_SCHEMA}"
 
 python /tests/test.py
+python /tests/test_camunda_smoke_flow.py
 python /tests/test_composite_transactions.py
 python /tests/test_security_validation.py
 python /tests/test_access_matrix.py
