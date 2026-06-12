@@ -14,15 +14,42 @@ import java.util.UUID;
 
 public interface InterviewRepository extends JpaRepository<InterviewEntity, UUID> {
 
-    @EntityGraph(attributePaths = {"application", "vacancy", "candidateUser", "recruiterUser"})
+    @EntityGraph(attributePaths = {
+            "application",
+            "application.vacancy",
+            "application.vacancy.recruiterUser",
+            "application.candidateUser",
+            "vacancy",
+            "vacancy.recruiterUser",
+            "candidateUser",
+            "recruiterUser"
+    })
     Optional<InterviewEntity> findByApplicationIdAndStatus(UUID applicationId, InterviewStatus status);
 
-    @EntityGraph(attributePaths = {"application", "vacancy", "candidateUser", "recruiterUser"})
+    @EntityGraph(attributePaths = {
+            "application",
+            "application.vacancy",
+            "application.vacancy.recruiterUser",
+            "application.candidateUser",
+            "vacancy",
+            "vacancy.recruiterUser",
+            "candidateUser",
+            "recruiterUser"
+    })
     @Query("select i from InterviewEntity i where i.application.id in :applicationIds and i.status = :status")
     List<InterviewEntity> findByApplicationIdInAndStatus(@Param("applicationIds") Collection<UUID> applicationIds,
                                                          @Param("status") InterviewStatus status);
 
-    @EntityGraph(attributePaths = {"application", "vacancy", "candidateUser", "recruiterUser"})
+    @EntityGraph(attributePaths = {
+            "application",
+            "application.vacancy",
+            "application.vacancy.recruiterUser",
+            "application.candidateUser",
+            "vacancy",
+            "vacancy.recruiterUser",
+            "candidateUser",
+            "recruiterUser"
+    })
     @Query("select i from InterviewEntity i where i.id = :id")
     Optional<InterviewEntity> findByIdForUpdate(@Param("id") UUID id);
 }
