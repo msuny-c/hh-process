@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:camunda="http://camunda.org/schema/1.0/dmn"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             id="Definitions_hh_auto_screening"
+             name="HH auto screening"
+             namespace="http://itmo.ru/hhprocess/camunda/dmn">
+  <decision id="hhAutoScreening" name="HH auto screening decision" camunda:historyTimeToLive="30">
+    <decisionTable id="DecisionTable_hhAutoScreening" hitPolicy="FIRST">
+      <input id="Input_score_delta" label="score - threshold">
+        <inputExpression id="InputExpression_score_delta" typeRef="integer">
+          <text>screeningScoreDelta</text>
+        </inputExpression>
+      </input>
+      <output id="Output_passed" label="screeningPassed" name="passed" typeRef="boolean" />
+      <rule id="Rule_screening_passed">
+        <description>Resume score is greater than or equal to vacancy threshold.</description>
+        <inputEntry id="Rule_screening_passed_delta"><text>&gt;= 0</text></inputEntry>
+        <outputEntry id="Rule_screening_passed_passed"><text>true</text></outputEntry>
+      </rule>
+      <rule id="Rule_screening_failed">
+        <description>Resume score is below vacancy threshold.</description>
+        <inputEntry id="Rule_screening_failed_delta"><text>&lt; 0</text></inputEntry>
+        <outputEntry id="Rule_screening_failed_passed"><text>false</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_hh_auto_screening">
+      <dmndi:DMNShape id="DMNShape_hhAutoScreening" dmnElementRef="hhAutoScreening">
+        <dc:Bounds x="160" y="80" width="180" height="80" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

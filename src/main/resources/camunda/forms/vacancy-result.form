@@ -7,7 +7,7 @@
     {
       "type": "html",
       "id": "errorBanner",
-      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\">{{formErrorMessage}}</div>",
+      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\"><strong>Ошибка формы:</strong> {{formErrorMessage}}<br/><span>Поля: {{formErrorFields}}</span></div>",
       "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
     },
     { "type": "text", "id": "resultHeader", "text": "## Результат процесса вакансии" },

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
+import ru.itmo.hhprocess.dto.recruiter.WeekScheduleResponse;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.InterviewEntity;
 import ru.itmo.hhprocess.entity.InvitationResponseEntity;
@@ -29,7 +30,6 @@ import ru.itmo.hhprocess.service.InterviewService;
 import ru.itmo.hhprocess.service.NotificationService;
 import ru.itmo.hhprocess.service.ScheduleService;
 import ru.itmo.hhprocess.service.ScreeningService;
-import ru.itmo.hhprocess.service.TimeoutService;
 import ru.itmo.hhprocess.service.VacancyHistoryService;
 
 import java.time.Instant;
@@ -38,6 +38,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -67,9 +68,10 @@ public class CamundaProcessAdapterService {
     private final NotificationService notificationService;
     private final InterviewService interviewService;
     private final ScheduleService scheduleService;
-    private final TimeoutService timeoutService;
     private final CamundaRestClient camundaRestClient;
+    private final CamundaProperties camundaProperties;
     private final ObjectMapper objectMapper;
+    private final CamundaFormValidator formValidator;
 
     @Transactional
     public Map<String, Object> autoScreen(UUID applicationId) {
@@ -96,6 +98,184 @@ public class CamundaProcessAdapterService {
         variables.put("screeningScore", screeningResult.getScore());
         variables.put("autoScreeningCompleted", true);
         return variables;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> prepareAutoScreen(UUID applicationId) {
+        ApplicationEntity application = getApplication(applicationId);
+        var input = screeningService.prepareScreeningInput(application);
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("screeningRequiredSkills", String.join(", ", input.requiredSkills()));
+        variables.put("screeningMatchedSkills", String.join(", ", input.matchedSkills()));
+        variables.put("screeningMatchedCount", input.matchedSkills().size());
+        variables.put("screeningTotalSkills", input.requiredSkills().size());
+        variables.put("screeningThreshold", input.threshold());
+        variables.put("screeningScore", input.score());
+        variables.put("screeningScoreDelta", input.score() - input.threshold());
+        variables.put("autoScreeningPrepared", true);
+        return variables;
+    }
+
+    @Transactional
+    public Map<String, Object> saveAutoScreenDecision(UUID applicationId, boolean screeningPassed, int screeningScore) {
+        ApplicationEntity application = getApplication(applicationId);
+        ApplicationStatus oldStatus = application.getStatus();
+        var input = screeningService.prepareScreeningInput(application);
+        ScreeningResultEntity screeningResult = screeningService.saveScreeningDecision(application, input, screeningPassed);
+
+        if (oldStatus == ApplicationStatus.SCREENING_IN_PROGRESS) {
+            if (screeningPassed) {
+                application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
+                historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW, null);
+            } else {
+                application.setStatus(ApplicationStatus.SCREENING_FAILED);
+                application.setClosedAt(Instant.now());
+                historyService.record(application, oldStatus, ApplicationStatus.SCREENING_FAILED, null);
+            }
+            applicationRepository.save(application);
+        }
+
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("screeningPassed", screeningResult.isPassed());
+        variables.put("status", application.getStatus().name());
+        variables.put("screeningScore", screeningScore);
+        variables.put("autoScreeningCompleted", true);
+        variables.put("autoScreeningDecisionOwner", "Camunda DMN hhAutoScreening");
+        return variables;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> resolveOperationPermission(String role, String operation, boolean ownership) {
+        return Map.of(
+                "permissionRole", role,
+                "permissionOperation", operation,
+                "permissionOwnership", ownership,
+                "permissionChecked", true
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> resolveCreateVacancyPermission(String starterUserId, UUID recruiterUserId) {
+        UserEntity user = resolvePermissionUser(starterUserId, recruiterUserId);
+        boolean ownership = user != null && user.isEnabled() && hasRole(user, "RECRUITER");
+        return permissionVariables(primaryRole(user), "CREATE_VACANCY", ownership, user);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> resolveRecruiterDecisionPermission(String starterUserId, UUID applicationId) {
+        UserEntity user = resolvePermissionUser(starterUserId, null);
+        boolean ownership = false;
+        if (user != null && applicationId != null && hasRole(user, "RECRUITER")) {
+            ownership = applicationRepository.findDetailedById(applicationId)
+                    .map(application -> application.getVacancy().getRecruiterUser().getId().equals(user.getId()))
+                    .orElse(false);
+        } else if (applicationId != null) {
+            ownership = applicationRepository.findDetailedById(applicationId)
+                    .map(application -> application.getVacancy().getRecruiterUser() != null)
+                    .orElse(false);
+            return permissionVariables("RECRUITER", "REVIEW_APPLICATION", ownership, null);
+        }
+        return permissionVariables(primaryRole(user), "REVIEW_APPLICATION", ownership, user);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> resolveCandidateResponsePermission(String starterUserId, UUID applicationId) {
+        UserEntity user = resolvePermissionUser(starterUserId, null);
+        boolean ownership = false;
+        if (user != null && applicationId != null && hasRole(user, "CANDIDATE")) {
+            ownership = applicationRepository.findDetailedById(applicationId)
+                    .map(application -> application.getCandidateUser().getId().equals(user.getId()))
+                    .orElse(false);
+        } else if (applicationId != null) {
+            ownership = applicationRepository.findDetailedById(applicationId)
+                    .map(application -> application.getCandidateUser() != null)
+                    .orElse(false);
+            return permissionVariables("CANDIDATE", "RESPOND_INVITATION", ownership, null);
+        }
+        return permissionVariables(primaryRole(user), "RESPOND_INVITATION", ownership, user);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> resolveAdminResetPermission(String starterUserId, UUID adminUserId) {
+        UserEntity user = resolvePermissionUser(starterUserId, adminUserId);
+        boolean ownership = user != null && user.isEnabled() && hasRole(user, "ADMIN");
+        return permissionVariables(primaryRole(user), "ADMIN_RESET", ownership, user);
+    }
+
+    @Transactional
+    public Map<String, Object> dispatchNotification(String notificationKind, UUID applicationId, UUID vacancyId,
+                                                    String invitationMessage, String closeReason, String cancelReason,
+                                                    String resetReason, String notificationTemplateCode) {
+        NotificationDecision decision = NotificationDecision.parse(notificationKind, notificationTemplateCode);
+        Map<String, Object> result = dispatchNotificationDecision(
+                decision,
+                applicationId,
+                vacancyId,
+                invitationMessage,
+                closeReason,
+                cancelReason,
+                resetReason);
+        Map<String, Object> variables = new LinkedHashMap<>(result);
+        variables.put("notificationDispatched", true);
+        variables.put("notificationKind", notificationKind);
+        variables.put("notificationType", decision.type().name());
+        variables.put("recipientRole", decision.recipientRole());
+        variables.put("notificationTemplate", decision.template());
+        if (closeReason != null && !closeReason.isBlank()) {
+            variables.put("closeReason", closeReason);
+        }
+        return variables;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> prepareNotificationDecision(String notificationKind, UUID applicationId, UUID vacancyId,
+                                                           String recipientRole) {
+        String status = "NONE";
+        if (applicationId != null) {
+            status = applicationRepository.findDetailedById(applicationId)
+                    .map(application -> application.getStatus().name())
+                    .orElse("UNKNOWN");
+        } else if (vacancyId != null) {
+            status = vacancyRepository.findById(vacancyId)
+                    .map(vacancy -> vacancy.getStatus().name())
+                    .orElse("UNKNOWN");
+        }
+        return Map.of(
+                "notificationKind", notificationKind == null || notificationKind.isBlank() ? "UNKNOWN" : notificationKind,
+                "notificationStatus", status,
+                "recipientRole", recipientRole == null || recipientRole.isBlank()
+                        ? defaultNotificationRecipientRole(notificationKind)
+                        : recipientRole
+        );
+    }
+
+    private String defaultNotificationRecipientRole(String notificationKind) {
+        return switch (notificationKind == null ? "" : notificationKind) {
+            case "NEW_APPLICATION", "CANDIDATE_RESPONSE" -> "RECRUITER";
+            case "TIMEOUT", "ADMIN_RESET" -> "CANDIDATE,RECRUITER";
+            default -> "CANDIDATE";
+        };
+    }
+
+    private Map<String, Object> dispatchNotificationDecision(NotificationDecision decision, UUID applicationId, UUID vacancyId,
+                                                             String invitationMessage, String closeReason, String cancelReason,
+                                                             String resetReason) {
+        if ("VACANCY_CLOSED".equals(decision.kind())) {
+            return notifyVacancyClosedCandidates(requiredUuid(vacancyId, "vacancyId"), decision);
+        }
+        ApplicationEntity application = getApplication(requiredUuid(applicationId, "applicationId"));
+        int sent = 0;
+        if (decision.sendsToCandidate()) {
+            notificationService.createIfAbsent(application.getCandidateUser(), application,
+                    decision.type(), renderTemplate(decision.template(), application, invitationMessage, closeReason, cancelReason, resetReason));
+            sent++;
+        }
+        if (decision.sendsToRecruiter()) {
+            notificationService.createIfAbsent(application.getVacancy().getRecruiterUser(), application,
+                    decision.type(), renderTemplate(decision.template(), application, invitationMessage, closeReason, cancelReason, resetReason));
+            sent++;
+        }
+        return Map.of("notificationSent", true, "notifiedCount", sent, "status", application.getStatus().name());
     }
 
     @Transactional
@@ -153,21 +333,12 @@ public class CamundaProcessAdapterService {
     @Transactional(readOnly = true)
     public Map<String, Object> validateInvitationForm(UUID applicationId, String message, Instant scheduledAt,
                                                        int durationMinutes) {
-        if (message == null || message.isBlank()) {
-            throw new CamundaFormValidationException("Invitation message must not be blank");
-        }
-        if (message.length() > 5_000) {
-            throw new CamundaFormValidationException("Invitation message must be at most 5000 characters");
-        }
-        if (scheduledAt == null) {
-            throw new CamundaFormValidationException("Interview date/time is required");
-        }
+        formValidator.requiredText(message, "Invitation message", 5_000);
+        formValidator.requireNonNull(scheduledAt, "Interview date/time is required");
         if (scheduledAt.isBefore(Instant.now())) {
             throw new CamundaFormValidationException("Interview date/time must be in the future");
         }
-        if (durationMinutes < 15 || durationMinutes > 480) {
-            throw new CamundaFormValidationException("Duration must be between 15 and 480 minutes");
-        }
+        formValidator.integerRange(durationMinutes, "Duration", 15, 480);
 
         ApplicationEntity application = getApplication(applicationId);
         if (application.getStatus() != ApplicationStatus.ON_RECRUITER_REVIEW
@@ -459,6 +630,14 @@ public class CamundaProcessAdapterService {
 
     @Transactional
     public Map<String, Object> notifyVacancyClosedCandidates(UUID vacancyId) {
+        return notifyVacancyClosedCandidates(vacancyId, new NotificationDecision(
+                "VACANCY_CLOSED",
+                NotificationType.VACANCY_CLOSED,
+                "CANDIDATE",
+                "Vacancy was closed: {vacancyTitle}"));
+    }
+
+    private Map<String, Object> notifyVacancyClosedCandidates(UUID vacancyId, NotificationDecision decision) {
         VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
                 .orElseThrow(() -> new IllegalArgumentException("Vacancy not found: " + vacancyId));
         List<ApplicationEntity> applications = applicationRepository.findByVacancyIdAndStatusIn(
@@ -466,10 +645,51 @@ public class CamundaProcessAdapterService {
         int notifiedCount = 0;
         for (ApplicationEntity application : applications) {
             notificationService.createIfAbsent(application.getCandidateUser(), application,
-                    NotificationType.VACANCY_CLOSED, "Vacancy was closed: " + vacancy.getTitle());
+                    decision.type(), renderTemplate(decision.template(), application, "", "", "", ""));
             notifiedCount++;
         }
         return Map.of("notificationSent", true, "notifiedCount", notifiedCount, "status", vacancy.getStatus().name());
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> prepareStatusTransition(String currentStatus, String action, String requestedStatus) {
+        return Map.of(
+                "currentStatus", currentStatus == null ? "UNKNOWN" : currentStatus,
+                "statusAction", action == null ? "UNKNOWN" : action,
+                "requestedStatus", requestedStatus == null ? "" : requestedStatus
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> prepareRecruiterDecisionTransition(UUID applicationId, String decision) {
+        ApplicationEntity application = getApplication(applicationId);
+        String action = switch (decision == null ? "" : decision) {
+            case "INVITE" -> "INVITE_APPLICATION";
+            case "REJECT" -> "REJECT_APPLICATION";
+            case "VACANCY_CLOSED" -> "CLOSE_BY_TIMEOUT";
+            default -> "UNKNOWN";
+        };
+        return prepareStatusTransition(application.getStatus().name(), action, "");
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> prepareCandidateResponseTransition(UUID applicationId, String responseType) {
+        ApplicationEntity application = getApplication(applicationId);
+        return prepareStatusTransition(application.getStatus().name(), "RESPOND_INVITATION", "");
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> prepareCloseVacancyTransition(UUID vacancyId) {
+        VacancyEntity vacancy = vacancyRepository.findById(vacancyId)
+                .orElseThrow(() -> new CamundaFormValidationException("Vacancy not found: " + vacancyId));
+        return prepareStatusTransition(vacancy.getStatus().name(), "CLOSE_VACANCY", VacancyStatus.CLOSED.name());
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> prepareVacancyStatusTransition(UUID vacancyId, String requestedStatus) {
+        VacancyEntity vacancy = vacancyRepository.findById(vacancyId)
+                .orElseThrow(() -> new CamundaFormValidationException("Vacancy not found: " + vacancyId));
+        return prepareStatusTransition(vacancy.getStatus().name(), "UPDATE_VACANCY_STATUS", requestedStatus);
     }
 
     @Transactional
@@ -578,15 +798,11 @@ public class CamundaProcessAdapterService {
     @Transactional(readOnly = true)
     public Map<String, Object> validateApplyToVacancyForm(UUID applicationId, UUID vacancyId, UUID candidateUserId,
                                                           String starterUserId, String resumeText, String coverLetter) {
-        if (resumeText == null || resumeText.isBlank()) {
-            throw new CamundaFormValidationException("Resume text must not be blank");
-        }
-        if (resumeText.length() < 20 || resumeText.length() > 50_000) {
+        formValidator.requiredText(resumeText, "Resume text", 50_000);
+        if (resumeText.trim().length() < 20) {
             throw new CamundaFormValidationException("Resume text length must be between 20 and 50000 characters");
         }
-        if (coverLetter != null && coverLetter.length() > 10_000) {
-            throw new CamundaFormValidationException("Cover letter must be at most 10000 characters");
-        }
+        formValidator.maxLength(coverLetter, "Cover letter", 10_000);
         if (applicationId != null) {
             getApplication(applicationId);
             return Map.of("formValidated", true, "formErrorMessage", "", "applicationId", applicationId);
@@ -683,18 +899,11 @@ public class CamundaProcessAdapterService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> validateRecruiterDecisionForm(UUID applicationId, String decision, String comment) {
-        if (decision == null || decision.isBlank()) {
-            throw new CamundaFormValidationException("Recruiter decision is required");
+        formValidator.requiredChoice(decision, "Recruiter decision", Set.of("INVITE", "REJECT", "VACANCY_CLOSED"));
+        if ("REJECT".equals(decision)) {
+            formValidator.requireNotBlank(comment, "Rejection comment is required");
         }
-        if (!List.of("INVITE", "REJECT", "VACANCY_CLOSED").contains(decision)) {
-            throw new CamundaFormValidationException("Recruiter decision must be INVITE, REJECT or VACANCY_CLOSED");
-        }
-        if ("REJECT".equals(decision) && (comment == null || comment.isBlank())) {
-            throw new CamundaFormValidationException("Rejection comment is required");
-        }
-        if (comment != null && comment.length() > 5_000) {
-            throw new CamundaFormValidationException("Recruiter comment must be at most 5000 characters");
-        }
+        formValidator.maxLength(comment, "Recruiter comment", 5_000);
         ApplicationEntity application = getApplication(applicationId);
         if (application.getStatus() != ApplicationStatus.ON_RECRUITER_REVIEW) {
             throw new CamundaFormValidationException("Application is not waiting for recruiter decision: " + application.getStatus());
@@ -705,9 +914,7 @@ public class CamundaProcessAdapterService {
     @Transactional(readOnly = true)
     public Map<String, Object> validateCandidateResponseForm(UUID applicationId, String responseType, String message) {
         requiredResponseType(responseType);
-        if (message != null && message.length() > 5_000) {
-            throw new CamundaFormValidationException("Candidate response message must be at most 5000 characters");
-        }
+        formValidator.maxLength(message, "Candidate response message", 5_000);
         ApplicationEntity application = getApplication(applicationId);
         if (application.getStatus() != ApplicationStatus.INVITED) {
             throw new CamundaFormValidationException("Application is not waiting for candidate response: " + application.getStatus());
@@ -716,28 +923,13 @@ public class CamundaProcessAdapterService {
     }
 
     public ResponseType requiredResponseType(String raw) {
-        if (raw == null || raw.isBlank()) {
-            throw new CamundaFormValidationException("Candidate response type is required");
-        }
-        try {
-            ResponseType type = ResponseType.valueOf(raw);
-            if (!List.of(ResponseType.ACCEPT, ResponseType.DECLINE, ResponseType.OTHER).contains(type)) {
-                throw new CamundaFormValidationException("Candidate response type must be ACCEPT, DECLINE or OTHER");
-            }
-            return type;
-        } catch (IllegalArgumentException e) {
-            throw new CamundaFormValidationException("Candidate response type must be ACCEPT, DECLINE or OTHER");
-        }
+        return formValidator.requiredEnum(raw, "Candidate response type",
+                ResponseType.class, Set.of(ResponseType.ACCEPT, ResponseType.DECLINE, ResponseType.OTHER));
     }
 
     @Transactional(readOnly = true)
     public Map<String, Object> validateRejectionAllowed(UUID applicationId, String comment) {
-        if (comment == null || comment.isBlank()) {
-            throw new CamundaFormValidationException("Rejection comment is required");
-        }
-        if (comment.length() > 5_000) {
-            throw new CamundaFormValidationException("Rejection comment must be at most 5000 characters");
-        }
+        formValidator.requiredText(comment, "Rejection comment", 5_000);
         ApplicationEntity application = getApplication(applicationId);
         if (application.getStatus() != ApplicationStatus.ON_RECRUITER_REVIEW
                 && application.getStatus() != ApplicationStatus.INVITED
@@ -893,18 +1085,8 @@ public class CamundaProcessAdapterService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> validateCloseVacancyForm(UUID vacancyId, String action, String reason) {
-        if (action == null || action.isBlank()) {
-            throw new CamundaFormValidationException("Vacancy action is required");
-        }
-        if (!"CLOSE".equals(action)) {
-            throw new CamundaFormValidationException("Vacancy action must be CLOSE");
-        }
-        if (reason == null || reason.isBlank()) {
-            throw new CamundaFormValidationException("Close reason is required");
-        }
-        if (reason.length() > 5_000) {
-            throw new CamundaFormValidationException("Close reason must be at most 5000 characters");
-        }
+        formValidator.requiredChoice(action, "Vacancy action", Set.of("CLOSE"));
+        formValidator.requiredText(reason, "Close reason", 5_000);
         vacancyRepository.findById(vacancyId).orElseThrow(() -> new CamundaFormValidationException("Vacancy not found: " + vacancyId));
         return Map.of("formValidated", true, "formErrorMessage", "");
     }
@@ -985,12 +1167,7 @@ public class CamundaProcessAdapterService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> validateAdminResetForm(UUID interviewId, UUID adminUserId, String reason) {
-        if (reason == null || reason.isBlank()) {
-            throw new CamundaFormValidationException("Reset reason is required");
-        }
-        if (reason.length() > 5_000) {
-            throw new CamundaFormValidationException("Reset reason must be at most 5000 characters");
-        }
+        formValidator.requiredText(reason, "Reset reason", 5_000);
         interviewService.getByIdForUpdate(interviewId);
         userRepository.findById(adminUserId).orElseThrow(() -> new CamundaFormValidationException("Admin user not found: " + adminUserId));
         return Map.of("formValidated", true, "formErrorMessage", "");
@@ -1085,12 +1262,7 @@ public class CamundaProcessAdapterService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> validateRecruiterCancelInterview(UUID interviewId, UUID recruiterUserId, String starterUserId, String reason) {
-        if (reason == null || reason.isBlank()) {
-            throw new CamundaFormValidationException("Cancel reason is required");
-        }
-        if (reason.length() > 5_000) {
-            throw new CamundaFormValidationException("Cancel reason must be at most 5000 characters");
-        }
+        formValidator.requiredText(reason, "Cancel reason", 5_000);
         InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
         UserEntity recruiter = resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
         if (interview.getStatus() != InterviewStatus.SCHEDULED) {
@@ -1240,7 +1412,8 @@ public class CamundaProcessAdapterService {
     public Map<String, Object> loadRecruiterSchedule(String starterUserId, Object weekOffsetRaw) {
         UserEntity recruiter = resolveUserFromCamundaStarter(starterUserId, "RECRUITER");
         int weekOffset = parseWeekOffset(weekOffsetRaw);
-        return uiPayload("Расписание рекрутера", scheduleService.getRecruiterWeekSchedule(recruiter, weekOffset));
+        return uiPayload("Расписание рекрутера", recruiterScheduleUiPayload(
+                scheduleService.getRecruiterWeekSchedule(recruiter, weekOffset)));
     }
 
     @Transactional(readOnly = true)
@@ -1252,39 +1425,32 @@ public class CamundaProcessAdapterService {
     @Transactional
     public Map<String, Object> runTimeoutReview(String starterUserId) {
         resolveUserFromCamundaStarter(starterUserId, "ADMIN");
-        int closedCount = timeoutService.runCloseExpired();
-        return uiPayload("Ручная проверка таймаутов", Map.of("closedCount", closedCount));
+        String businessKey = "timeout-review:" + UUID.randomUUID();
+        String processInstanceId = camundaRestClient.startProcessByKey(
+                        camundaProperties.getTimeoutSchedulerProcessKey(),
+                        businessKey,
+                        Map.of(
+                                "manualTimeoutReview", true,
+                                "startedBy", starterUserId,
+                                "startedAt", Instant.now()
+                        ))
+                .orElse("");
+        return uiPayload("Ручная проверка таймаутов",
+                Map.of(
+                        "schedulerProcessStarted", !processInstanceId.isBlank(),
+                        "processInstanceId", processInstanceId,
+                        "businessKey", businessKey,
+                        "owner", "Camunda BPMN loop hhTimeoutSchedulerProcess"
+                ));
     }
 
 
     public Instant requiredScheduledAt(Object value) {
-        if (value == null || String.valueOf(value).isBlank()) {
-            throw new CamundaFormValidationException("Interview date/time is required");
-        }
-        String raw = String.valueOf(value);
-        try {
-            return Instant.parse(raw);
-        } catch (RuntimeException instantParseException) {
-            try {
-                return OffsetDateTime.parse(raw).toInstant();
-            } catch (RuntimeException offsetParseException) {
-                throw new CamundaFormValidationException("Interview date/time must be a valid ISO-8601 timestamp");
-            }
-        }
+        return formValidator.requiredInstant(value, "Interview date/time");
     }
 
     public int requiredDurationMinutes(Object value) {
-        if (value == null || String.valueOf(value).isBlank()) {
-            throw new CamundaFormValidationException("Duration is required");
-        }
-        try {
-            if (value instanceof Number number) {
-                return number.intValue();
-            }
-            return Integer.parseInt(String.valueOf(value));
-        } catch (RuntimeException e) {
-            throw new CamundaFormValidationException("Duration must be an integer number of minutes");
-        }
+        return formValidator.integerRange(value, "Duration", 15, 480);
     }
 
     public Instant scheduledAtOrDefault(Object value) {
@@ -1348,120 +1514,148 @@ public class CamundaProcessAdapterService {
         return user;
     }
 
+    private UserEntity resolvePermissionUser(String starterUserId, UUID explicitUserId) {
+        try {
+            if (explicitUserId != null) {
+                return userRepository.findById(explicitUserId).orElse(null);
+            }
+            return resolveUserFromCamundaStarter(starterUserId, null);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private Map<String, Object> permissionVariables(String role, String operation, boolean ownership, UserEntity user) {
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("permissionRole", role);
+        variables.put("permissionOperation", operation);
+        variables.put("permissionOwnership", ownership);
+        variables.put("permissionChecked", true);
+        if (user != null) {
+            variables.put("permissionSubjectUserId", user.getId());
+        }
+        return variables;
+    }
+
+    private String primaryRole(UserEntity user) {
+        if (user == null) {
+            return "UNKNOWN";
+        }
+        if (hasRole(user, "ADMIN")) {
+            return "ADMIN";
+        }
+        if (hasRole(user, "RECRUITER")) {
+            return "RECRUITER";
+        }
+        if (hasRole(user, "CANDIDATE")) {
+            return "CANDIDATE";
+        }
+        return "UNKNOWN";
+    }
+
     private boolean hasRole(UserEntity user, String roleCode) {
         return user.getRoles().stream().anyMatch(role -> roleCode.equalsIgnoreCase(role.getCode()));
     }
 
-    private String normalizeRequiredText(String value, String fieldName, int maxLength) {
-        if (value == null || value.isBlank()) {
-            throw new CamundaFormValidationException(fieldName + " is required");
-        }
-        String normalized = value.trim();
-        if (normalized.length() > maxLength) {
-            throw new CamundaFormValidationException(fieldName + " must be at most " + maxLength + " characters");
-        }
-        return normalized;
-    }
-
-    private String normalizeOptionalText(String value, String fieldName, int maxLength) {
-        if (value == null || value.isBlank()) {
-            return "";
-        }
-        String normalized = value.trim();
-        if (normalized.length() > maxLength) {
-            throw new CamundaFormValidationException(fieldName + " must be at most " + maxLength + " characters");
-        }
-        return normalized;
-    }
-
-    private List<String> parseRequiredSkills(Object raw) {
-        java.util.List<String> result = new java.util.ArrayList<>();
-        if (raw instanceof Iterable<?> iterable) {
-            for (Object item : iterable) {
-                if (item != null && !String.valueOf(item).isBlank()) {
-                    result.add(String.valueOf(item).trim());
-                }
-            }
-        } else if (raw != null) {
-            String rawText = String.valueOf(raw).trim();
-            if (rawText.startsWith("[") && rawText.endsWith("]")) {
-                rawText = rawText.substring(1, rawText.length() - 1);
-            }
-            for (String item : rawText.split(",")) {
-                if (!item.isBlank()) {
-                    result.add(item.trim());
-                }
-            }
-        }
-        if (result.isEmpty()) {
-            throw new CamundaFormValidationException("At least one required skill is required");
-        }
-        if (result.size() > 50) {
-            throw new CamundaFormValidationException("Required skills list must contain at most 50 items");
-        }
-        for (String skill : result) {
-            if (skill.length() > 100) {
-                throw new CamundaFormValidationException("Each skill must be at most 100 characters");
-            }
-        }
-        return java.util.List.copyOf(result);
-    }
-
-    private int requiredScreeningThreshold(Object raw) {
-        if (raw == null || String.valueOf(raw).isBlank()) {
-            throw new CamundaFormValidationException("Screening threshold is required");
-        }
-        int value;
-        try {
-            if (raw instanceof Number number) {
-                value = number.intValue();
-            } else {
-                value = Integer.parseInt(String.valueOf(raw));
-            }
-        } catch (NumberFormatException e) {
-            throw new CamundaFormValidationException("Screening threshold must be a number");
-        }
-        if (value < 0 || value > 100) {
-            throw new CamundaFormValidationException("Screening threshold must be between 0 and 100");
+    private UUID requiredUuid(UUID value, String name) {
+        if (value == null) {
+            throw new IllegalArgumentException("Camunda notification variable is required: " + name);
         }
         return value;
     }
 
+    private String renderTemplate(String template, ApplicationEntity application, String invitationMessage, String closeReason,
+                                  String cancelReason, String resetReason) {
+        String result = template == null || template.isBlank() ? "Notification for vacancy: {vacancyTitle}" : template;
+        return result
+                .replace("{vacancyTitle}", application.getVacancy().getTitle())
+                .replace("{applicationStatus}", application.getStatus().name())
+                .replace("{invitationMessage}", safeTemplateValue(invitationMessage))
+                .replace("{closeReason}", safeTemplateValue(closeReason))
+                .replace("{cancelReason}", safeTemplateValue(cancelReason))
+                .replace("{resetReason}", safeTemplateValue(resetReason));
+    }
+
+    private String safeTemplateValue(String value) {
+        return value == null ? "" : value;
+    }
+
+    private record NotificationDecision(String kind, NotificationType type, String recipientRole, String template) {
+        static NotificationDecision parse(String fallbackKind, String code) {
+            if (code == null || code.isBlank()) {
+                return defaultFor(fallbackKind);
+            }
+            String[] parts = code.split("\\|", 4);
+            if (parts.length != 4) {
+                return defaultFor(fallbackKind);
+            }
+            return new NotificationDecision(
+                    parts[0],
+                    NotificationType.valueOf(parts[1]),
+                    parts[2],
+                    parts[3]
+            );
+        }
+
+        static NotificationDecision defaultFor(String kind) {
+            return switch (kind) {
+                case "SCREENING_FAILED" -> new NotificationDecision(kind, NotificationType.SCREENING_RESULT,
+                        "CANDIDATE", "Your application has been rejected");
+                case "NEW_APPLICATION" -> new NotificationDecision(kind, NotificationType.NEW_APPLICATION,
+                        "RECRUITER", "New application received for vacancy: {vacancyTitle}");
+                case "REJECTION" -> new NotificationDecision(kind, NotificationType.APPLICATION_REJECTED,
+                        "CANDIDATE", "Your application has been rejected");
+                case "INVITATION" -> new NotificationDecision(kind, NotificationType.INVITATION,
+                        "CANDIDATE", "You have been invited to an interview: {invitationMessage}");
+                case "CANDIDATE_RESPONSE" -> new NotificationDecision(kind, NotificationType.INVITATION_RESPONSE,
+                        "RECRUITER", "Candidate responded to interview invitation");
+                case "TIMEOUT" -> new NotificationDecision(kind, NotificationType.INVITATION_TIMEOUT,
+                        "CANDIDATE,RECRUITER", "Interview invitation expired for vacancy: {vacancyTitle}");
+                case "ADMIN_RESET" -> new NotificationDecision(kind, NotificationType.INTERVIEW_CANCELLED,
+                        "CANDIDATE,RECRUITER", "Interview was reset by administrator: {resetReason}");
+                case "RECRUITER_CANCEL" -> new NotificationDecision(kind, NotificationType.INTERVIEW_CANCELLED,
+                        "CANDIDATE", "Interview was cancelled: {cancelReason}");
+                case "VACANCY_CLOSED" -> new NotificationDecision(kind, NotificationType.VACANCY_CLOSED,
+                        "CANDIDATE", "Vacancy was closed: {vacancyTitle}");
+                default -> throw new IllegalArgumentException("Unsupported notification kind: " + kind);
+            };
+        }
+
+        boolean sendsToCandidate() {
+            return recipientRole.contains("CANDIDATE");
+        }
+
+        boolean sendsToRecruiter() {
+            return recipientRole.contains("RECRUITER");
+        }
+    }
+
+    private String normalizeRequiredText(String value, String fieldName, int maxLength) {
+        return formValidator.requiredText(value, fieldName, maxLength);
+    }
+
+    private String normalizeOptionalText(String value, String fieldName, int maxLength) {
+        return formValidator.optionalText(value, fieldName, maxLength);
+    }
+
+    private List<String> parseRequiredSkills(Object raw) {
+        return formValidator.requiredSkills(raw);
+    }
+
+    private int requiredScreeningThreshold(Object raw) {
+        return formValidator.integerRange(raw, "Screening threshold", 0, 100);
+    }
+
     private VacancyStatus parseVacancyStatus(String requestedStatus) {
-        if (requestedStatus == null || requestedStatus.isBlank()) {
-            throw new CamundaFormValidationException("Vacancy status is required");
-        }
-        try {
-            return VacancyStatus.valueOf(requestedStatus);
-        } catch (IllegalArgumentException e) {
-            throw new CamundaFormValidationException("Unsupported vacancy status: " + requestedStatus);
-        }
+        return formValidator.requiredEnum(requestedStatus, "Vacancy status", VacancyStatus.class, null);
     }
 
     private UUID parseUuidText(String value, String fieldName) {
-        if (value == null || value.isBlank()) {
-            throw new CamundaFormValidationException(fieldName + " is required");
-        }
-        try {
-            return UUID.fromString(value.trim());
-        } catch (IllegalArgumentException e) {
-            throw new CamundaFormValidationException(fieldName + " must be a valid UUID");
-        }
+        return formValidator.requiredUuidText(value, fieldName);
     }
 
     private int parseWeekOffset(Object raw) {
-        if (raw == null || String.valueOf(raw).isBlank()) {
-            return 0;
-        }
-        try {
-            int value = raw instanceof Number number ? number.intValue() : Integer.parseInt(String.valueOf(raw));
-            if (value < -52 || value > 52) {
-                throw new CamundaFormValidationException("weekOffset must be between -52 and 52");
-            }
-            return value;
-        } catch (NumberFormatException e) {
-            throw new CamundaFormValidationException("weekOffset must be an integer");
-        }
+        return formValidator.optionalIntegerRange(raw, "weekOffset", -52, 52, 0);
     }
 
     private Map<String, Object> applicationSummary(ApplicationEntity application) {
@@ -1493,6 +1687,28 @@ public class CamundaProcessAdapterService {
                 "uiPayload", toCamundaUiJson(payload),
                 "loadedAt", Instant.now().toString()
         );
+    }
+
+    private Map<String, Object> recruiterScheduleUiPayload(WeekScheduleResponse schedule) {
+        List<Map<String, Object>> items = schedule.getItems().stream()
+                .map(item -> {
+                    Map<String, Object> result = new LinkedHashMap<>();
+                    result.put("start_at", item.getStartAt());
+                    result.put("end_at", item.getEndAt());
+                    result.put("application_id", item.getApplicationId());
+                    result.put("candidate_email", item.getCandidateEmail());
+                    result.put("interview_status", item.getInterviewStatus());
+                    result.put("slot_status", item.getStatus());
+                    return result;
+                })
+                .toList();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("week_offset", schedule.getWeekOffset());
+        result.put("week_start", schedule.getWeekStart());
+        result.put("week_end", schedule.getWeekEnd());
+        result.put("total_items", items.size());
+        result.put("items", items);
+        return result;
     }
 
     private String toCamundaUiJson(Object payload) {

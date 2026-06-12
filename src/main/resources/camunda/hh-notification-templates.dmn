@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:camunda="http://camunda.org/schema/1.0/dmn"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             id="Definitions_hh_notification_templates"
+             name="HH notification templates"
+             namespace="http://itmo.ru/hhprocess/camunda/dmn">
+  <decision id="hhNotificationTemplates" name="HH notification template matrix" camunda:historyTimeToLive="30">
+    <decisionTable id="DecisionTable_hhNotificationTemplates" hitPolicy="FIRST">
+      <input id="Input_kind" label="notificationKind">
+        <inputExpression id="InputExpression_kind" typeRef="string">
+          <text>notificationKind</text>
+        </inputExpression>
+      </input>
+      <input id="Input_status" label="status">
+        <inputExpression id="InputExpression_status" typeRef="string">
+          <text>notificationStatus</text>
+        </inputExpression>
+      </input>
+      <input id="Input_recipient_role" label="recipientRole">
+        <inputExpression id="InputExpression_recipient_role" typeRef="string">
+          <text>recipientRole</text>
+        </inputExpression>
+      </input>
+      <output id="Output_template_code" label="kind|type|recipientRole|template" name="templateCode" typeRef="string" />
+      <rule id="Rule_screening_failed">
+        <inputEntry id="Rule_screening_failed_kind"><text>"SCREENING_FAILED"</text></inputEntry>
+        <inputEntry id="Rule_screening_failed_status"><text>"SCREENING_FAILED"</text></inputEntry>
+        <inputEntry id="Rule_screening_failed_role"><text>"CANDIDATE"</text></inputEntry>
+        <outputEntry id="Rule_screening_failed_code"><text>"SCREENING_FAILED|SCREENING_RESULT|CANDIDATE|Your application has been rejected"</text></outputEntry>
+      </rule>
+      <rule id="Rule_new_application">
+        <inputEntry id="Rule_new_application_kind"><text>"NEW_APPLICATION"</text></inputEntry>
+        <inputEntry id="Rule_new_application_status"><text>"ON_RECRUITER_REVIEW"</text></inputEntry>
+        <inputEntry id="Rule_new_application_role"><text>"RECRUITER"</text></inputEntry>
+        <outputEntry id="Rule_new_application_code"><text>"NEW_APPLICATION|NEW_APPLICATION|RECRUITER|New application received for vacancy: {vacancyTitle}"</text></outputEntry>
+      </rule>
+      <rule id="Rule_rejection">
+        <inputEntry id="Rule_rejection_kind"><text>"REJECTION"</text></inputEntry>
+        <inputEntry id="Rule_rejection_status"><text>"REJECTED_BY_RECRUITER"</text></inputEntry>
+        <inputEntry id="Rule_rejection_role"><text>"CANDIDATE"</text></inputEntry>
+        <outputEntry id="Rule_rejection_code"><text>"REJECTION|APPLICATION_REJECTED|CANDIDATE|Your application has been rejected"</text></outputEntry>
+      </rule>
+      <rule id="Rule_invitation">
+        <inputEntry id="Rule_invitation_kind"><text>"INVITATION"</text></inputEntry>
+        <inputEntry id="Rule_invitation_status"><text>"INVITED"</text></inputEntry>
+        <inputEntry id="Rule_invitation_role"><text>"CANDIDATE"</text></inputEntry>
+        <outputEntry id="Rule_invitation_code"><text>"INVITATION|INVITATION|CANDIDATE|You have been invited to an interview: {invitationMessage}"</text></outputEntry>
+      </rule>
+      <rule id="Rule_candidate_response">
+        <inputEntry id="Rule_candidate_response_kind"><text>"CANDIDATE_RESPONSE"</text></inputEntry>
+        <inputEntry id="Rule_candidate_response_status"><text>"INVITATION_RESPONDED"</text></inputEntry>
+        <inputEntry id="Rule_candidate_response_role"><text>"RECRUITER"</text></inputEntry>
+        <outputEntry id="Rule_candidate_response_code"><text>"CANDIDATE_RESPONSE|INVITATION_RESPONSE|RECRUITER|Candidate responded to interview invitation"</text></outputEntry>
+      </rule>
+      <rule id="Rule_timeout">
+        <inputEntry id="Rule_timeout_kind"><text>"TIMEOUT"</text></inputEntry>
+        <inputEntry id="Rule_timeout_status"><text>"CLOSED_BY_TIMEOUT"</text></inputEntry>
+        <inputEntry id="Rule_timeout_role"><text>"CANDIDATE,RECRUITER"</text></inputEntry>
+        <outputEntry id="Rule_timeout_code"><text>"TIMEOUT|INVITATION_TIMEOUT|CANDIDATE,RECRUITER|Interview invitation expired for vacancy: {vacancyTitle}"</text></outputEntry>
+      </rule>
+      <rule id="Rule_admin_reset">
+        <inputEntry id="Rule_admin_reset_kind"><text>"ADMIN_RESET"</text></inputEntry>
+        <inputEntry id="Rule_admin_reset_status"><text>"ON_RECRUITER_REVIEW"</text></inputEntry>
+        <inputEntry id="Rule_admin_reset_role"><text>"CANDIDATE,RECRUITER"</text></inputEntry>
+        <outputEntry id="Rule_admin_reset_code"><text>"ADMIN_RESET|INTERVIEW_CANCELLED|CANDIDATE,RECRUITER|Interview was reset by administrator: {resetReason}"</text></outputEntry>
+      </rule>
+      <rule id="Rule_recruiter_cancel">
+        <inputEntry id="Rule_recruiter_cancel_kind"><text>"RECRUITER_CANCEL"</text></inputEntry>
+        <inputEntry id="Rule_recruiter_cancel_status"><text>"ON_RECRUITER_REVIEW"</text></inputEntry>
+        <inputEntry id="Rule_recruiter_cancel_role"><text>"CANDIDATE"</text></inputEntry>
+        <outputEntry id="Rule_recruiter_cancel_code"><text>"RECRUITER_CANCEL|INTERVIEW_CANCELLED|CANDIDATE|Interview was cancelled: {cancelReason}"</text></outputEntry>
+      </rule>
+      <rule id="Rule_vacancy_closed">
+        <inputEntry id="Rule_vacancy_closed_kind"><text>"VACANCY_CLOSED"</text></inputEntry>
+        <inputEntry id="Rule_vacancy_closed_status"><text>"CLOSED"</text></inputEntry>
+        <inputEntry id="Rule_vacancy_closed_role"><text>"CANDIDATE"</text></inputEntry>
+        <outputEntry id="Rule_vacancy_closed_code"><text>"VACANCY_CLOSED|VACANCY_CLOSED|CANDIDATE|Vacancy was closed: {vacancyTitle}"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_hh_notification_templates">
+      <dmndi:DMNShape id="DMNShape_hhNotificationTemplates" dmnElementRef="hhNotificationTemplates">
+        <dc:Bounds x="160" y="80" width="180" height="80" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

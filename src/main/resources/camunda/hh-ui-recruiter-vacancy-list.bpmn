@@ -1,12 +1,58 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_hh_ui_recruiter_vacancy_list" targetNamespace="http://itmo.ru/hhprocess/camunda">
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_recruiter_vacancy_list" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+  <bpmn:collaboration id="Collaboration_hhUiRecruiterVacancyList" name="Pool: HH UI recruiter vacancy list">
+    <bpmn:participant id="Participant_hhUiRecruiterVacancyList" name="POOL: HH UI recruiter vacancy list" processRef="hhUiRecruiterVacancyList" />
+  </bpmn:collaboration>
   <bpmn:process id="hhUiRecruiterVacancyList" name="HH UI recruiter vacancy list" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId"/>
-    <bpmn:serviceTask id="LoadRecruiterVacancyList" name="Загрузить вакансии рекрутера" camunda:type="external" camunda:topic="ui-query"/>
-    <bpmn:userTask id="DisplayRecruiterVacancyList" name="Список вакансий рекрутера" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN"/>
-    <bpmn:endEvent id="End"/>
-    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadRecruiterVacancyList"/>
-    <bpmn:sequenceFlow id="F2" sourceRef="LoadRecruiterVacancyList" targetRef="DisplayRecruiterVacancyList"/>
-    <bpmn:sequenceFlow id="F3" sourceRef="DisplayRecruiterVacancyList" targetRef="End"/>
+    <bpmn:laneSet id="LaneSet_hhUiRecruiterVacancyList">
+      <bpmn:lane id="Lane_hhUiRecruiterVacancyList_RoleSystem" name="RECRUITER / ADMIN / SYSTEM">
+        <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>LoadRecruiterVacancyList</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>DisplayRecruiterVacancyList</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start" name="Запущен список вакансий рекрутера" camunda:initiator="starterUserId" />
+    <bpmn:serviceTask id="LoadRecruiterVacancyList" name="Загрузить вакансии рекрутера" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:userTask id="DisplayRecruiterVacancyList" name="Список вакансий рекрутера" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:endEvent id="End" name="Список вакансий рекрутера показан" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadRecruiterVacancyList" />
+    <bpmn:sequenceFlow id="F2" sourceRef="LoadRecruiterVacancyList" targetRef="DisplayRecruiterVacancyList" />
+    <bpmn:sequenceFlow id="F3" sourceRef="DisplayRecruiterVacancyList" targetRef="End" />
   </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_hhUiRecruiterVacancyList">
+    <bpmndi:BPMNPlane id="BPMNPlane_hhUiRecruiterVacancyList" bpmnElement="Collaboration_hhUiRecruiterVacancyList">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_hhUiRecruiterVacancyList" bpmnElement="Participant_hhUiRecruiterVacancyList" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="1545" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_hhUiRecruiterVacancyList_RoleSystem" bpmnElement="Lane_hhUiRecruiterVacancyList_RoleSystem" isHorizontal="true">
+        <dc:Bounds x="180" y="100" width="1425" height="160" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Start" bpmnElement="Start">
+        <dc:Bounds x="355" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="332" y="198" width="83" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_LoadRecruiterVacancyList" bpmnElement="LoadRecruiterVacancyList">
+        <dc:Bounds x="460" y="140" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_DisplayRecruiterVacancyList" bpmnElement="DisplayRecruiterVacancyList">
+        <dc:Bounds x="720" y="140" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_End" bpmnElement="End">
+        <dc:Bounds x="1047" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1022" y="198" width="87" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_F1" bpmnElement="F1">
+        <di:waypoint x="391" y="180.0" /><di:waypoint x="460" y="180.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_F2" bpmnElement="F2">
+        <di:waypoint x="630" y="180.0" /><di:waypoint x="720" y="180.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_F3" bpmnElement="F3">
+        <di:waypoint x="890" y="180.0" /><di:waypoint x="1047" y="180.0" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>

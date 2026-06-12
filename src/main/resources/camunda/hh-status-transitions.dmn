@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:camunda="http://camunda.org/schema/1.0/dmn"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             id="Definitions_hh_status_transitions"
+             name="HH status transitions"
+             namespace="http://itmo.ru/hhprocess/camunda/dmn">
+  <decision id="hhStatusTransitions" name="HH status transition matrix" camunda:historyTimeToLive="30">
+    <decisionTable id="DecisionTable_hhStatusTransitions" hitPolicy="FIRST">
+      <input id="Input_current_status" label="currentStatus">
+        <inputExpression id="InputExpression_current_status" typeRef="string">
+          <text>currentStatus</text>
+        </inputExpression>
+      </input>
+      <input id="Input_action" label="action">
+        <inputExpression id="InputExpression_action" typeRef="string">
+          <text>statusAction</text>
+        </inputExpression>
+      </input>
+      <input id="Input_requested_status" label="requestedStatus">
+        <inputExpression id="InputExpression_requested_status" typeRef="string">
+          <text>requestedStatus</text>
+        </inputExpression>
+      </input>
+      <output id="Output_allowed" label="allowed" name="allowed" typeRef="boolean" />
+      <output id="Output_next_status" label="nextStatus" name="nextStatus" typeRef="string" />
+      <rule id="Rule_invite_application">
+        <inputEntry id="Rule_invite_application_current"><text>"ON_RECRUITER_REVIEW"</text></inputEntry>
+        <inputEntry id="Rule_invite_application_action"><text>"INVITE_APPLICATION"</text></inputEntry>
+        <inputEntry id="Rule_invite_application_requested"><text>-</text></inputEntry>
+        <outputEntry id="Rule_invite_application_allowed"><text>true</text></outputEntry>
+        <outputEntry id="Rule_invite_application_next"><text>"INVITED"</text></outputEntry>
+      </rule>
+      <rule id="Rule_reject_from_review">
+        <inputEntry id="Rule_reject_from_review_current"><text>"ON_RECRUITER_REVIEW"</text></inputEntry>
+        <inputEntry id="Rule_reject_from_review_action"><text>"REJECT_APPLICATION"</text></inputEntry>
+        <inputEntry id="Rule_reject_from_review_requested"><text>-</text></inputEntry>
+        <outputEntry id="Rule_reject_from_review_allowed"><text>true</text></outputEntry>
+        <outputEntry id="Rule_reject_from_review_next"><text>"REJECTED_BY_RECRUITER"</text></outputEntry>
+      </rule>
+      <rule id="Rule_reject_from_invited">
+        <inputEntry id="Rule_reject_from_invited_current"><text>"INVITED","INVITATION_RESPONDED"</text></inputEntry>
+        <inputEntry id="Rule_reject_from_invited_action"><text>"REJECT_APPLICATION"</text></inputEntry>
+        <inputEntry id="Rule_reject_from_invited_requested"><text>-</text></inputEntry>
+        <outputEntry id="Rule_reject_from_invited_allowed"><text>true</text></outputEntry>
+        <outputEntry id="Rule_reject_from_invited_next"><text>"REJECTED_BY_RECRUITER"</text></outputEntry>
+      </rule>
+      <rule id="Rule_candidate_response">
+        <inputEntry id="Rule_candidate_response_current"><text>"INVITED"</text></inputEntry>
+        <inputEntry id="Rule_candidate_response_action"><text>"RESPOND_INVITATION"</text></inputEntry>
+        <inputEntry id="Rule_candidate_response_requested"><text>-</text></inputEntry>
+        <outputEntry id="Rule_candidate_response_allowed"><text>true</text></outputEntry>
+        <outputEntry id="Rule_candidate_response_next"><text>"INVITATION_RESPONDED"</text></outputEntry>
+      </rule>
+      <rule id="Rule_close_active_vacancy">
+        <inputEntry id="Rule_close_active_vacancy_current"><text>"ACTIVE"</text></inputEntry>
+        <inputEntry id="Rule_close_active_vacancy_action"><text>"CLOSE_VACANCY"</text></inputEntry>
+        <inputEntry id="Rule_close_active_vacancy_requested"><text>"CLOSED"</text></inputEntry>
+        <outputEntry id="Rule_close_active_vacancy_allowed"><text>true</text></outputEntry>
+        <outputEntry id="Rule_close_active_vacancy_next"><text>"CLOSED"</text></outputEntry>
+      </rule>
+      <rule id="Rule_update_active_to_closed">
+        <inputEntry id="Rule_update_active_to_closed_current"><text>"ACTIVE"</text></inputEntry>
+        <inputEntry id="Rule_update_active_to_closed_action"><text>"UPDATE_VACANCY_STATUS"</text></inputEntry>
+        <inputEntry id="Rule_update_active_to_closed_requested"><text>"CLOSED"</text></inputEntry>
+        <outputEntry id="Rule_update_active_to_closed_allowed"><text>true</text></outputEntry>
+        <outputEntry id="Rule_update_active_to_closed_next"><text>"CLOSED"</text></outputEntry>
+      </rule>
+      <rule id="Rule_update_closed_to_active">
+        <inputEntry id="Rule_update_closed_to_active_current"><text>"CLOSED"</text></inputEntry>
+        <inputEntry id="Rule_update_closed_to_active_action"><text>"UPDATE_VACANCY_STATUS"</text></inputEntry>
+        <inputEntry id="Rule_update_closed_to_active_requested"><text>"ACTIVE"</text></inputEntry>
+        <outputEntry id="Rule_update_closed_to_active_allowed"><text>true</text></outputEntry>
+        <outputEntry id="Rule_update_closed_to_active_next"><text>"ACTIVE"</text></outputEntry>
+      </rule>
+      <rule id="Rule_default_denied">
+        <inputEntry id="Rule_default_denied_current"><text>-</text></inputEntry>
+        <inputEntry id="Rule_default_denied_action"><text>-</text></inputEntry>
+        <inputEntry id="Rule_default_denied_requested"><text>-</text></inputEntry>
+        <outputEntry id="Rule_default_denied_allowed"><text>false</text></outputEntry>
+        <outputEntry id="Rule_default_denied_next"><text>""</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_hh_status_transitions">
+      <dmndi:DMNShape id="DMNShape_hhStatusTransitions" dmnElementRef="hhStatusTransitions">
+        <dc:Bounds x="160" y="80" width="180" height="80" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

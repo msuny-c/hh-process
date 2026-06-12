@@ -1,6 +1,13 @@
 # HH Process — сервис обработки откликов на вакансии
 
-Spring Boot сервис для обработки жизненного цикла откликов на вакансии: регистрации кандидатов, создания/статусов вакансий рекрутёром, принятия решений по заявкам, а также уведомлений (REST + WebSocket).
+Spring Boot + WildFly сервис для обработки жизненного цикла откликов на вакансии. Бизнес-процесс вынесен в standalone Camunda BPM: пользовательские действия демонстрируются через Camunda Tasklist/Forms, решения ролей и статусов вынесены в DMN, а Java-код работает как адаптер external tasks, task listeners, транзакций и интеграции с БД.
+
+Текущий демонстрационный контур:
+
+- `postgres` хранит данные приложения и Camunda в разных схемах;
+- `camunda` запускает BPMN/DMN, Tasklist, Cockpit и Forms;
+- `app` деплоится как `ROOT.war` в WildFly, синхронизирует пользователей/группы Camunda, назначает user tasks и обрабатывает external tasks;
+- валидация Camunda Forms выполняется server-side во внешнем Java-адаптере, затем возвращает пользователя на форму через BPMN error loop `FORM_VALIDATION_FAILED`.
 
 ## Конфигурация
 
@@ -14,20 +21,18 @@ POSTGRES_SCHEMA=public
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 
-JWT_SECRET=... (base64-строка)
-JWT_ACCESS_EXPIRATION (мс, по умолчанию 900000)
-JWT_REFRESH_EXPIRATION (мс, по умолчанию 604800000)
-
 WS_ALLOWED_ORIGINS=http://localhost:3000 (через запятую)
 ```
 
 Сервер слушает порт `8080`.
 
-## Авторизация (JWT)
+## Авторизация (HTTP Basic)
 
-Все защищенные endpoint’ы принимают заголовок:
+Все защищенные endpoint'ы используют HTTP Basic:
 
-`Authorization: Bearer <access_token>`
+```bash
+curl -u recruiter@example.com:password123 http://localhost:8080/api/v1/me
+```
 
 Роли определяют доступ к группам API:
 - `/api/v1/candidates/**` -> `CANDIDATE`
@@ -36,21 +41,23 @@ WS_ALLOWED_ORIGINS=http://localhost:3000 (через запятую)
 
 ## REST API
 
+REST API остаётся служебным уровнем приложения и используется автотестами, но основной демонстрационный путь лабораторной проходит через Camunda Tasklist и Camunda Forms. Для защиты см. `CAMUNDA_README.md` и `docs/CAMUNDA_TASKLIST_DEMO.md`.
+
+Camunda identity/users/groups/filters синхронизируются внешним `CamundaIdentityProviderService`, а активные user tasks назначаются владельцам через `CamundaTaskListenerAdapter`. Server-side ошибки форм проходят через `CamundaFormValidator` и BPMN loop `FORM_VALIDATION_FAILED -> исходная user task`; в переменные процесса попадают `formErrorMessage`, `formErrorField`, `formErrorFields`, `formErrorCode`, поэтому форма показывает понятную ошибку и проблемное поле. При старте приложения создаётся новый Camunda deployment из текущего WAR, чтобы Cockpit/Tasklist показывали актуальные BPMN/DMN.
+
 Базовый префикс: `/api/v1`
 
 ### Auth
 
 - `POST /api/v1/auth/register/candidate` (регистрация кандидата)
-- `POST /api/v1/auth/login` (выдача access/refresh токенов)
-- `POST /api/v1/auth/refresh` (обновление токена)
 - `GET /api/v1/me` (профиль текущего пользователя)
 
-Пример логина:
+Пример регистрации кандидата:
 
 ```bash
-curl -sS -X POST http://localhost:8080/api/v1/auth/login \
+curl -sS -X POST http://localhost:8080/api/v1/auth/register/candidate \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@example.com","password":"password123"}'
+  -d '{"email":"candidate@example.com","password":"password123","first_name":"Candidate","last_name":"Demo"}'
 ```
 
 ### Кандидат
@@ -69,7 +76,7 @@ curl -sS -X POST http://localhost:8080/api/v1/auth/login \
 
 `InvitationResponseRequest`:
 ```json
-{ "response_type": "INVITATION_ACCEPTED|INVITATION_REJECTED", "message": "..." }
+{ "response_type": "ACCEPT|DECLINE|OTHER", "message": "..." }
 ```
 
 ### Рекрутер
@@ -89,7 +96,7 @@ curl -sS -X POST http://localhost:8080/api/v1/auth/login \
 
 Тело `UpdateVacancyStatusRequest`:
 ```json
-{ "status": "OPEN|CLOSED|..."}
+{ "status": "ACTIVE|CLOSED" }
 ```
 
 Тело `RejectRequest`:
@@ -148,6 +155,13 @@ docker compose down -v
 docker compose up --build
 ```
 
+Быстрая проверка после старта:
+
+```bash
+curl -sS http://localhost:8080/actuator/health
+curl -sS http://localhost:8081/engine-rest/engine
+```
+
 В `docker-compose.yml` PostgreSQL уже запускается с `max_prepared_transactions=100`, поэтому JTA/Narayana работает локально из коробки.
 
 Начиная с миграции `V4__repair_seed_data.sql`, приложение при старте дополнительно восстанавливает базовые роли и сидовых пользователей:
@@ -180,7 +194,7 @@ Additional endpoints:
 
 ## Python API tests
 
-В каталоге `test/` лежат интеграционные и e2e-сценарии для REST API.
+В каталоге `test/` лежат интеграционные и e2e-сценарии для REST API, Camunda Tasklist/Form path, DMN runtime, BPMN visual contract и транзакционных сценариев.
 
 Основные команды:
 
@@ -192,10 +206,52 @@ python test/test_access_matrix.py
 python test/test_transaction_atomicity.py
 python test/test_business_rules.py
 python test/test_timeout_job_db_fixture.py
-python test/test_e2e_platform.py
+python test/test_camunda_model_coverage.py
+python test/test_camunda_visual_model_contract.py
+python test/test_camunda_decisions_runtime.py
+python test/test_camunda_tasklist_candidate_apply.py
+python test/test_camunda_smoke_flow.py
+python test/test_admin_interview_reset.py
+python test/test_camunda_integration.py
+python test/test_camunda_scenarios.py
+python test/test_camunda_e2e.py
 ```
 
-`test/test_e2e_platform.py` — сквозной e2e-сценарий: несколько кандидатов, несколько вакансий, приглашение на интервью, ответ на приглашение, отмена интервью, отклонение заявки, закрытие вакансии, проверка уведомлений, расписания рекрутера и атомарности составных транзакций.
+Полный Docker-прогон против поднятого compose-окружения:
+
+```bash
+docker build -t hh-process-tests:local test
+docker run --rm --network hh-process_default \
+  -e BASE_URL=http://app:8080 \
+  -e CAMUNDA_URL=http://camunda:8080/engine-rest \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_DB=postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_SCHEMA=public \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  hh-process-tests:local \
+  sh -c 'set -eu; for f in test/test_camunda_model_coverage.py test/test_camunda_visual_model_contract.py test/test_camunda_decisions_runtime.py test/test_camunda_tasklist_candidate_apply.py test/test.py test/test_camunda_smoke_flow.py test/test_composite_transactions.py test/test_security_validation.py test/test_access_matrix.py test/test_transaction_atomicity.py test/test_business_rules.py test/test_timeout_job_db_fixture.py test/test_admin_interview_reset.py test/test_camunda_integration.py test/test_camunda_scenarios.py test/test_camunda_e2e.py; do echo "===== $f"; python "$f"; done'
+```
+
+Java unit tests также можно запускать в контейнере:
+
+```bash
+docker run --rm --network hh-process_default \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  maven:3.9-eclipse-temurin-17 mvn test -B
+```
+
+Camunda-focused проверки:
+- `test/test_camunda_model_coverage.py` — BPMN/DMN coverage: DI, DMN decisions, messages, compensation, отсутствие fallback scheduler.
+- `test/test_camunda_visual_model_contract.py` — визуальный контракт BPMN: каждый файл имеет pool, lane, подписанные start/end, BPMNShape/BPMNEdge и открывается как диаграмма.
+- `test/test_camunda_decisions_runtime.py` — runtime evaluation DMN через Camunda REST.
+- `test/test_camunda_tasklist_candidate_apply.py` — кандидат создаёт отклик через Camunda Form/Tasklist path, не через REST apply endpoint.
+- `test/test_camunda_smoke_flow.py` — сквозной Camunda smoke: users/groups, instances, history activities, UI-процессы, variables и отсутствие incidents.
+- `test/test_admin_interview_reset.py`, `test/test_camunda_integration.py`, `test/test_camunda_scenarios.py`, `test/test_camunda_e2e.py` — полные runtime-сценарии Camunda, административный reset, deployed artifacts, authorizations, scheduler и e2e happy path.
 
 
 ## Локальный запуск через WildFly в Docker
@@ -219,17 +275,17 @@ docker compose down -v
 docker compose up --build
 ```
 
-Подробности см. в `README_WILDFLY_DOCKER.md`.
+Подробности по связке Camunda + WildFly см. в `CAMUNDA_README.md` и `HELIOS_SPLIT_DEPLOY.md`.
 
 
 ## WildFly / FreeBSD / Helios
 
-Docker Compose используется для локальной разработки. Для Helios / FreeBSD 14.4-STABLE добавлена бездокерная схема:
+Docker Compose используется для локальной разработки. Для Helios / FreeBSD добавлена split-схема:
 
 ```text
-README-HELIOS-FREEBSD.md
-infra/appctl.sh
-infra/helios/app.env.example
+HELIOS_SPLIT_DEPLOY.md
+infra/helios-split/camundactl.sh
+infra/helios-split/wildflyctl.sh
 scripts/release/make-helios-freebsd-bundle.sh
 ```
 
@@ -255,6 +311,8 @@ mvn clean package -DskipTests
 ```text
 CAMUNDA_README.md
 ```
+
+Для защиты лабораторной см. особенно разделы `13` и `14` в `CAMUNDA_README.md`: там собран пошаговый сценарий показа преподавателю, проверки ролей, DMN-матрицы прав, call activity уведомлений, транзакций/откатов с compensation/cancel events, Camunda scheduler, pool/lane layout BPMN и сноски на Java/BPMN-код.
 
 ## Helios split deployment
 

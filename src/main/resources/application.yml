@@ -30,7 +30,10 @@ server:
   port: ${SERVER_PORT:8080}
 
 springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_API_DOCS_ENABLED:false}
   swagger-ui:
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:false}
     path: /swagger-ui.html
 
 management:
@@ -85,6 +88,10 @@ app:
       async-response-timeout-ms: ${CAMUNDA_WORKER_ASYNC_RESPONSE_TIMEOUT_MS:2000}
       poll-interval-ms: ${CAMUNDA_WORKER_POLL_INTERVAL_MS:3000}
       initial-delay-ms: ${CAMUNDA_WORKER_INITIAL_DELAY_MS:10000}
+    task-listener:
+      enabled: ${CAMUNDA_TASK_LISTENER_ENABLED:true}
+      poll-interval-ms: ${CAMUNDA_TASK_LISTENER_POLL_INTERVAL_MS:5000}
+      initial-delay-ms: ${CAMUNDA_TASK_LISTENER_INITIAL_DELAY_MS:12000}
 
 
 logging:

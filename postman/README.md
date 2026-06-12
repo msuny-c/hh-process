@@ -1,29 +1,13 @@
-# Postman
+# Legacy REST collection
 
-В архиве:
-- `HH Process API - Basic Auth + Composite Transactions.postman_collection.json`
-- `HH Process Local.postman_environment.json`
+Эта папка оставлена только как архив старой REST-коллекции для ручной отладки служебного API.
 
-Как использовать:
-1. Импортируй оба файла в Postman.
-2. Выбери environment `HH Process Local`.
-3. Проверь логины/пароли под свою XML-конфигурацию.
-4. Запускай папки сверху вниз:
-   - `00 Auth & Context`
-   - `01 Recruiter Vacancies`
-   - `02 Candidate Applications`
-   - `03 Recruiter Applications & Interviews`
-   - `04 Schedule`
-   - `05 Notifications`
-   - `06 Admin Jobs`
-   - `07 Negative & Validation`
+Для защиты лабораторной её использовать не нужно: пользовательский сценарий перенесён в Camunda Tasklist и Camunda Forms, а проверка бизнес-правил выполняется через BPMN/DMN и автотесты.
 
-Что автоматизируется:
-- регистрация уникального кандидата
-- переключение между admin / recruiter / candidate
-- сохранение `vacancyId`, `applicationId`, `interviewId`, `notificationId`
+Актуальные инструкции:
 
-Замечания:
-- запросы используют HTTP Basic на уровне коллекции
-- регистрация кандидата выполняется без аутентификации
-- негативные сценарии рассчитаны на запуск после happy path
+- `CAMUNDA_README.md` — полный сценарий защиты, роли, Cockpit, Tasklist, DMN, транзакции и scheduler.
+- `docs/CAMUNDA_TASKLIST_DEMO.md` — короткий Tasklist-only сценарий.
+- `README.md` — Docker-запуск, полный список Python/Camunda тестов и команды для прогона тестов внутри Docker.
+- `test/test_camunda_visual_model_contract.py` — проверка, что все BPMN открываются как диаграммы с pool/lane и подписанными start/end.
+- `test/test_camunda_tasklist_candidate_apply.py` — проверка, что кандидат создаёт отклик через Camunda Form path.

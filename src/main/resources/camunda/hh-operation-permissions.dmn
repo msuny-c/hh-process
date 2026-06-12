@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:camunda="http://camunda.org/schema/1.0/dmn"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             id="Definitions_hh_operation_permissions"
+             name="HH operation permissions"
+             namespace="http://itmo.ru/hhprocess/camunda/dmn">
+  <decision id="hhOperationPermissions" name="HH operation permission matrix" camunda:historyTimeToLive="30">
+    <decisionTable id="DecisionTable_hhOperationPermissions" hitPolicy="FIRST">
+      <input id="Input_role" label="role">
+        <inputExpression id="InputExpression_role" typeRef="string">
+          <text>permissionRole</text>
+        </inputExpression>
+      </input>
+      <input id="Input_operation" label="operation">
+        <inputExpression id="InputExpression_operation" typeRef="string">
+          <text>permissionOperation</text>
+        </inputExpression>
+      </input>
+      <input id="Input_ownership" label="ownership">
+        <inputExpression id="InputExpression_ownership" typeRef="boolean">
+          <text>permissionOwnership</text>
+        </inputExpression>
+      </input>
+      <output id="Output_allowed" label="allowed" name="allowed" typeRef="boolean" />
+      <rule id="Rule_recruiter_create_vacancy">
+        <description>Recruiter owns the vacancy command and may create a vacancy.</description>
+        <inputEntry id="Rule_recruiter_create_vacancy_role"><text>"RECRUITER"</text></inputEntry>
+        <inputEntry id="Rule_recruiter_create_vacancy_operation"><text>"CREATE_VACANCY"</text></inputEntry>
+        <inputEntry id="Rule_recruiter_create_vacancy_ownership"><text>true</text></inputEntry>
+        <outputEntry id="Rule_recruiter_create_vacancy_allowed"><text>true</text></outputEntry>
+      </rule>
+      <rule id="Rule_recruiter_review_application">
+        <description>Recruiter may review applications for own vacancies.</description>
+        <inputEntry id="Rule_recruiter_review_application_role"><text>"RECRUITER"</text></inputEntry>
+        <inputEntry id="Rule_recruiter_review_application_operation"><text>"REVIEW_APPLICATION"</text></inputEntry>
+        <inputEntry id="Rule_recruiter_review_application_ownership"><text>true</text></inputEntry>
+        <outputEntry id="Rule_recruiter_review_application_allowed"><text>true</text></outputEntry>
+      </rule>
+      <rule id="Rule_candidate_respond_invitation">
+        <description>Candidate may respond only to own invitation.</description>
+        <inputEntry id="Rule_candidate_respond_invitation_role"><text>"CANDIDATE"</text></inputEntry>
+        <inputEntry id="Rule_candidate_respond_invitation_operation"><text>"RESPOND_INVITATION"</text></inputEntry>
+        <inputEntry id="Rule_candidate_respond_invitation_ownership"><text>true</text></inputEntry>
+        <outputEntry id="Rule_candidate_respond_invitation_allowed"><text>true</text></outputEntry>
+      </rule>
+      <rule id="Rule_admin_reset">
+        <description>Admin may reset interviews.</description>
+        <inputEntry id="Rule_admin_reset_role"><text>"ADMIN"</text></inputEntry>
+        <inputEntry id="Rule_admin_reset_operation"><text>"ADMIN_RESET"</text></inputEntry>
+        <inputEntry id="Rule_admin_reset_ownership"><text>true</text></inputEntry>
+        <outputEntry id="Rule_admin_reset_allowed"><text>true</text></outputEntry>
+      </rule>
+      <rule id="Rule_default_denied">
+        <description>Everything not explicitly allowed is denied.</description>
+        <inputEntry id="Rule_default_denied_role"><text>-</text></inputEntry>
+        <inputEntry id="Rule_default_denied_operation"><text>-</text></inputEntry>
+        <inputEntry id="Rule_default_denied_ownership"><text>-</text></inputEntry>
+        <outputEntry id="Rule_default_denied_allowed"><text>false</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_hh_operation_permissions">
+      <dmndi:DMNShape id="DMNShape_hhOperationPermissions" dmnElementRef="hhOperationPermissions">
+        <dc:Bounds x="160" y="80" width="180" height="80" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

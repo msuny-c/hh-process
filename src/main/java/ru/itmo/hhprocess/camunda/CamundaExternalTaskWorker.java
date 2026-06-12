@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 import ru.itmo.hhprocess.enums.ResponseType;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.service.TimeoutBatchProcessor;
-import ru.itmo.hhprocess.service.TimeoutService;
 
 import java.util.List;
 import java.util.Map;
@@ -34,13 +33,16 @@ public class CamundaExternalTaskWorker {
     private static final String TOPIC_ROLLBACK = "transaction-rollback";
     private static final String TOPIC_ADMIN_INTERVIEW_RESET = "admin-interview-reset";
     private static final String TOPIC_UI_QUERY = "ui-query";
+    private static final String TOPIC_PERMISSION_CHECK = "permission-check";
+    private static final String TOPIC_STATUS_TRANSITION = "status-transition";
+    private static final String TOPIC_NOTIFICATION_DECISION = "notification-decision";
+    private static final String TOPIC_NOTIFICATION_DISPATCH = "notification-dispatch";
     private static final String APPLICATION_TRANSACTION_FAILED = "APPLICATION_TX_FAILED";
     private static final String VACANCY_TRANSACTION_FAILED = "VACANCY_TX_FAILED";
     private static final String ADMIN_RESET_FAILED = "ADMIN_RESET_FAILED";
     private static final String FORM_VALIDATION_FAILED = "FORM_VALIDATION_FAILED";
 
     private final CamundaRestClient camundaRestClient;
-    private final TimeoutService timeoutService;
     private final TimeoutBatchProcessor timeoutBatchProcessor;
     private final CamundaProcessAdapterService adapterService;
 
@@ -52,7 +54,8 @@ public class CamundaExternalTaskWorker {
         List<Map<String, Object>> tasks = camundaRestClient.fetchAndLockExternalTasks(
                 List.of(TOPIC_AUTO_SCREEN, TOPIC_NOTIFY, TOPIC_APPLICATION_PERSISTENCE, TOPIC_APPLICATION_NOTIFICATION, TOPIC_APPLICATION_MESSAGE,
                         TOPIC_FORM_VALIDATION, TOPIC_TIMEOUT, TOPIC_VACANCY_CREATE, TOPIC_VACANCY_CLOSE,
-                        TOPIC_VACANCY_STATUS_UPDATE, TOPIC_INTERVIEW_CANCEL, TOPIC_ROLLBACK, TOPIC_ADMIN_INTERVIEW_RESET, TOPIC_UI_QUERY)
+                        TOPIC_VACANCY_STATUS_UPDATE, TOPIC_INTERVIEW_CANCEL, TOPIC_ROLLBACK, TOPIC_ADMIN_INTERVIEW_RESET, TOPIC_UI_QUERY,
+                        TOPIC_PERMISSION_CHECK, TOPIC_STATUS_TRANSITION, TOPIC_NOTIFICATION_DECISION, TOPIC_NOTIFICATION_DISPATCH)
         );
         for (Map<String, Object> task : tasks) {
             handleTask(task);
@@ -65,7 +68,7 @@ public class CamundaExternalTaskWorker {
         String activityId = String.valueOf(task.get("activityId"));
         try {
             Map<String, Object> variables = switch (topic) {
-                case TOPIC_AUTO_SCREEN -> adapterService.autoScreen(readRequiredUuid(task, "applicationId"));
+                case TOPIC_AUTO_SCREEN -> handleAutoScreenTask(activityId, task);
                 case TOPIC_NOTIFY, TOPIC_APPLICATION_PERSISTENCE, TOPIC_APPLICATION_NOTIFICATION, TOPIC_APPLICATION_MESSAGE ->
                         handleNotificationBackedTask(activityId, task);
                 case TOPIC_FORM_VALIDATION -> handleFormValidationTask(activityId, task);
@@ -77,6 +80,10 @@ public class CamundaExternalTaskWorker {
                 case TOPIC_ROLLBACK -> handleRollbackTask(activityId, task);
                 case TOPIC_ADMIN_INTERVIEW_RESET -> handleAdminInterviewResetTask(activityId, task);
                 case TOPIC_UI_QUERY -> handleUiQueryTask(activityId, task);
+                case TOPIC_PERMISSION_CHECK -> handlePermissionTask(activityId, task);
+                case TOPIC_STATUS_TRANSITION -> handleStatusTransitionTask(activityId, task);
+                case TOPIC_NOTIFICATION_DECISION -> handleNotificationDecisionTask(task);
+                case TOPIC_NOTIFICATION_DISPATCH -> handleNotificationDispatchTask(task);
                 default -> Map.of("ignored", true, "topic", topic);
             };
             camundaRestClient.completeExternalTask(taskId, variables);
@@ -94,6 +101,18 @@ public class CamundaExternalTaskWorker {
             }
             camundaRestClient.failExternalTask(taskId, e.getMessage(), stackTraceToString(e));
         }
+    }
+
+    private Map<String, Object> handleAutoScreenTask(String activityId, Map<String, Object> task) {
+        UUID applicationId = readRequiredUuid(task, "applicationId");
+        return switch (activityId) {
+            case "AutoScreenApplication" -> adapterService.prepareAutoScreen(applicationId);
+            case "SaveAutoScreenDecision" -> adapterService.saveAutoScreenDecision(
+                    applicationId,
+                    booleanValue(task, "screeningPassed"),
+                    integerValue(task, "screeningScore"));
+            default -> adapterService.prepareAutoScreen(applicationId);
+        };
     }
 
     private Map<String, Object> handleFormValidationTask(String activityId, Map<String, Object> task) {
@@ -247,8 +266,7 @@ public class CamundaExternalTaskWorker {
                         "timeoutBatchIterationCompleted", true);
             }
         }
-        int closedCount = timeoutService.runCloseExpired();
-        return Map.of("closedCount", closedCount, "timeoutScanCompleted", true);
+        return Map.of("timeoutTaskIgnored", true, "activityId", activityId);
     }
 
     private Map<String, Object> handleAdminInterviewResetTask(String activityId, Map<String, Object> task) {
@@ -354,6 +372,75 @@ public class CamundaExternalTaskWorker {
         };
     }
 
+    private Map<String, Object> handlePermissionTask(String activityId, Map<String, Object> task) {
+        return switch (activityId) {
+            case "ResolveCreateVacancyPermission" ->
+                    adapterService.resolveCreateVacancyPermission(
+                            stringValue(task, "starterUserId"),
+                            readUuid(task, "recruiterUserId"));
+            case "ResolveRecruiterDecisionPermission" ->
+                    adapterService.resolveRecruiterDecisionPermission(
+                            stringValue(task, "starterUserId"),
+                            readUuid(task, "applicationId"));
+            case "ResolveCandidateResponsePermission" ->
+                    adapterService.resolveCandidateResponsePermission(
+                            stringValue(task, "starterUserId"),
+                            readUuid(task, "applicationId"));
+            case "ResolveAdminResetPermission" ->
+                    adapterService.resolveAdminResetPermission(
+                            stringValue(task, "starterUserId"),
+                            readUuid(task, "adminUserId"));
+            default -> adapterService.resolveOperationPermission("SYSTEM", "UNKNOWN", false);
+        };
+    }
+
+    private Map<String, Object> handleStatusTransitionTask(String activityId, Map<String, Object> task) {
+        return switch (activityId) {
+            case "PrepareRecruiterDecisionTransition" ->
+                    adapterService.prepareRecruiterDecisionTransition(
+                            readRequiredUuid(task, "applicationId"),
+                            stringValue(task, "decision"));
+            case "PrepareCandidateResponseTransition" ->
+                    adapterService.prepareCandidateResponseTransition(
+                            readRequiredUuid(task, "applicationId"),
+                            stringValue(task, "responseType"));
+            case "PrepareCloseVacancyTransition" ->
+                    adapterService.prepareCloseVacancyTransition(readRequiredUuid(task, "vacancyId"));
+            case "PrepareVacancyStatusTransition" ->
+                    adapterService.prepareVacancyStatusTransition(
+                            readRequiredUuid(task, "vacancyId"),
+                            stringValue(task, "requestedStatus"));
+            default -> adapterService.prepareStatusTransition("UNKNOWN", "UNKNOWN", "");
+        };
+    }
+
+    private Map<String, Object> handleNotificationDecisionTask(Map<String, Object> task) {
+        return adapterService.prepareNotificationDecision(
+                stringValue(task, "notificationKind"),
+                readUuid(task, "applicationId"),
+                readUuid(task, "vacancyId"),
+                stringValue(task, "recipientRole")
+        );
+    }
+
+    private Map<String, Object> handleNotificationDispatchTask(Map<String, Object> task) {
+        String notificationKind = stringValue(task, "notificationKind");
+        UUID applicationId = readUuid(task, "applicationId");
+        if (applicationId == null) {
+            applicationId = readUuid(task, "expiredApplicationId");
+        }
+        return adapterService.dispatchNotification(
+                notificationKind,
+                applicationId,
+                readUuid(task, "vacancyId"),
+                stringValue(task, "invitationMessage"),
+                stringValue(task, "closeReason"),
+                stringValue(task, "cancelReason"),
+                stringValue(task, "resetReason"),
+                stringValue(task, "notificationTemplateCode")
+        );
+    }
+
     private Map<String, Object> handleRollbackTask(String activityId, Map<String, Object> task) {
         return switch (activityId) {
             case "RollbackApplicationTransaction" -> adapterService.rollbackApplicationTransaction(
@@ -374,7 +461,10 @@ public class CamundaExternalTaskWorker {
         if (applicationId != null) {
             variables.put("applicationId", applicationId);
         }
+        String fieldName = e.getFieldName() == null ? "" : e.getFieldName();
         variables.put("formErrorMessage", e.getMessage() == null ? "Invalid form data" : e.getMessage());
+        variables.put("formErrorField", fieldName);
+        variables.put("formErrorFields", fieldName);
         variables.put("formErrorCode", FORM_VALIDATION_FAILED);
         return camundaRestClient.throwBpmnErrorExternalTask(
                 taskId, FORM_VALIDATION_FAILED, e.getMessage(), variables);
@@ -442,6 +532,22 @@ public class CamundaExternalTaskWorker {
     private String stringValue(Map<String, Object> task, String name) {
         Object value = readValue(task, name);
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private boolean booleanValue(Map<String, Object> task, String name) {
+        Object value = readValue(task, name);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    private int integerValue(Map<String, Object> task, String name) {
+        Object value = readValue(task, name);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.parseInt(String.valueOf(value));
     }
 
     private static String stackTraceToString(Exception e) {

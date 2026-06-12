@@ -16,7 +16,7 @@ ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'password123')
 RECRUITER_EMAIL = os.getenv('RECRUITER_EMAIL', 'recruiter@example.com')
 RECRUITER_PASSWORD = os.getenv('RECRUITER_PASSWORD', 'password123')
 CANDIDATE_PASSWORD = os.getenv('CANDIDATE_PASSWORD', 'password123')
-REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '20'))
+REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '90'))
 
 class CheckError(RuntimeError):
     pass
@@ -127,7 +127,24 @@ def reject(api: API, recruiter: SessionCtx, app_id: str) -> Dict[str, Any]:
     return api.json('POST', f'/api/v1/recruiters/applications/{app_id}/reject', auth=recruiter.auth, expected=[200], payload={'comment': 'No fit'})
 
 def respond(api: API, candidate: SessionCtx, app_id: str) -> Dict[str, Any]:
-    return api.json('POST', f'/api/v1/candidates/applications/{app_id}/invitation-response', auth=candidate.auth, expected=[200], payload={'response_type': 'ACCEPT', 'message': 'Ok'})
+    payload = {'response_type': 'ACCEPT', 'message': 'Ok'}
+    last_response = None
+    for _ in range(24):
+        resp = api.request(
+            'POST',
+            f'/api/v1/candidates/applications/{app_id}/invitation-response',
+            auth=candidate.auth,
+            expected=[200, 409],
+            data=json.dumps(payload),
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        last_response = resp
+        if 'Camunda candidate response task is not active' in resp.text:
+            time.sleep(0.5)
+            continue
+        break
+    raise CheckError(f'Response failed: {last_response.status_code} {last_response.text}')
 
 def notifications(api: API, ctx: SessionCtx) -> List[Dict[str, Any]]:
     return api.json('GET', '/api/v1/notifications', auth=ctx.auth, expected=[200])

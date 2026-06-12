@@ -272,13 +272,20 @@ def reject_application(api: API, recruiter: SessionCtx, application_id: str, com
 
 
 def respond_to_invitation(api: API, candidate: SessionCtx, application_id: str, response_type: str = 'ACCEPT', message: str = 'Ok') -> requests.Response:
-    return api.request(
-        'POST',
-        f'/api/v1/candidates/applications/{application_id}/invitation-response',
-        auth=candidate.auth,
-        expected=[200, 409, 403],
-        payload={'response_type': response_type, 'message': message},
-    )
+    last_response: Optional[requests.Response] = None
+    for _ in range(24):
+        resp = api.request(
+            'POST',
+            f'/api/v1/candidates/applications/{application_id}/invitation-response',
+            auth=candidate.auth,
+            expected=[200, 409, 403],
+            payload={'response_type': response_type, 'message': message},
+        )
+        if resp.status_code != 409 or 'Camunda candidate response task is not active' not in resp.text:
+            return resp
+        last_response = resp
+        time.sleep(0.5)
+    return last_response
 
 
 def cancel_interview(api: API, recruiter: SessionCtx, interview_id: str, reason: str = 'Need to reschedule') -> Dict[str, Any]:

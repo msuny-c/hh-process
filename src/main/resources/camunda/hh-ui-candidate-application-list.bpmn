@@ -1,12 +1,51 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_hh_ui_candidate_application_list" targetNamespace="http://itmo.ru/hhprocess/camunda">
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_candidate_application_list" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+  <bpmn:collaboration id="Collaboration_hhUiCandidateApplicationList" name="Pool: HH UI candidate application list">
+    <bpmn:participant id="Participant_hhUiCandidateApplicationList" name="POOL: HH UI candidate application list" processRef="hhUiCandidateApplicationList" />
+  </bpmn:collaboration>
   <bpmn:process id="hhUiCandidateApplicationList" name="HH UI candidate application list" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId"/>
-    <bpmn:serviceTask id="LoadCandidateApplicationList" name="Загрузить отклики кандидата" camunda:type="external" camunda:topic="ui-query"/>
-    <bpmn:userTask id="DisplayCandidateApplicationList" name="Список откликов кандидата" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE,ADMIN"/>
-    <bpmn:endEvent id="End"/>
-    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadCandidateApplicationList"/>
-    <bpmn:sequenceFlow id="F2" sourceRef="LoadCandidateApplicationList" targetRef="DisplayCandidateApplicationList"/>
-    <bpmn:sequenceFlow id="F3" sourceRef="DisplayCandidateApplicationList" targetRef="End"/>
+    <bpmn:laneSet id="LaneSet_hhUiCandidateApplicationList">
+      <bpmn:lane id="Lane_hhUiCandidateApplicationList_RoleSystem" name="CANDIDATE / ADMIN / SYSTEM">
+        <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>LoadCandidateApplicationList</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>DisplayCandidateApplicationList</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Запущен список откликов кандидата" />
+    <bpmn:serviceTask id="LoadCandidateApplicationList" name="Загрузить отклики кандидата" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:userTask id="DisplayCandidateApplicationList" name="Список откликов кандидата" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE,ADMIN" />
+    <bpmn:endEvent id="End" name="Список откликов кандидата показан" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadCandidateApplicationList" />
+    <bpmn:sequenceFlow id="F2" sourceRef="LoadCandidateApplicationList" targetRef="DisplayCandidateApplicationList" />
+    <bpmn:sequenceFlow id="F3" sourceRef="DisplayCandidateApplicationList" targetRef="End" />
   </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_hhUiCandidateApplicationList">
+    <bpmndi:BPMNPlane id="BPMNPlane_hhUiCandidateApplicationList" bpmnElement="Collaboration_hhUiCandidateApplicationList">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_hhUiCandidateApplicationList" bpmnElement="Participant_hhUiCandidateApplicationList" isHorizontal="true">
+        <dc:Bounds x="60" y="20" width="1316" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_hhUiCandidateApplicationList_RoleSystem" bpmnElement="Lane_hhUiCandidateApplicationList_RoleSystem" isHorizontal="true">
+        <dc:Bounds x="160" y="40" width="1196" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Start" bpmnElement="Start">
+        <dc:Bounds x="200" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_End" bpmnElement="End">
+        <dc:Bounds x="920" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_LoadCandidateApplicationList" bpmnElement="LoadCandidateApplicationList">
+        <dc:Bounds x="439" y="80" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_DisplayCandidateApplicationList" bpmnElement="DisplayCandidateApplicationList">
+        <dc:Bounds x="681" y="80" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_F1" bpmnElement="F1">
+        <di:waypoint x="236" y="120.0" /><di:waypoint x="439" y="120.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_F2" bpmnElement="F2">
+        <di:waypoint x="609" y="120.0" /><di:waypoint x="681" y="120.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_F3" bpmnElement="F3">
+        <di:waypoint x="851" y="120.0" /><di:waypoint x="920" y="120.0" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>

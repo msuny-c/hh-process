@@ -1,21 +1,162 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_hh_vacancy_status_update" targetNamespace="http://itmo.ru/hhprocess/camunda">
-  <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED"/>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_hh_vacancy_status_update" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+  <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
+  <bpmn:collaboration id="Collaboration_hhVacancyStatusUpdateProcess" name="Pool: HH vacancy status update">
+    <bpmn:participant id="Participant_hhVacancyStatusUpdateProcess" name="POOL: HH vacancy status update" processRef="hhVacancyStatusUpdateProcess" />
+  </bpmn:collaboration>
   <bpmn:process id="hhVacancyStatusUpdateProcess" name="HH vacancy status update" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
-    <bpmn:startEvent id="VacancyStatusUpdateStart" name="Запрошено изменение статуса" camunda:initiator="starterUserId"/>
-    <bpmn:userTask id="UpdateVacancyStatusTask" name="Изменить статус вакансии" camunda:formRef="vacancy-status-update-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER"/>
-    <bpmn:serviceTask id="ValidateVacancyStatusUpdate" name="Проверить изменение статуса" camunda:type="external" camunda:topic="vacancy-status-update"/>
+    <bpmn:laneSet id="LaneSet_hhVacancyStatusUpdateProcess">
+      <bpmn:lane id="Lane_hhVacancyStatusUpdateProcess_RoleSystem" name="RECRUITER / ADMIN / SYSTEM">
+        <bpmn:flowNodeRef>VacancyStatusUpdateStart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>PrepareVacancyStatusTransition</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EvaluateVacancyStatusTransition</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>VacancyStatusTransitionGateway</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ApplyVacancyStatusUpdate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>VacancyStatusResultTask</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>VacancyStatusUpdateEnd</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>VacancyStatusTransitionDenied</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>UpdateVacancyStatusTask</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ValidateVacancyStatusUpdate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>VacancyStatusValidationError</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="VacancyStatusUpdateStart" name="Запрошено изменение статуса" camunda:initiator="starterUserId" />
+    <bpmn:serviceTask id="PrepareVacancyStatusTransition" name="SYSTEM: подготовить DMN currentStatus + UPDATE_VACANCY_STATUS" camunda:type="external" camunda:topic="status-transition" />
+    <bpmn:businessRuleTask id="EvaluateVacancyStatusTransition" name="DMN: currentStatus + action -&#62; allowed/nextStatus" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleResult" />
+    <bpmn:exclusiveGateway id="VacancyStatusTransitionGateway" name="Переход статуса вакансии разрешён?" />
+    <bpmn:serviceTask id="ApplyVacancyStatusUpdate" name="Сохранить статус вакансии" camunda:type="external" camunda:topic="vacancy-status-update" />
+    <bpmn:userTask id="VacancyStatusResultTask" name="Показать результат изменения статуса" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:endEvent id="VacancyStatusUpdateEnd" name="Статус обновлён" />
+    <bpmn:endEvent id="VacancyStatusTransitionDenied" name="DMN запретила переход статуса" />
+    <bpmn:userTask id="UpdateVacancyStatusTask" name="Изменить статус вакансии" camunda:formRef="vacancy-status-update-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:serviceTask id="ValidateVacancyStatusUpdate" name="Проверить форму и владельца вакансии" camunda:type="external" camunda:topic="vacancy-status-update" />
     <bpmn:boundaryEvent id="VacancyStatusValidationError" attachedToRef="ValidateVacancyStatusUpdate">
-      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed"/>
+      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="ApplyVacancyStatusUpdate" name="Сохранить статус вакансии" camunda:type="external" camunda:topic="vacancy-status-update"/>
-    <bpmn:userTask id="VacancyStatusResultTask" name="Показать результат изменения статуса" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN"/>
-    <bpmn:endEvent id="VacancyStatusUpdateEnd" name="Статус обновлён"/>
-    <bpmn:sequenceFlow id="VS1" sourceRef="VacancyStatusUpdateStart" targetRef="UpdateVacancyStatusTask"/>
-    <bpmn:sequenceFlow id="VS2" sourceRef="UpdateVacancyStatusTask" targetRef="ValidateVacancyStatusUpdate"/>
-    <bpmn:sequenceFlow id="VS2e" sourceRef="VacancyStatusValidationError" targetRef="UpdateVacancyStatusTask"/>
-    <bpmn:sequenceFlow id="VS3" sourceRef="ValidateVacancyStatusUpdate" targetRef="ApplyVacancyStatusUpdate"/>
-    <bpmn:sequenceFlow id="VS4" sourceRef="ApplyVacancyStatusUpdate" targetRef="VacancyStatusResultTask"/>
-    <bpmn:sequenceFlow id="VS5" sourceRef="VacancyStatusResultTask" targetRef="VacancyStatusUpdateEnd"/>
+    <bpmn:sequenceFlow id="VS1" sourceRef="VacancyStatusUpdateStart" targetRef="UpdateVacancyStatusTask" />
+    <bpmn:sequenceFlow id="VS3" sourceRef="ValidateVacancyStatusUpdate" targetRef="PrepareVacancyStatusTransition" />
+    <bpmn:sequenceFlow id="VS4" name="контекст статуса подготовлен" sourceRef="PrepareVacancyStatusTransition" targetRef="EvaluateVacancyStatusTransition" />
+    <bpmn:sequenceFlow id="VS5" name="DMN вернула allowed/nextStatus" sourceRef="EvaluateVacancyStatusTransition" targetRef="VacancyStatusTransitionGateway" />
+    <bpmn:sequenceFlow id="VS6" name="разрешено DMN" sourceRef="VacancyStatusTransitionGateway" targetRef="ApplyVacancyStatusUpdate">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="VS7" name="запрещено DMN" sourceRef="VacancyStatusTransitionGateway" targetRef="VacancyStatusTransitionDenied">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed != true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="VS8" sourceRef="ApplyVacancyStatusUpdate" targetRef="VacancyStatusResultTask" />
+    <bpmn:sequenceFlow id="VS9" sourceRef="VacancyStatusResultTask" targetRef="VacancyStatusUpdateEnd" />
+    <bpmn:sequenceFlow id="VS2e" sourceRef="VacancyStatusValidationError" targetRef="UpdateVacancyStatusTask" />
+    <bpmn:sequenceFlow id="VS2" sourceRef="UpdateVacancyStatusTask" targetRef="ValidateVacancyStatusUpdate" />
   </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_hhVacancyStatusUpdateProcess">
+    <bpmndi:BPMNPlane id="BPMNPlane_hhVacancyStatusUpdateProcess" bpmnElement="Collaboration_hhVacancyStatusUpdateProcess">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_hhVacancyStatusUpdateProcess" bpmnElement="Participant_hhVacancyStatusUpdateProcess" isHorizontal="true">
+        <dc:Bounds x="160" y="80" width="2488" height="376" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_hhVacancyStatusUpdateProcess_RoleSystem" bpmnElement="Lane_hhVacancyStatusUpdateProcess_RoleSystem" isHorizontal="true">
+        <dc:Bounds x="260" y="100" width="2368" height="336" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_VacancyStatusUpdateStart" bpmnElement="VacancyStatusUpdateStart">
+        <dc:Bounds x="300" y="232" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="289" y="268" width="59" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_PrepareVacancyStatusTransition" bpmnElement="PrepareVacancyStatusTransition">
+        <dc:Bounds x="950" y="140" width="220" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_EvaluateVacancyStatusTransition" bpmnElement="EvaluateVacancyStatusTransition">
+        <dc:Bounds x="950" y="310" width="220" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_VacancyStatusTransitionGateway" bpmnElement="VacancyStatusTransitionGateway" isMarkerVisible="true">
+        <dc:Bounds x="1405" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1465" y="330" width="86" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ApplyVacancyStatusUpdate" bpmnElement="ApplyVacancyStatusUpdate">
+        <dc:Bounds x="1660" y="180" width="190" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_VacancyStatusResultTask" bpmnElement="VacancyStatusResultTask">
+        <dc:Bounds x="1920" y="180" width="190" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_VacancyStatusUpdateEnd" bpmnElement="VacancyStatusUpdateEnd">
+        <dc:Bounds x="2192" y="202" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2167" y="238" width="87" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_VacancyStatusTransitionDenied" bpmnElement="VacancyStatusTransitionDenied">
+        <dc:Bounds x="1667" y="360" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1643" y="396" width="84" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_UpdateVacancyStatusTask" bpmnElement="UpdateVacancyStatusTask">
+        <dc:Bounds x="405" y="210" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ValidateVacancyStatusUpdate" bpmnElement="ValidateVacancyStatusUpdate">
+        <dc:Bounds x="700" y="210" width="190" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_VacancyStatusValidationError" bpmnElement="VacancyStatusValidationError">
+        <dc:Bounds x="850" y="272" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS1" bpmnElement="VS1">
+        <di:waypoint x="336" y="250" />
+        <di:waypoint x="405" y="250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS2" bpmnElement="VS2">
+        <di:waypoint x="575" y="250" />
+        <di:waypoint x="700" y="250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS2e" bpmnElement="VS2e">
+        <di:waypoint x="868" y="308" />
+        <di:waypoint x="868" y="350" />
+        <di:waypoint x="490" y="350" />
+        <di:waypoint x="490" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS3" bpmnElement="VS3">
+        <di:waypoint x="890" y="250" />
+        <di:waypoint x="920" y="250" />
+        <di:waypoint x="920" y="180" />
+        <di:waypoint x="950" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS4" bpmnElement="VS4">
+        <di:waypoint x="1060" y="220" />
+        <di:waypoint x="1060" y="310" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1028" y="251" width="86" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS5" bpmnElement="VS5">
+        <di:waypoint x="1170" y="350" />
+        <di:waypoint x="1405" y="350" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1244" y="325" width="87" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS6" bpmnElement="VS6">
+        <di:waypoint x="1455" y="340" />
+        <di:waypoint x="1660" y="258" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1369" y="265" width="85" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS7" bpmnElement="VS7">
+        <di:waypoint x="1455" y="352.7" />
+        <di:waypoint x="1667" y="376" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1444" y="410" width="85" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS8" bpmnElement="VS8">
+        <di:waypoint x="1850" y="220" />
+        <di:waypoint x="1920" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS9" bpmnElement="VS9">
+        <di:waypoint x="2110" y="220" />
+        <di:waypoint x="2192" y="220" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>

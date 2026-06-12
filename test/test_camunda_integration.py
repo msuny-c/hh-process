@@ -112,6 +112,7 @@ def main() -> int:
         'hhAdminInterviewResetProcess': 'ADMIN',
         'hhVacancyStatusUpdateProcess': 'RECRUITER,ADMIN',
         'hhRecruiterInterviewCancelProcess': 'RECRUITER,ADMIN',
+        'hhNotificationProcess': '',
         'hhUiCandidateVacancyList': 'CANDIDATE,ADMIN',
         'hhUiCandidateApplicationList': 'CANDIDATE,ADMIN',
         'hhUiCandidateApplicationView': 'CANDIDATE,ADMIN',
@@ -134,6 +135,9 @@ def main() -> int:
 
     for key, expected_groups in required_processes.items():
         xml = process_xml(key)
+        if not expected_groups:
+            print(f'OK BPMN reusable process deployed: {key}')
+            continue
         expected = f'camunda:candidateStarterGroups="{expected_groups}"'
         if expected not in xml:
             print(f'Process {key} is missing starter groups in BPMN XML: {expected}')
@@ -145,6 +149,23 @@ def main() -> int:
         print('Deprecated notification-send topic is still present in executable application BPMN')
         return 1
     print('OK executable application BPMN uses split notification/message topics')
+
+    required_decisions = {
+        'hhOperationPermissions',
+        'hhAutoScreening',
+        'hhStatusTransitions',
+        'hhNotificationTemplates',
+    }
+    for key in required_decisions:
+        resp = get(f'/decision-definition?key={quote(key, safe="")}&latestVersion=true')
+        if resp.status_code != 200 or not resp.json():
+            print(f'Camunda decision definition is missing: {key}')
+            return 1
+        decision = resp.json()[0]
+        if decision.get('historyTimeToLive') != 30:
+            print(f'Camunda decision {key} must have historyTimeToLive=30: {decision}')
+            return 1
+        print(f'OK Camunda decision definition deployed: {key}')
 
     removed_demo_processes = ['invoice', 'ReviewInvoice']
     for key in removed_demo_processes:

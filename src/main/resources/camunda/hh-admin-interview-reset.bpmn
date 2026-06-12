@@ -1,186 +1,343 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_v3" targetNamespace="http://itmo.ru/hhprocess/camunda">
-  <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED"/>
-  <bpmn:error id="Error_AdminResetFailed" name="ADMIN_RESET_FAILED" errorCode="ADMIN_RESET_FAILED"/>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_hh_v3" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+  <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
+  <bpmn:error id="Error_AdminResetFailed" name="ADMIN_RESET_FAILED" errorCode="ADMIN_RESET_FAILED" />
+  <bpmn:collaboration id="Collaboration_hhAdminInterviewResetProcess" name="Pool: HH admin interview reset with roles">
+    <bpmn:participant id="Participant_hhAdminInterviewResetProcess" name="POOL: HH admin interview reset with roles" processRef="hhAdminInterviewResetProcess" />
+  </bpmn:collaboration>
   <bpmn:process id="hhAdminInterviewResetProcess" name="HH admin interview reset with roles" isExecutable="true" camunda:candidateStarterGroups="ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_AdminReset">
+      <bpmn:lane id="Lane_System_A" name="SYSTEM">
+        <bpmn:flowNodeRef>ValidateAdminResetForm</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>NotifyAdminResetParticipants</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>RollbackAdminReset</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EvaluateAdminResetPermission</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>AdminResetPermissionGateway</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>AdminResetPermissionDenied</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Transaction_AdminInterviewReset</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Compensate_Transaction_AdminInterviewReset_Boundary</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Cancel_Transaction_AdminInterviewReset</bpmn:flowNodeRef>
+      </bpmn:lane>
       <bpmn:lane id="Lane_Admin_A" name="ADMIN">
         <bpmn:flowNodeRef>AdminResetStart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ResolveAdminResetPermission</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>AdminResetApprovalTask</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>AdminResetFormError</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>AdminResetErrorBoundary</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>AdminResetEnd</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>AdminResetRollbackEnd</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>AdminResetResultTask</bpmn:flowNodeRef>
-      </bpmn:lane>
-      <bpmn:lane id="Lane_System_A" name="SYSTEM">
-        <bpmn:flowNodeRef>ValidateAdminResetForm</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Transaction_AdminInterviewReset</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>NotifyAdminResetParticipants</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>RollbackAdminReset</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>AdminResetErrorBoundary</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>AdminResetFormError</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="AdminResetStart" name="Админ запросил сброс интервью"/>
-    <bpmn:userTask id="AdminResetApprovalTask" name="Подтвердить сброс интервью" camunda:formRef="reset-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN"/>
-    <bpmn:serviceTask id="ValidateAdminResetForm" name="Проверить форму админского сброса" camunda:type="external" camunda:topic="admin-interview-reset"/>
-    <bpmn:boundaryEvent id="AdminResetFormError" attachedToRef="ValidateAdminResetForm">
-      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed"/>
-    </bpmn:boundaryEvent>
+    <bpmn:startEvent id="AdminResetStart" name="Админ запросил сброс интервью" />
+    <bpmn:serviceTask id="ValidateAdminResetForm" name="Проверить форму админского сброса" camunda:type="external" camunda:topic="admin-interview-reset" />
+    <bpmn:serviceTask id="ResolveAdminResetPermission" name="SYSTEM: подготовить DMN-контекст ADMIN_RESET" camunda:type="external" camunda:topic="permission-check" />
+    <bpmn:userTask id="AdminResetApprovalTask" name="Подтвердить сброс интервью" camunda:formRef="reset-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
     <bpmn:transaction id="Transaction_AdminInterviewReset" name="TX: административный сброс интервью">
-      <bpmn:startEvent id="Transaction_AdminInterviewReset_Start" name="Начать транзакционный блок"/>
-      <bpmn:serviceTask id="ValidateInterviewCanBeReset" name="Проверить возможность сброса интервью" camunda:type="external" camunda:topic="admin-interview-reset"/>
-      <bpmn:serviceTask id="CancelInterviewByAdmin" name="Отменить интервью" camunda:type="external" camunda:topic="admin-interview-reset"/>
-      <bpmn:serviceTask id="ReleaseAdminResetSlot" name="Освободить слот интервью" camunda:type="external" camunda:topic="admin-interview-reset"/>
-      <bpmn:serviceTask id="ReturnApplicationToReview" name="Вернуть отклик на рассмотрение" camunda:type="external" camunda:topic="admin-interview-reset"/>
-      <bpmn:serviceTask id="RecordAdminResetHistory" name="Записать историю админского сброса" camunda:type="external" camunda:topic="admin-interview-reset"/>
-      <bpmn:endEvent id="Transaction_AdminInterviewReset_End" name="Завершить транзакционный блок"/>
-      <bpmn:sequenceFlow id="Transaction_AdminInterviewReset_SF_Start" sourceRef="Transaction_AdminInterviewReset_Start" targetRef="ValidateInterviewCanBeReset"/>
-      <bpmn:sequenceFlow id="ATX1" sourceRef="ValidateInterviewCanBeReset" targetRef="CancelInterviewByAdmin"/>
-      <bpmn:sequenceFlow id="ATX2" sourceRef="CancelInterviewByAdmin" targetRef="ReleaseAdminResetSlot"/>
-      <bpmn:sequenceFlow id="ATX3" sourceRef="ReleaseAdminResetSlot" targetRef="ReturnApplicationToReview"/>
-      <bpmn:sequenceFlow id="ATX4" sourceRef="ReturnApplicationToReview" targetRef="RecordAdminResetHistory"/>
-      <bpmn:sequenceFlow id="Transaction_AdminInterviewReset_SF_End" sourceRef="RecordAdminResetHistory" targetRef="Transaction_AdminInterviewReset_End"/>
+      <bpmn:startEvent id="Transaction_AdminInterviewReset_Start" name="Начать транзакционный блок" />
+      <bpmn:serviceTask id="ValidateInterviewCanBeReset" name="Проверить возможность сброса интервью" camunda:type="external" camunda:topic="admin-interview-reset" />
+      <bpmn:serviceTask id="CancelInterviewByAdmin" name="Отменить интервью" camunda:type="external" camunda:topic="admin-interview-reset" />
+      <bpmn:serviceTask id="ReleaseAdminResetSlot" name="Освободить слот интервью" camunda:type="external" camunda:topic="admin-interview-reset" />
+      <bpmn:serviceTask id="ReturnApplicationToReview" name="Вернуть отклик на рассмотрение" camunda:type="external" camunda:topic="admin-interview-reset" />
+      <bpmn:serviceTask id="RecordAdminResetHistory" name="Записать историю админского сброса" camunda:type="external" camunda:topic="admin-interview-reset" />
+      <bpmn:endEvent id="Transaction_AdminInterviewReset_End" name="Завершить транзакционный блок" />
+      <bpmn:sequenceFlow id="Transaction_AdminInterviewReset_SF_Start" sourceRef="Transaction_AdminInterviewReset_Start" targetRef="ValidateInterviewCanBeReset" />
+      <bpmn:sequenceFlow id="ATX1" sourceRef="ValidateInterviewCanBeReset" targetRef="CancelInterviewByAdmin" />
+      <bpmn:sequenceFlow id="ATX2" sourceRef="CancelInterviewByAdmin" targetRef="ReleaseAdminResetSlot" />
+      <bpmn:sequenceFlow id="ATX3" sourceRef="ReleaseAdminResetSlot" targetRef="ReturnApplicationToReview" />
+      <bpmn:sequenceFlow id="ATX4" sourceRef="ReturnApplicationToReview" targetRef="RecordAdminResetHistory" />
+      <bpmn:sequenceFlow id="Transaction_AdminInterviewReset_SF_End" sourceRef="RecordAdminResetHistory" targetRef="Transaction_AdminInterviewReset_End" />
     </bpmn:transaction>
-    <bpmn:boundaryEvent id="AdminResetErrorBoundary" attachedToRef="Transaction_AdminInterviewReset">
-      <bpmn:errorEventDefinition errorRef="Error_AdminResetFailed"/>
+    <bpmn:callActivity id="NotifyAdminResetParticipants" name="Call: уведомить участников о сбросе интервью" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+      <bpmn:extensionElements>
+        <camunda:in sourceExpression="${'ADMIN_RESET'}" target="notificationKind" />
+        <camunda:in source="applicationId" target="applicationId" />
+        <camunda:in source="resetReason" target="resetReason" />
+        <camunda:out source="notificationDispatched" target="NotifyAdminResetParticipantsDispatched" />
+        <camunda:out source="notificationKind" target="lastNotificationKind" />
+      </bpmn:extensionElements>
+    </bpmn:callActivity>
+    <bpmn:intermediateThrowEvent id="ThrowCompensationAdminResetRollback" name="Явно запустить BPMN compensation handlers">
+      <bpmn:compensateEventDefinition waitForCompletion="true" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:serviceTask id="RollbackAdminReset" name="Выполнить recovery админского сброса" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:endEvent id="AdminResetEnd" name="Админский сброс выполнен" />
+    <bpmn:endEvent id="AdminResetRollbackEnd" name="Recovery сброса завершён" />
+    <bpmn:userTask id="AdminResetResultTask" name="Показать результат сброса интервью" camunda:formRef="admin-reset-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
+    <bpmn:businessRuleTask id="EvaluateAdminResetPermission" name="DMN: ADMIN + ADMIN_RESET + ownership" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleEntry" />
+    <bpmn:exclusiveGateway id="AdminResetPermissionGateway" name="Доступ ADMIN_RESET разрешён?" />
+    <bpmn:endEvent id="AdminResetPermissionDenied" name="Доступ к административному сбросу запрещён" />
+    <bpmn:serviceTask id="Compensate_Transaction_AdminInterviewReset" name="Компенсация: административный сброс интервью" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:boundaryEvent id="Compensate_Transaction_AdminInterviewReset_Boundary" name="Compensation boundary: административный сброс интервью" attachedToRef="Transaction_AdminInterviewReset">
+      <bpmn:compensateEventDefinition />
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="NotifyAdminResetParticipants" name="Уведомить участников о сбросе интервью" camunda:type="external" camunda:topic="admin-interview-reset"/>
-    <bpmn:serviceTask id="RollbackAdminReset" name="Выполнить recovery админского сброса" camunda:type="external" camunda:topic="transaction-rollback"/>
-    <bpmn:endEvent id="AdminResetEnd" name="Админский сброс выполнен"/>
-    <bpmn:endEvent id="AdminResetRollbackEnd" name="Recovery сброса завершён"/>
-    <bpmn:userTask id="AdminResetResultTask" name="Показать результат сброса интервью" camunda:formRef="admin-reset-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN"/>
-    <bpmn:sequenceFlow id="AF1" sourceRef="AdminResetStart" targetRef="AdminResetApprovalTask"/>
-    <bpmn:sequenceFlow id="AF2" sourceRef="AdminResetApprovalTask" targetRef="ValidateAdminResetForm"/>
-    <bpmn:sequenceFlow id="AF2e" sourceRef="AdminResetFormError" targetRef="AdminResetApprovalTask"/>
-    <bpmn:sequenceFlow id="AF3" sourceRef="ValidateAdminResetForm" targetRef="Transaction_AdminInterviewReset"/>
-    <bpmn:sequenceFlow id="AF4" sourceRef="Transaction_AdminInterviewReset" targetRef="NotifyAdminResetParticipants"/>
-    <bpmn:sequenceFlow id="AF5" sourceRef="NotifyAdminResetParticipants" targetRef="AdminResetResultTask"/>
-    <bpmn:sequenceFlow id="AF6" sourceRef="AdminResetErrorBoundary" targetRef="RollbackAdminReset"/>
-    <bpmn:sequenceFlow id="AF7" sourceRef="RollbackAdminReset" targetRef="AdminResetRollbackEnd"/>
-    <bpmn:sequenceFlow id="AF_Result_End" sourceRef="AdminResetResultTask" targetRef="AdminResetEnd"/>
+    <bpmn:boundaryEvent id="Cancel_Transaction_AdminInterviewReset" name="Cancel boundary: административный сброс интервью" attachedToRef="Transaction_AdminInterviewReset">
+      <bpmn:cancelEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="AdminResetErrorBoundary" attachedToRef="Transaction_AdminInterviewReset">
+      <bpmn:errorEventDefinition errorRef="Error_AdminResetFailed" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="AdminResetFormError" attachedToRef="ValidateAdminResetForm">
+      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="AF1" sourceRef="AdminResetStart" targetRef="ResolveAdminResetPermission" />
+    <bpmn:sequenceFlow id="AF2" sourceRef="AdminResetApprovalTask" targetRef="ValidateAdminResetForm" />
+    <bpmn:sequenceFlow id="AF3" sourceRef="ValidateAdminResetForm" targetRef="Transaction_AdminInterviewReset" />
+    <bpmn:sequenceFlow id="AF1_DMN_Resolve" name="контекст прав подготовлен" sourceRef="ResolveAdminResetPermission" targetRef="EvaluateAdminResetPermission" />
+    <bpmn:sequenceFlow id="AF2e" sourceRef="AdminResetFormError" targetRef="AdminResetApprovalTask" />
+    <bpmn:sequenceFlow id="AF1_DMN_Allowed" name="разрешено DMN" sourceRef="AdminResetPermissionGateway" targetRef="AdminResetApprovalTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${permissionAllowed == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="AF4" sourceRef="Transaction_AdminInterviewReset" targetRef="NotifyAdminResetParticipants" />
+    <bpmn:sequenceFlow id="AF5" sourceRef="NotifyAdminResetParticipants" targetRef="AdminResetResultTask" />
+    <bpmn:sequenceFlow id="AF6" name="ошибка TX -&gt; compensate" sourceRef="AdminResetErrorBoundary" targetRef="ThrowCompensationAdminResetRollback" />
+    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_AdminInterviewReset_Recovery" name="cancel -&gt; recovery" sourceRef="Cancel_Transaction_AdminInterviewReset" targetRef="ThrowCompensationAdminResetRollback" />
+    <bpmn:sequenceFlow id="AF6_COMPENSATED" name="compensation выполнена" sourceRef="ThrowCompensationAdminResetRollback" targetRef="RollbackAdminReset" />
+    <bpmn:sequenceFlow id="AF7" sourceRef="RollbackAdminReset" targetRef="AdminResetRollbackEnd" />
+    <bpmn:sequenceFlow id="AF_Result_End" sourceRef="AdminResetResultTask" targetRef="AdminResetEnd" />
+    <bpmn:sequenceFlow id="AF1_DMN_Evaluate" name="решение DMN получено" sourceRef="EvaluateAdminResetPermission" targetRef="AdminResetPermissionGateway" />
+    <bpmn:sequenceFlow id="AF1_DMN_Denied" name="запрещено DMN" sourceRef="AdminResetPermissionGateway" targetRef="AdminResetPermissionDenied">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${permissionAllowed != true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:association id="Association_Compensate_Transaction_AdminInterviewReset" sourceRef="Compensate_Transaction_AdminInterviewReset_Boundary" targetRef="Compensate_Transaction_AdminInterviewReset" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_AutoLayout">
-    <bpmndi:BPMNPlane id="BPMNPlane_AutoLayout" bpmnElement="hhAdminInterviewResetProcess">
-      <bpmndi:BPMNShape id="BPMNShape_Lane_Admin_A" bpmnElement="Lane_Admin_A" isHorizontal="true">
-        <dc:Bounds x="20" y="40" width="2600" height="160"/>
+    <bpmndi:BPMNPlane id="BPMNPlane_AutoLayout" bpmnElement="Collaboration_hhAdminInterviewResetProcess">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_hhAdminInterviewResetProcess" bpmnElement="Participant_hhAdminInterviewResetProcess" isHorizontal="true">
+        <dc:Bounds x="160" y="80" width="2760" height="370" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_System_A" bpmnElement="Lane_System_A" isHorizontal="true">
-        <dc:Bounds x="20" y="210" width="2600" height="160"/>
+        <dc:Bounds x="260" y="270" width="2640" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_Admin_A" bpmnElement="Lane_Admin_A" isHorizontal="true">
+        <dc:Bounds x="260" y="100" width="2640" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_AdminResetStart" bpmnElement="AdminResetStart">
-        <dc:Bounds x="80" y="85" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_AdminResetApprovalTask" bpmnElement="AdminResetApprovalTask">
-        <dc:Bounds x="300" y="85" width="170" height="80"/>
+        <dc:Bounds x="280" y="145" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="256" y="181" width="85" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_ValidateAdminResetForm" bpmnElement="ValidateAdminResetForm">
-        <dc:Bounds x="80" y="255" width="170" height="80"/>
+        <dc:Bounds x="280" y="315" width="170" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_AdminResetFormError" bpmnElement="AdminResetFormError">
-        <dc:Bounds x="520" y="85" width="36" height="36"/>
+      <bpmndi:BPMNShape id="BPMNShape_ResolveAdminResetPermission" bpmnElement="ResolveAdminResetPermission">
+        <dc:Bounds x="365" y="130" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_AdminResetApprovalTask" bpmnElement="AdminResetApprovalTask">
+        <dc:Bounds x="590" y="154" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Transaction_AdminInterviewReset" bpmnElement="Transaction_AdminInterviewReset" isExpanded="true">
-        <dc:Bounds x="300" y="255" width="210" height="120"/>
+        <dc:Bounds x="500" y="315" width="210" height="120" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Transaction_AdminInterviewReset_Start" bpmnElement="Transaction_AdminInterviewReset_Start">
-        <dc:Bounds x="330" y="290" width="36" height="36"/>
+        <dc:Bounds x="530" y="350" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="506" y="386" width="85" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_ValidateInterviewCanBeReset" bpmnElement="ValidateInterviewCanBeReset">
-        <dc:Bounds x="495" y="290" width="140" height="60"/>
+        <dc:Bounds x="695" y="350" width="140" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_CancelInterviewByAdmin" bpmnElement="CancelInterviewByAdmin">
-        <dc:Bounds x="660" y="290" width="140" height="60"/>
+        <dc:Bounds x="860" y="350" width="140" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_ReleaseAdminResetSlot" bpmnElement="ReleaseAdminResetSlot">
-        <dc:Bounds x="825" y="290" width="140" height="60"/>
+        <dc:Bounds x="1025" y="350" width="140" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_ReturnApplicationToReview" bpmnElement="ReturnApplicationToReview">
-        <dc:Bounds x="990" y="290" width="140" height="60"/>
+        <dc:Bounds x="1190" y="350" width="140" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_RecordAdminResetHistory" bpmnElement="RecordAdminResetHistory">
-        <dc:Bounds x="1155" y="290" width="140" height="60"/>
+        <dc:Bounds x="1355" y="350" width="140" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Transaction_AdminInterviewReset_End" bpmnElement="Transaction_AdminInterviewReset_End">
-        <dc:Bounds x="2310" y="290" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_AdminResetErrorBoundary" bpmnElement="AdminResetErrorBoundary">
-        <dc:Bounds x="740" y="85" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_NotifyAdminResetParticipants" bpmnElement="NotifyAdminResetParticipants">
-        <dc:Bounds x="740" y="255" width="170" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_RollbackAdminReset" bpmnElement="RollbackAdminReset">
-        <dc:Bounds x="960" y="255" width="170" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_AdminResetEnd" bpmnElement="AdminResetEnd">
-        <dc:Bounds x="1180" y="85" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_AdminResetRollbackEnd" bpmnElement="AdminResetRollbackEnd">
-        <dc:Bounds x="1400" y="85" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_AdminResetResultTask" bpmnElement="AdminResetResultTask">
-        <dc:Bounds x="1620" y="85" width="170" height="80"/>
+        <dc:Bounds x="2230" y="350" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2486" y="386" width="1" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_Transaction_AdminInterviewReset_SF_Start" bpmnElement="Transaction_AdminInterviewReset_SF_Start">
-        <di:waypoint x="366" y="308.0"/>
-        <di:waypoint x="495" y="320.0"/>
+        <di:waypoint x="566" y="369" />
+        <di:waypoint x="695" y="376.1" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_ATX1" bpmnElement="ATX1">
-        <di:waypoint x="635" y="320.0"/>
-        <di:waypoint x="660" y="320.0"/>
+        <di:waypoint x="835" y="380" />
+        <di:waypoint x="860" y="380" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_ATX2" bpmnElement="ATX2">
-        <di:waypoint x="800" y="320.0"/>
-        <di:waypoint x="825" y="320.0"/>
+        <di:waypoint x="1000" y="380" />
+        <di:waypoint x="1025" y="380" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_ATX3" bpmnElement="ATX3">
-        <di:waypoint x="965" y="320.0"/>
-        <di:waypoint x="990" y="320.0"/>
+        <di:waypoint x="1165" y="380" />
+        <di:waypoint x="1190" y="380" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_ATX4" bpmnElement="ATX4">
-        <di:waypoint x="1130" y="320.0"/>
-        <di:waypoint x="1155" y="320.0"/>
+        <di:waypoint x="1330" y="380" />
+        <di:waypoint x="1355" y="380" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_Transaction_AdminInterviewReset_SF_End" bpmnElement="Transaction_AdminInterviewReset_SF_End">
-        <di:waypoint x="1295" y="320.0"/>
-        <di:waypoint x="2310" y="308.0"/>
+        <di:waypoint x="1495" y="379.2" />
+        <di:waypoint x="2230" y="368.2" />
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="BPMNShape_NotifyAdminResetParticipants" bpmnElement="NotifyAdminResetParticipants">
+        <dc:Bounds x="940" y="315" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ThrowCompensationAdminResetRollback" bpmnElement="ThrowCompensationAdminResetRollback">
+        <dc:Bounds x="2506" y="760" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="8899" y="796" width="1" height="53" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RollbackAdminReset" bpmnElement="RollbackAdminReset">
+        <dc:Bounds x="1160" y="315" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_AdminResetEnd" bpmnElement="AdminResetEnd">
+        <dc:Bounds x="1380" y="145" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1354" y="181" width="89" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_AdminResetRollbackEnd" bpmnElement="AdminResetRollbackEnd">
+        <dc:Bounds x="1600" y="145" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1575" y="181" width="86" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_AdminResetResultTask" bpmnElement="AdminResetResultTask">
+        <dc:Bounds x="1820" y="145" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_EvaluateAdminResetPermission" bpmnElement="EvaluateAdminResetPermission">
+        <dc:Bounds x="590" y="315" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_AdminResetPermissionGateway" bpmnElement="AdminResetPermissionGateway" isMarkerVisible="true">
+        <dc:Bounds x="820" y="330" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="806" y="380" width="79" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_AdminResetPermissionDenied" bpmnElement="AdminResetPermissionDenied">
+        <dc:Bounds x="960" y="337" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="936" y="373" width="85" height="53" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Compensate_Transaction_AdminInterviewReset" bpmnElement="Compensate_Transaction_AdminInterviewReset">
+        <dc:Bounds x="1410" y="480" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Compensate_Transaction_AdminInterviewReset_Boundary" bpmnElement="Compensate_Transaction_AdminInterviewReset_Boundary">
+        <dc:Bounds x="1470" y="410" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1446" y="446" width="85" height="66" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Cancel_Transaction_AdminInterviewReset" bpmnElement="Cancel_Transaction_AdminInterviewReset">
+        <dc:Bounds x="1520" y="410" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1496" y="446" width="85" height="66" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_AdminResetErrorBoundary" bpmnElement="AdminResetErrorBoundary">
+        <dc:Bounds x="940" y="145" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_AdminResetFormError" bpmnElement="AdminResetFormError">
+        <dc:Bounds x="720" y="145" width="36" height="36" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_AF1" bpmnElement="AF1">
-        <di:waypoint x="116" y="103.0"/>
-        <di:waypoint x="300" y="125.0"/>
+        <di:waypoint x="316" y="163" />
+        <di:waypoint x="341" y="163" />
+        <di:waypoint x="341" y="170" />
+        <di:waypoint x="365" y="170" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_AF2" bpmnElement="AF2">
-        <di:waypoint x="470" y="125.0"/>
-        <di:waypoint x="80" y="295.0"/>
+        <di:waypoint x="675" y="234" />
+        <di:waypoint x="675" y="355" />
+        <di:waypoint x="450" y="355" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_AF2e" bpmnElement="AF2e">
-        <di:waypoint x="556" y="103.0"/>
-        <di:waypoint x="300" y="125.0"/>
+        <di:waypoint x="756" y="163" />
+        <di:waypoint x="776" y="163" />
+        <di:waypoint x="776" y="199" />
+        <di:waypoint x="675" y="199" />
+        <di:waypoint x="760" y="199" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_AF3" bpmnElement="AF3">
-        <di:waypoint x="250" y="295.0"/>
-        <di:waypoint x="300" y="315.0"/>
+        <di:waypoint x="450" y="362.1" />
+        <di:waypoint x="500" y="366.2" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_AF4" bpmnElement="AF4">
-        <di:waypoint x="510" y="315.0"/>
-        <di:waypoint x="740" y="295.0"/>
+        <di:waypoint x="710" y="370" />
+        <di:waypoint x="940" y="359" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_AF5" bpmnElement="AF5">
-        <di:waypoint x="910" y="295.0"/>
-        <di:waypoint x="1620" y="125.0"/>
+        <di:waypoint x="1110" y="338.6" />
+        <di:waypoint x="1820" y="201.4" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_AF6" bpmnElement="AF6">
-        <di:waypoint x="776" y="103.0"/>
-        <di:waypoint x="960" y="295.0"/>
+        <di:waypoint x="976" y="164.3" />
+        <di:waypoint x="2506" y="776.7" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="4771" y="446" width="74" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_AF6_COMPENSATED" bpmnElement="AF6_COMPENSATED">
+        <di:waypoint x="2506" y="777" />
+        <di:waypoint x="1330" y="359.5" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="4951" y="543" width="69" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_AF7" bpmnElement="AF7">
-        <di:waypoint x="1130" y="295.0"/>
-        <di:waypoint x="1400" y="103.0"/>
+        <di:waypoint x="1322.7" y="315" />
+        <di:waypoint x="1600" y="172.3" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_AF_Result_End" bpmnElement="AF_Result_End">
-        <di:waypoint x="1790" y="125.0"/>
-        <di:waypoint x="1180" y="103.0"/>
+        <di:waypoint x="1820" y="181.3" />
+        <di:waypoint x="1416" y="163.8" />
       </bpmndi:BPMNEdge>
-      </bpmndi:BPMNPlane>
+      <bpmndi:BPMNEdge id="BPMNEdge_AF1_DMN_Resolve" bpmnElement="AF1_DMN_Resolve">
+        <di:waypoint x="535" y="170" />
+        <di:waypoint x="563" y="170" />
+        <di:waypoint x="563" y="355" />
+        <di:waypoint x="590" y="355" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="514" y="145" width="71" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_AF1_DMN_Evaluate" bpmnElement="AF1_DMN_Evaluate">
+        <di:waypoint x="760" y="355" />
+        <di:waypoint x="820" y="355" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="753" y="330" width="74" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_AF1_DMN_Allowed" bpmnElement="AF1_DMN_Allowed">
+        <di:waypoint x="845" y="330" />
+        <di:waypoint x="845" y="194" />
+        <di:waypoint x="760" y="194" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="756" y="172" width="85" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_AF1_DMN_Denied" bpmnElement="AF1_DMN_Denied">
+        <di:waypoint x="870" y="355" />
+        <di:waypoint x="960" y="355" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="873" y="330" width="85" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Cancel_Transaction_AdminInterviewReset_Recovery" bpmnElement="Flow_Cancel_Transaction_AdminInterviewReset_Recovery">
+        <di:waypoint x="1556" y="428.8" />
+        <di:waypoint x="2506" y="777.2" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="5070" y="578" width="56" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Association_Compensate_Transaction_AdminInterviewReset" bpmnElement="Association_Compensate_Transaction_AdminInterviewReset">
+        <di:waypoint x="1489.4" y="446" />
+        <di:waypoint x="1492" y="480" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

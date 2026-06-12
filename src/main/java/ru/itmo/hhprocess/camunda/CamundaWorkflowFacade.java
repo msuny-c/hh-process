@@ -168,6 +168,14 @@ public class CamundaWorkflowFacade {
     }
 
     public boolean invitationTimedOut(ApplicationEntity application) {
+        Map<String, Object> variables = Map.of(
+                "responseType", "TIMEOUT",
+                "timeoutAt", Instant.now(),
+                "applicationId", application.getId()
+        );
+        if (camundaRestClient.correlateMessage("MSG_INVITATION_EXPIRED", applicationBusinessKey(application.getId()), variables)) {
+            return true;
+        }
         return completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, Map.of(
                 "responseType", "TIMEOUT",
                 "timeoutAt", Instant.now()
@@ -180,6 +188,15 @@ public class CamundaWorkflowFacade {
                 "cancelReason", safe(reason),
                 "returnedToRecruiterReviewAt", Instant.now()
         );
+        String messageName = switch (responseType) {
+            case "ADMIN_RESET" -> "MSG_ADMIN_RESET_DONE";
+            case "RECRUITER_CANCEL" -> "MSG_INTERVIEW_CANCELLED";
+            default -> "";
+        };
+        if (!messageName.isBlank()
+                && camundaRestClient.correlateMessage(messageName, applicationBusinessKey(application.getId()), variables)) {
+            return true;
+        }
         if (completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, variables)) {
             return true;
         }

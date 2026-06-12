@@ -235,6 +235,27 @@ Workflow `.github/workflows/deploy-split-helios.yml` now has a separate `ci-dock
 
 Deploy jobs depend on this Docker test job, so deployment will not start if tests fail. Docker logs are uploaded as the `docker-ci-logs-*` artifact.
 
+Before pushing to `lab4`, run the local Camunda model checks as well:
+
+```bash
+python3 test/test_camunda_visual_model_contract.py
+python3 test/test_camunda_model_coverage.py
+mvn test
+```
+
+`test_camunda_visual_model_contract.py` is the guard against broken diagrams on the defense machine: every BPMN must have a collaboration pool, at least one lane, named start/end events, BPMNShape for every flow node and BPMNEdge for every sequence flow. This is the check that prevents Camunda Modeler from showing `no diagram to display`.
+
+After the Docker stack is up, run the runtime Camunda checks:
+
+```bash
+.venv/bin/python test/test_camunda_integration.py
+.venv/bin/python test/test_camunda_decisions_runtime.py
+.venv/bin/python test/test_camunda_tasklist_candidate_apply.py
+.venv/bin/python test/test_camunda_smoke_flow.py
+```
+
+These checks verify deployed process definitions, deployed DMN decisions, Tasklist/Form candidate apply path, scheduler ownership by `hhTimeoutSchedulerProcess`, and absence of Camunda incidents.
+
 Local equivalent:
 
 ```bash

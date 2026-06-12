@@ -1,148 +1,202 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_v3" targetNamespace="http://itmo.ru/hhprocess/camunda">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_hh_v3" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+  <bpmn:collaboration id="Collaboration_hhTimeoutSchedulerProcess" name="Pool: HH timeout scheduler with roles">
+    <bpmn:participant id="Participant_hhTimeoutSchedulerProcess" name="POOL: HH timeout scheduler with roles" processRef="hhTimeoutSchedulerProcess" />
+  </bpmn:collaboration>
   <bpmn:process id="hhTimeoutSchedulerProcess" name="HH timeout scheduler with roles" isExecutable="true" camunda:candidateStarterGroups="ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_Timeout">
+      <bpmn:lane id="Lane_System_T" name="SYSTEM">
+        <bpmn:flowNodeRef>Compensate_Transaction_TimeoutOneInvitation</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ThrowCompensationTimeoutRollback</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Cancel_Transaction_TimeoutOneInvitation</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Compensate_Transaction_TimeoutOneInvitation_Boundary</bpmn:flowNodeRef>
+      </bpmn:lane>
       <bpmn:lane id="Lane_Timer_T" name="TIMER">
+        <bpmn:flowNodeRef>CompleteExpiredInvitationProcess</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>TimeoutTimerStart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Transaction_TimeoutOneInvitation_End</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>NoExpiredInvitationsEnd</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Transaction_TimeoutOneInvitation_Start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>FindOneExpiredInvitation</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ExpiredFoundGateway</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Transaction_TimeoutOneInvitation</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>NotifyExpiredInvitationParticipants</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CompleteExpiredInvitationProcess</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>NoExpiredInvitationsEnd</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_System_T" name="SYSTEM"/>
     </bpmn:laneSet>
     <bpmn:startEvent id="TimeoutTimerStart" name="Периодический запуск проверки таймаутов">
       <bpmn:timerEventDefinition>
         <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT5M</bpmn:timeCycle>
       </bpmn:timerEventDefinition>
     </bpmn:startEvent>
-    <bpmn:serviceTask id="FindOneExpiredInvitation" name="Найти одно просроченное приглашение" camunda:type="external" camunda:topic="timeout-close-expired"/>
-    <bpmn:exclusiveGateway id="ExpiredFoundGateway" name="Просроченное приглашение найдено?"/>
+    <bpmn:serviceTask id="FindOneExpiredInvitation" name="Найти одно просроченное приглашение" camunda:type="external" camunda:topic="timeout-close-expired" />
+    <bpmn:exclusiveGateway id="ExpiredFoundGateway" name="Просроченное приглашение найдено?" />
     <bpmn:transaction id="Transaction_TimeoutOneInvitation" name="TX: обработка одной просрочки">
-      <bpmn:startEvent id="Transaction_TimeoutOneInvitation_Start" name="Начать транзакционный блок"/>
-      <bpmn:serviceTask id="CancelExpiredInvitationInterview" name="Отменить интервью по таймауту" camunda:type="external" camunda:topic="timeout-close-expired"/>
-      <bpmn:serviceTask id="ReleaseExpiredInvitationSlot" name="Освободить слот по таймауту" camunda:type="external" camunda:topic="timeout-close-expired"/>
-      <bpmn:serviceTask id="CloseExpiredInvitationApplication" name="Закрыть отклик по таймауту" camunda:type="external" camunda:topic="timeout-close-expired"/>
-      <bpmn:serviceTask id="RecordExpiredInvitationHistory" name="Записать историю таймаута" camunda:type="external" camunda:topic="timeout-close-expired"/>
-      <bpmn:endEvent id="Transaction_TimeoutOneInvitation_End" name="Завершить транзакционный блок"/>
-      <bpmn:sequenceFlow id="Transaction_TimeoutOneInvitation_SF_Start" sourceRef="Transaction_TimeoutOneInvitation_Start" targetRef="CancelExpiredInvitationInterview"/>
-      <bpmn:sequenceFlow id="TTX1" sourceRef="CancelExpiredInvitationInterview" targetRef="ReleaseExpiredInvitationSlot"/>
-      <bpmn:sequenceFlow id="TTX2" sourceRef="ReleaseExpiredInvitationSlot" targetRef="CloseExpiredInvitationApplication"/>
-      <bpmn:sequenceFlow id="TTX3" sourceRef="CloseExpiredInvitationApplication" targetRef="RecordExpiredInvitationHistory"/>
-      <bpmn:sequenceFlow id="Transaction_TimeoutOneInvitation_SF_End" sourceRef="RecordExpiredInvitationHistory" targetRef="Transaction_TimeoutOneInvitation_End"/>
+      <bpmn:startEvent id="Transaction_TimeoutOneInvitation_Start" name="Начать транзакционный блок" />
+      <bpmn:serviceTask id="CancelExpiredInvitationInterview" name="Отменить интервью по таймауту" camunda:type="external" camunda:topic="timeout-close-expired" />
+      <bpmn:serviceTask id="ReleaseExpiredInvitationSlot" name="Освободить слот по таймауту" camunda:type="external" camunda:topic="timeout-close-expired" />
+      <bpmn:serviceTask id="CloseExpiredInvitationApplication" name="Закрыть отклик по таймауту" camunda:type="external" camunda:topic="timeout-close-expired" />
+      <bpmn:serviceTask id="RecordExpiredInvitationHistory" name="Записать историю таймаута" camunda:type="external" camunda:topic="timeout-close-expired" />
+      <bpmn:endEvent id="Transaction_TimeoutOneInvitation_End" name="Завершить транзакционный блок" />
+      <bpmn:sequenceFlow id="Transaction_TimeoutOneInvitation_SF_Start" sourceRef="Transaction_TimeoutOneInvitation_Start" targetRef="CancelExpiredInvitationInterview" />
+      <bpmn:sequenceFlow id="TTX1" sourceRef="CancelExpiredInvitationInterview" targetRef="ReleaseExpiredInvitationSlot" />
+      <bpmn:sequenceFlow id="TTX2" sourceRef="ReleaseExpiredInvitationSlot" targetRef="CloseExpiredInvitationApplication" />
+      <bpmn:sequenceFlow id="TTX3" sourceRef="CloseExpiredInvitationApplication" targetRef="RecordExpiredInvitationHistory" />
+      <bpmn:sequenceFlow id="Transaction_TimeoutOneInvitation_SF_End" sourceRef="RecordExpiredInvitationHistory" targetRef="Transaction_TimeoutOneInvitation_End" />
     </bpmn:transaction>
-    <bpmn:serviceTask id="NotifyExpiredInvitationParticipants" name="Уведомить участников о таймауте" camunda:type="external" camunda:topic="timeout-close-expired"/>
-    <bpmn:serviceTask id="CompleteExpiredInvitationProcess" name="Завершить процесс отклика по таймауту" camunda:type="external" camunda:topic="timeout-close-expired"/>
-    <bpmn:endEvent id="NoExpiredInvitationsEnd" name="Просрочек нет"/>
-    <bpmn:sequenceFlow id="TF1" sourceRef="TimeoutTimerStart" targetRef="FindOneExpiredInvitation"/>
-    <bpmn:sequenceFlow id="TF2" sourceRef="FindOneExpiredInvitation" targetRef="ExpiredFoundGateway"/>
+    <bpmn:callActivity id="NotifyExpiredInvitationParticipants" name="Call: уведомить участников о таймауте" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+      <bpmn:extensionElements>
+        <camunda:in sourceExpression="${'TIMEOUT'}" target="notificationKind" />
+        <camunda:in source="expiredApplicationId" target="applicationId" />
+        <camunda:in source="expiredApplicationId" target="expiredApplicationId" />
+        <camunda:out source="notificationDispatched" target="NotifyExpiredInvitationParticipantsDispatched" />
+        <camunda:out source="notificationKind" target="lastNotificationKind" />
+      </bpmn:extensionElements>
+    </bpmn:callActivity>
+    <bpmn:serviceTask id="CompleteExpiredInvitationProcess" name="Завершить процесс отклика по таймауту" camunda:type="external" camunda:topic="timeout-close-expired" />
+    <bpmn:endEvent id="NoExpiredInvitationsEnd" name="Просрочек нет" />
+    <bpmn:boundaryEvent id="Cancel_Transaction_TimeoutOneInvitation" name="Cancel boundary: обработка таймаута приглашения" attachedToRef="Transaction_TimeoutOneInvitation">
+      <bpmn:cancelEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Compensate_Transaction_TimeoutOneInvitation_Boundary" name="Compensation boundary: обработка таймаута приглашения" attachedToRef="Transaction_TimeoutOneInvitation">
+      <bpmn:compensateEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:intermediateThrowEvent id="ThrowCompensationTimeoutRollback" name="Явно запустить BPMN compensation handlers">
+      <bpmn:compensateEventDefinition waitForCompletion="true" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:serviceTask id="Compensate_Transaction_TimeoutOneInvitation" name="Компенсация: обработка таймаута приглашения" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:sequenceFlow id="TF1" sourceRef="TimeoutTimerStart" targetRef="FindOneExpiredInvitation" />
+    <bpmn:sequenceFlow id="TF2" sourceRef="FindOneExpiredInvitation" targetRef="ExpiredFoundGateway" />
     <bpmn:sequenceFlow id="TF3" sourceRef="ExpiredFoundGateway" targetRef="NoExpiredInvitationsEnd">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${expiredFound == false}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="TF4" sourceRef="ExpiredFoundGateway" targetRef="Transaction_TimeoutOneInvitation">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${expiredFound == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="TF5" sourceRef="Transaction_TimeoutOneInvitation" targetRef="NotifyExpiredInvitationParticipants"/>
-    <bpmn:sequenceFlow id="TF6" sourceRef="NotifyExpiredInvitationParticipants" targetRef="CompleteExpiredInvitationProcess"/>
-    <bpmn:sequenceFlow id="TF7" sourceRef="CompleteExpiredInvitationProcess" targetRef="FindOneExpiredInvitation"/>
+    <bpmn:sequenceFlow id="TF5" sourceRef="Transaction_TimeoutOneInvitation" targetRef="NotifyExpiredInvitationParticipants" />
+    <bpmn:sequenceFlow id="TF6" sourceRef="NotifyExpiredInvitationParticipants" targetRef="CompleteExpiredInvitationProcess" />
+    <bpmn:sequenceFlow id="TF7" sourceRef="CompleteExpiredInvitationProcess" targetRef="FindOneExpiredInvitation" />
+    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_TimeoutOneInvitation_Recovery" name="cancel -&gt; compensation" sourceRef="Cancel_Transaction_TimeoutOneInvitation" targetRef="ThrowCompensationTimeoutRollback" />
+    <bpmn:sequenceFlow id="TF_CANCEL_COMPENSATED" name="compensation выполнена" sourceRef="ThrowCompensationTimeoutRollback" targetRef="CompleteExpiredInvitationProcess" />
+    <bpmn:association id="Association_Compensate_Transaction_TimeoutOneInvitation" sourceRef="Compensate_Transaction_TimeoutOneInvitation_Boundary" targetRef="Compensate_Transaction_TimeoutOneInvitation" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_AutoLayout">
-    <bpmndi:BPMNPlane id="BPMNPlane_AutoLayout" bpmnElement="hhTimeoutSchedulerProcess">
-      <bpmndi:BPMNShape id="BPMNShape_Lane_Timer_T" bpmnElement="Lane_Timer_T" isHorizontal="true">
-        <dc:Bounds x="20" y="40" width="2600" height="160"/>
+    <bpmndi:BPMNPlane id="BPMNPlane_AutoLayout" bpmnElement="Collaboration_hhTimeoutSchedulerProcess">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_hhTimeoutSchedulerProcess" bpmnElement="Participant_hhTimeoutSchedulerProcess" isHorizontal="true">
+        <dc:Bounds x="100" y="410" width="3080" height="370" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_System_T" bpmnElement="Lane_System_T" isHorizontal="true">
-        <dc:Bounds x="20" y="210" width="2600" height="160"/>
+        <dc:Bounds x="200" y="600" width="2960" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_Timer_T" bpmnElement="Lane_Timer_T" isHorizontal="true">
+        <dc:Bounds x="200" y="430" width="2960" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_TimeoutTimerStart" bpmnElement="TimeoutTimerStart">
-        <dc:Bounds x="80" y="85" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_FindOneExpiredInvitation" bpmnElement="FindOneExpiredInvitation">
-        <dc:Bounds x="300" y="85" width="170" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_ExpiredFoundGateway" bpmnElement="ExpiredFoundGateway">
-        <dc:Bounds x="520" y="85" width="50" height="50"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_Transaction_TimeoutOneInvitation" bpmnElement="Transaction_TimeoutOneInvitation" isExpanded="true">
-        <dc:Bounds x="740" y="85" width="210" height="120"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_Transaction_TimeoutOneInvitation_Start" bpmnElement="Transaction_TimeoutOneInvitation_Start">
-        <dc:Bounds x="770" y="120" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_CancelExpiredInvitationInterview" bpmnElement="CancelExpiredInvitationInterview">
-        <dc:Bounds x="935" y="120" width="140" height="60"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_ReleaseExpiredInvitationSlot" bpmnElement="ReleaseExpiredInvitationSlot">
-        <dc:Bounds x="1100" y="120" width="140" height="60"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_CloseExpiredInvitationApplication" bpmnElement="CloseExpiredInvitationApplication">
-        <dc:Bounds x="1265" y="120" width="140" height="60"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_RecordExpiredInvitationHistory" bpmnElement="RecordExpiredInvitationHistory">
-        <dc:Bounds x="1430" y="120" width="140" height="60"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_Transaction_TimeoutOneInvitation_End" bpmnElement="Transaction_TimeoutOneInvitation_End">
-        <dc:Bounds x="1595" y="120" width="36" height="36"/>
+        <dc:Bounds x="260" y="475" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="237" y="511" width="83" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_NotifyExpiredInvitationParticipants" bpmnElement="NotifyExpiredInvitationParticipants">
-        <dc:Bounds x="960" y="85" width="170" height="80"/>
+        <dc:Bounds x="1095" y="80" width="170" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_CompleteExpiredInvitationProcess" bpmnElement="CompleteExpiredInvitationProcess">
-        <dc:Bounds x="1180" y="85" width="170" height="80"/>
+        <dc:Bounds x="1360" y="475" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_NoExpiredInvitationsEnd" bpmnElement="NoExpiredInvitationsEnd">
-        <dc:Bounds x="1400" y="85" width="36" height="36"/>
+        <dc:Bounds x="1580" y="475" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1561" y="511" width="75" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Compensate_Transaction_TimeoutOneInvitation" bpmnElement="Compensate_Transaction_TimeoutOneInvitation">
+        <dc:Bounds x="1690" y="645" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_FindOneExpiredInvitation" bpmnElement="FindOneExpiredInvitation">
+        <dc:Bounds x="445" y="460" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ExpiredFoundGateway" bpmnElement="ExpiredFoundGateway" isMarkerVisible="true">
+        <dc:Bounds x="765" y="255" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="753" y="205" width="74" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Transaction_TimeoutOneInvitation" bpmnElement="Transaction_TimeoutOneInvitation" isExpanded="true">
+        <dc:Bounds x="920" y="230" width="911" height="365" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Transaction_TimeoutOneInvitation_Start" bpmnElement="Transaction_TimeoutOneInvitation_Start">
+        <dc:Bounds x="950" y="510" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="937" y="546" width="85" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_CancelExpiredInvitationInterview" bpmnElement="CancelExpiredInvitationInterview">
+        <dc:Bounds x="1115" y="510" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ReleaseExpiredInvitationSlot" bpmnElement="ReleaseExpiredInvitationSlot">
+        <dc:Bounds x="1280" y="510" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_CloseExpiredInvitationApplication" bpmnElement="CloseExpiredInvitationApplication">
+        <dc:Bounds x="1445" y="510" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RecordExpiredInvitationHistory" bpmnElement="RecordExpiredInvitationHistory">
+        <dc:Bounds x="1610" y="510" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Transaction_TimeoutOneInvitation_End" bpmnElement="Transaction_TimeoutOneInvitation_End">
+        <dc:Bounds x="1775" y="510" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1751" y="546" width="85" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_Transaction_TimeoutOneInvitation_SF_Start" bpmnElement="Transaction_TimeoutOneInvitation_SF_Start">
-        <di:waypoint x="806" y="138.0"/>
-        <di:waypoint x="935" y="150.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="986" y="529.0" /><di:waypoint x="1115" y="536.1" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_TTX1" bpmnElement="TTX1">
-        <di:waypoint x="1075" y="150.0"/>
-        <di:waypoint x="1100" y="150.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="1255" y="540.0" /><di:waypoint x="1280" y="540.0" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_TTX2" bpmnElement="TTX2">
-        <di:waypoint x="1240" y="150.0"/>
-        <di:waypoint x="1265" y="150.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="1420" y="540.0" /><di:waypoint x="1445" y="540.0" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_TTX3" bpmnElement="TTX3">
-        <di:waypoint x="1405" y="150.0"/>
-        <di:waypoint x="1430" y="150.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="1585" y="540.0" /><di:waypoint x="1610" y="540.0" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_Transaction_TimeoutOneInvitation_SF_End" bpmnElement="Transaction_TimeoutOneInvitation_SF_End">
-        <di:waypoint x="1570" y="150.0"/>
-        <di:waypoint x="1595" y="138.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="1750" y="532.6" /><di:waypoint x="1775" y="529.9" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Association_Compensate_Transaction_TimeoutOneInvitation" bpmnElement="Association_Compensate_Transaction_TimeoutOneInvitation">
+        <di:waypoint x="2051" y="619.4" /><di:waypoint x="1860" y="683.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="BPMNShape_Compensate_Transaction_TimeoutOneInvitation_Boundary" bpmnElement="Compensate_Transaction_TimeoutOneInvitation_Boundary">
+        <dc:Bounds x="2051" y="601" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="4585" y="637" width="1" height="66" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Cancel_Transaction_TimeoutOneInvitation" bpmnElement="Cancel_Transaction_TimeoutOneInvitation">
+        <dc:Bounds x="2268" y="601" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2243" y="637" width="87" height="53" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_TF1" bpmnElement="TF1">
-        <di:waypoint x="116" y="103.0"/>
-        <di:waypoint x="300" y="125.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="296" y="493.5" /><di:waypoint x="445" y="497.6" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_TF2" bpmnElement="TF2">
-        <di:waypoint x="470" y="125.0"/>
-        <di:waypoint x="520" y="110.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="577.3" y="460.0" /><di:waypoint x="765" y="301.2" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_TF3" bpmnElement="TF3">
-        <di:waypoint x="570" y="110.0"/>
-        <di:waypoint x="1400" y="103.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="815" y="286.6" /><di:waypoint x="1580" y="488.3" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_TF4" bpmnElement="TF4">
-        <di:waypoint x="570" y="110.0"/>
-        <di:waypoint x="740" y="145.0"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_TF5" bpmnElement="TF5">
-        <di:waypoint x="950" y="145.0"/>
-        <di:waypoint x="960" y="125.0"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_TF6" bpmnElement="TF6">
-        <di:waypoint x="1130" y="125.0"/>
-        <di:waypoint x="1180" y="125.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="815" y="285.7" /><di:waypoint x="920" y="309.4" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_TF7" bpmnElement="TF7">
-        <di:waypoint x="1350" y="125.0"/>
-        <di:waypoint x="300" y="125.0"/>
+        <di:waypoint x="1360" y="513.6" /><di:waypoint x="615" y="501.4" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_TF5" bpmnElement="TF5">
+        <di:waypoint x="1253.5" y="230.0" /><di:waypoint x="1206.7" y="160.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_TF6" bpmnElement="TF6">
+        <di:waypoint x="1206.8" y="160.0" /><di:waypoint x="1418.2" y="475.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="BPMNShape_ThrowCompensationTimeoutRollback" bpmnElement="ThrowCompensationTimeoutRollback">
+        <dc:Bounds x="1362" y="650" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Cancel_Transaction_TimeoutOneInvitation_Recovery" bpmnElement="Flow_Cancel_Transaction_TimeoutOneInvitation_Recovery">
+      <di:waypoint x="2268" y="619.3" /><di:waypoint x="1398" y="667.7" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2269" y="633" width="56" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_TF_CANCEL_COMPENSATED" bpmnElement="TF_CANCEL_COMPENSATED">
+        <di:waypoint x="1387.6" y="650.0" /><di:waypoint x="1428" y="555.0" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

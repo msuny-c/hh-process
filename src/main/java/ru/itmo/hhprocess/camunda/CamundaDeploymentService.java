@@ -33,9 +33,7 @@ public class CamundaDeploymentService {
 
     private final CamundaRestClient camundaRestClient;
     private final CamundaWorkflowFacade camundaWorkflowFacade;
-    private final CamundaAuthorizationService camundaAuthorizationService;
-    private final CamundaIdentitySyncService camundaIdentitySyncService;
-    private final CamundaTasklistFilterService camundaTasklistFilterService;
+    private final CamundaIdentityProviderService camundaIdentityProviderService;
     private final CamundaProperties properties;
 
     @EventListener(ApplicationReadyEvent.class)
@@ -53,9 +51,7 @@ public class CamundaDeploymentService {
 
         camundaRestClient.deploy(properties.getDeploymentName(), resources)
                 .ifPresent(id -> log.info("Deployed BPMN/resources to Camunda deploymentId={}", id));
-        camundaAuthorizationService.configureStartAuthorizations();
-        camundaIdentitySyncService.syncUsersGroupsAndMemberships();
-        camundaTasklistFilterService.configureTasklistFilters();
+        camundaIdentityProviderService.provisionApplicationIdentity();
         cleanupDefaultDemoArtifactsWithRetries();
         camundaWorkflowFacade.startTimeoutSchedulerIfNeeded();
     }
@@ -116,6 +112,7 @@ public class CamundaDeploymentService {
         ResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
         Map<String, Resource> resources = new LinkedHashMap<>();
         addAll(resources, resolver, "classpath*:camunda/*.bpmn");
+        addAll(resources, resolver, "classpath*:camunda/*.dmn");
         addAll(resources, resolver, "classpath*:camunda/forms/*.form");
         log.info("Scanned Camunda deployment resources: {}", resources.keySet());
         return resources;

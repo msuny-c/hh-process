@@ -1,12 +1,51 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_hh_ui_candidate_vacancy_list" targetNamespace="http://itmo.ru/hhprocess/camunda">
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_candidate_vacancy_list" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+  <bpmn:collaboration id="Collaboration_hhUiCandidateVacancyList" name="Pool: HH UI candidate vacancy list">
+    <bpmn:participant id="Participant_hhUiCandidateVacancyList" name="POOL: HH UI candidate vacancy list" processRef="hhUiCandidateVacancyList" />
+  </bpmn:collaboration>
   <bpmn:process id="hhUiCandidateVacancyList" name="HH UI candidate vacancy list" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId"/>
-    <bpmn:serviceTask id="LoadCandidateVacancyList" name="Загрузить активные вакансии" camunda:type="external" camunda:topic="ui-query"/>
-    <bpmn:userTask id="DisplayCandidateVacancyList" name="Список вакансий кандидата" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE,ADMIN"/>
-    <bpmn:endEvent id="End"/>
-    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadCandidateVacancyList"/>
-    <bpmn:sequenceFlow id="F2" sourceRef="LoadCandidateVacancyList" targetRef="DisplayCandidateVacancyList"/>
-    <bpmn:sequenceFlow id="F3" sourceRef="DisplayCandidateVacancyList" targetRef="End"/>
+    <bpmn:laneSet id="LaneSet_hhUiCandidateVacancyList">
+      <bpmn:lane id="Lane_hhUiCandidateVacancyList_RoleSystem" name="CANDIDATE / ADMIN / SYSTEM">
+        <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>LoadCandidateVacancyList</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>DisplayCandidateVacancyList</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Запущен список вакансий кандидата" />
+    <bpmn:serviceTask id="LoadCandidateVacancyList" name="Загрузить активные вакансии" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:userTask id="DisplayCandidateVacancyList" name="Список вакансий кандидата" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE,ADMIN" />
+    <bpmn:endEvent id="End" name="Список вакансий кандидата показан" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadCandidateVacancyList" />
+    <bpmn:sequenceFlow id="F2" sourceRef="LoadCandidateVacancyList" targetRef="DisplayCandidateVacancyList" />
+    <bpmn:sequenceFlow id="F3" sourceRef="DisplayCandidateVacancyList" targetRef="End" />
   </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_hhUiCandidateVacancyList">
+    <bpmndi:BPMNPlane id="BPMNPlane_hhUiCandidateVacancyList" bpmnElement="Collaboration_hhUiCandidateVacancyList">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_hhUiCandidateVacancyList" bpmnElement="Participant_hhUiCandidateVacancyList" isHorizontal="true">
+        <dc:Bounds x="60" y="20" width="1316" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_hhUiCandidateVacancyList_RoleSystem" bpmnElement="Lane_hhUiCandidateVacancyList_RoleSystem" isHorizontal="true">
+        <dc:Bounds x="160" y="40" width="1196" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Start" bpmnElement="Start">
+        <dc:Bounds x="200" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_End" bpmnElement="End">
+        <dc:Bounds x="920" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_LoadCandidateVacancyList" bpmnElement="LoadCandidateVacancyList">
+        <dc:Bounds x="375" y="80" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_DisplayCandidateVacancyList" bpmnElement="DisplayCandidateVacancyList">
+        <dc:Bounds x="665" y="80" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_F1" bpmnElement="F1">
+        <di:waypoint x="236" y="120.0" /><di:waypoint x="375" y="120.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_F3" bpmnElement="F3">
+        <di:waypoint x="835" y="120.0" /><di:waypoint x="920" y="120.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_F2" bpmnElement="F2">
+        <di:waypoint x="545" y="120.0" /><di:waypoint x="665" y="120.0" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>

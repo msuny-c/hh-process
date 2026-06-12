@@ -56,8 +56,6 @@ public class CamundaRestClient {
         try {
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
             body.add("deployment-name", deploymentName);
-            body.add("enable-duplicate-filtering", "true");
-            body.add("deploy-changed-only", "true");
             int index = 0;
             for (Map.Entry<String, Resource> entry : resources.entrySet()) {
                 String partName = "resource-" + index++;
@@ -560,6 +558,88 @@ public class CamundaRestClient {
                 "find Camunda task " + taskDefinitionKey + " processInstanceId=" + processInstanceId);
     }
 
+    public List<Map<String, Object>> findActiveUserTasks(int maxResults) {
+        if (!properties.isEnabled()) {
+            return List.of();
+        }
+        String uri = UriComponentsBuilder.fromHttpUrl(url("/task"))
+                .queryParam("active", true)
+                .queryParam("sortBy", "created")
+                .queryParam("sortOrder", "desc")
+                .queryParam("maxResults", Math.max(1, maxResults))
+                .toUriString();
+        return findActiveTasksByUri(uri, "find active Camunda user tasks");
+    }
+
+    public Map<String, Object> getTaskVariables(String taskId) {
+        if (!properties.isEnabled()) {
+            return Map.of();
+        }
+        try {
+            ResponseEntity<Map> response = camundaRestTemplate.exchange(
+                    url("/task/" + encodePath(taskId) + "/variables"), HttpMethod.GET, null, Map.class);
+            Map<?, ?> raw = response.getBody();
+            if (raw == null || raw.isEmpty()) {
+                return Map.of();
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            raw.forEach((key, value) -> result.put(String.valueOf(key), value));
+            return result;
+        } catch (RuntimeException e) {
+            handle("read Camunda task variables " + taskId, e);
+            return Map.of();
+        }
+    }
+
+    public boolean setTaskAssignee(String taskId, String userId) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        Map<String, Object> body = Map.of("userId", userId);
+        try {
+            camundaRestTemplate.postForEntity(url("/task/" + encodePath(taskId) + "/assignee"), body, Void.class);
+            return true;
+        } catch (RuntimeException e) {
+            handle("assign Camunda task " + taskId + " to " + userId, e);
+            return false;
+        }
+    }
+
+    public boolean ensureTaskUserAuthorization(String userId, String taskId) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        try {
+            String uri = UriComponentsBuilder.fromHttpUrl(url("/authorization"))
+                    .queryParam("type", 1)
+                    .queryParam("userIdIn", userId)
+                    .queryParam("resourceType", 7)
+                    .queryParam("resourceId", taskId)
+                    .toUriString();
+            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
+            List<?> raw = response.getBody();
+            if (raw != null && !raw.isEmpty()) {
+                return true;
+            }
+        } catch (RuntimeException e) {
+            handle("check Camunda task authorization user=" + userId + " task=" + taskId, e);
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", 1);
+        body.put("userId", userId);
+        body.put("resourceType", 7);
+        body.put("resourceId", taskId);
+        body.put("permissions", List.of("READ", "UPDATE", "TASK_WORK"));
+        try {
+            camundaRestTemplate.postForEntity(url("/authorization/create"), body, Map.class);
+            return true;
+        } catch (RuntimeException e) {
+            handle("create Camunda task authorization user=" + userId + " task=" + taskId, e);
+            return false;
+        }
+    }
+
     private boolean hasActiveProcessInstanceByUri(String uri, String operation) {
         try {
             ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
@@ -670,6 +750,9 @@ public class CamundaRestClient {
                                 "scheduleSlotId",
                                 "oldApplicationStatus",
                                 "formErrorMessage",
+                                "formErrorField",
+                                "formErrorFields",
+                                "formErrorCode",
                                 "vacancyId",
                                 "candidateUserId",
                                 "recruiterUserId",
@@ -680,6 +763,10 @@ public class CamundaRestClient {
                                 "description",
                                 "requiredSkills",
                                 "screeningThreshold",
+                                "screeningScore",
+                                "screeningScoreDelta",
+                                "screeningMatchedCount",
+                                "screeningTotalSkills",
                                 "requestedStatus",
                                 "resumeText",
                                 "coverLetter",
@@ -697,6 +784,21 @@ public class CamundaRestClient {
                                 "cancelReason",
                                 "resetReason",
                                 "rollbackReason",
+                                "permissionRole",
+                                "permissionOperation",
+                                "permissionOwnership",
+                                "permissionAllowed",
+                                "permissionChecked",
+                                "currentStatus",
+                                "statusAction",
+                                "statusTransition",
+                                "notificationStatus",
+                                "recipientRole",
+                                "notificationTemplateCode",
+                                "notificationTemplate",
+                                "notificationType",
+                                "notificationKind",
+                                "notificationDispatched",
                                 "applicationIdText",
                                 "weekOffset",
                                 "uiTitle",

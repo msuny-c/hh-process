@@ -334,7 +334,8 @@ def main() -> int:
         first_task_id='ConfirmTimeoutReview',
         first_task_variables={'manualRunConfirmed': True},
     )
-    assert_payload_contains(admin_ui, 'closedCount', 'timeout review result')
+    assert_payload_contains(admin_ui, 'schedulerProcessStarted', 'timeout review scheduler start')
+    assert_payload_contains(admin_ui, 'Camunda BPMN loop hhTimeoutSchedulerProcess', 'timeout review BPMN owner')
     wait_activity_finished(admin_ui['processInstanceId'], 'RunTimeoutReview')
     ok('9. Админская джоба', f'hhUiAdminTimeoutReview={admin_ui["processInstanceId"]}')
 

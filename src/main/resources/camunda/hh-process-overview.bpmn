@@ -1,6 +1,9 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_v3" targetNamespace="http://itmo.ru/hhprocess/camunda">
-  <bpmn:message id="Message_VacancyClosed" name="MSG_VACANCY_CLOSED"/>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_v3" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+  <bpmn:message id="Message_VacancyClosed" name="MSG_VACANCY_CLOSED" />
+  <bpmn:collaboration id="Collaboration_hhProcessOverview" name="Pool: Overview: роли и процессы HH">
+    <bpmn:participant id="Participant_hhProcessOverview" name="POOL: Overview: роли и процессы HH" processRef="hhProcessOverview" />
+  </bpmn:collaboration>
   <bpmn:process id="hhProcessOverview" name="Overview: роли и процессы HH" isExecutable="false">
     <bpmn:laneSet id="LaneSet_Overview">
       <bpmn:lane id="Lane_Candidate_O" name="CANDIDATE">
@@ -25,138 +28,127 @@
         <bpmn:flowNodeRef>OverviewEnd</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="OverviewStart" name="Начало"/>
-    <bpmn:userTask id="OverviewCandidateApply" name="Кандидат заполняет отклик" camunda:formRef="apply-to-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE"/>
-    <bpmn:serviceTask id="OverviewAutoScreen" name="Система выполняет автоскрининг" camunda:type="external" camunda:topic="application-auto-screening"/>
-    <bpmn:userTask id="OverviewRecruiterDecision" name="Рекрутер принимает решение" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER"/>
-    <bpmn:exclusiveGateway id="OverviewDecisionGateway" name="Решение"/>
-    <bpmn:userTask id="OverviewInvitation" name="Рекрутер готовит приглашение" camunda:formRef="invitation-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER"/>
-    <bpmn:userTask id="OverviewCandidateResponse" name="Кандидат отвечает на приглашение" camunda:formRef="invitation-response-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE"/>
-    <bpmn:userTask id="OverviewCloseVacancy" name="Рекрутер закрывает вакансию" camunda:formRef="close-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER"/>
-    <bpmn:userTask id="OverviewAdminReset" name="Админ сбрасывает интервью" camunda:formRef="reset-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN"/>
-    <bpmn:serviceTask id="OverviewTimeout" name="Таймер закрывает просрочки" camunda:type="external" camunda:topic="timeout-close-expired"/>
-    <bpmn:endEvent id="OverviewEnd" name="Конец"/>
-    <bpmn:serviceTask id="OverviewVacancyClosedMessage" name="MSG_VACANCY_CLOSED закрывает активные процессы откликов"/>
-    <bpmn:userTask id="OverviewResultForms" name="Camunda result forms показывают итог операции"/>
-    <bpmn:sequenceFlow id="OF1" sourceRef="OverviewStart" targetRef="OverviewCandidateApply"/>
-    <bpmn:sequenceFlow id="OF2" sourceRef="OverviewCandidateApply" targetRef="OverviewAutoScreen"/>
-    <bpmn:sequenceFlow id="OF3" sourceRef="OverviewAutoScreen" targetRef="OverviewRecruiterDecision"/>
-    <bpmn:sequenceFlow id="OF4" sourceRef="OverviewRecruiterDecision" targetRef="OverviewDecisionGateway"/>
-    <bpmn:sequenceFlow id="OF5" sourceRef="OverviewDecisionGateway" targetRef="OverviewInvitation"/>
-    <bpmn:sequenceFlow id="OF6" sourceRef="OverviewInvitation" targetRef="OverviewCandidateResponse"/>
-    <bpmn:sequenceFlow id="OF7" sourceRef="OverviewCandidateResponse" targetRef="OverviewEnd"/>
-    <bpmn:sequenceFlow id="OF8" sourceRef="OverviewDecisionGateway" targetRef="OverviewEnd"/>
-    <bpmn:sequenceFlow id="OF9" sourceRef="OverviewCloseVacancy" targetRef="OverviewEnd"/>
-    <bpmn:sequenceFlow id="OF10" sourceRef="OverviewAdminReset" targetRef="OverviewEnd"/>
-    <bpmn:sequenceFlow id="OF11" sourceRef="OverviewTimeout" targetRef="OverviewEnd"/>
-    <bpmn:sequenceFlow id="OF12" sourceRef="OverviewCloseVacancy" targetRef="OverviewVacancyClosedMessage"/>
-    <bpmn:sequenceFlow id="OF13" sourceRef="OverviewVacancyClosedMessage" targetRef="OverviewResultForms"/>
+    <bpmn:startEvent id="OverviewStart" name="Начало" />
+    <bpmn:userTask id="OverviewCandidateApply" name="Кандидат заполняет отклик" camunda:formRef="apply-to-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
+    <bpmn:serviceTask id="OverviewAutoScreen" name="Система выполняет автоскрининг" camunda:type="external" camunda:topic="application-auto-screening" />
+    <bpmn:userTask id="OverviewRecruiterDecision" name="Рекрутер принимает решение" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:exclusiveGateway id="OverviewDecisionGateway" name="Решение" />
+    <bpmn:userTask id="OverviewInvitation" name="Рекрутер готовит приглашение" camunda:formRef="invitation-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:userTask id="OverviewCandidateResponse" name="Кандидат отвечает на приглашение" camunda:formRef="invitation-response-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
+    <bpmn:userTask id="OverviewCloseVacancy" name="Рекрутер закрывает вакансию" camunda:formRef="close-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:userTask id="OverviewAdminReset" name="Админ сбрасывает интервью" camunda:formRef="reset-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
+    <bpmn:serviceTask id="OverviewTimeout" name="Таймер закрывает просрочки" camunda:type="external" camunda:topic="timeout-close-expired" />
+    <bpmn:endEvent id="OverviewEnd" name="Процесс завершён" />
+    <bpmn:serviceTask id="OverviewVacancyClosedMessage" name="MSG_VACANCY_CLOSED закрывает активные процессы откликов" />
+    <bpmn:userTask id="OverviewResultForms" name="Camunda result forms показывают итог операции" />
+    <bpmn:sequenceFlow id="OF1" sourceRef="OverviewStart" targetRef="OverviewCandidateApply" />
+    <bpmn:sequenceFlow id="OF2" sourceRef="OverviewCandidateApply" targetRef="OverviewAutoScreen" />
+    <bpmn:sequenceFlow id="OF3" sourceRef="OverviewAutoScreen" targetRef="OverviewRecruiterDecision" />
+    <bpmn:sequenceFlow id="OF4" sourceRef="OverviewRecruiterDecision" targetRef="OverviewDecisionGateway" />
+    <bpmn:sequenceFlow id="OF5" sourceRef="OverviewDecisionGateway" targetRef="OverviewInvitation" />
+    <bpmn:sequenceFlow id="OF6" sourceRef="OverviewInvitation" targetRef="OverviewCandidateResponse" />
+    <bpmn:sequenceFlow id="OF7" sourceRef="OverviewCandidateResponse" targetRef="OverviewEnd" />
+    <bpmn:sequenceFlow id="OF8" sourceRef="OverviewDecisionGateway" targetRef="OverviewEnd" />
+    <bpmn:sequenceFlow id="OF9" sourceRef="OverviewCloseVacancy" targetRef="OverviewEnd" />
+    <bpmn:sequenceFlow id="OF10" sourceRef="OverviewAdminReset" targetRef="OverviewEnd" />
+    <bpmn:sequenceFlow id="OF11" sourceRef="OverviewTimeout" targetRef="OverviewEnd" />
+    <bpmn:sequenceFlow id="OF12" sourceRef="OverviewCloseVacancy" targetRef="OverviewVacancyClosedMessage" />
+    <bpmn:sequenceFlow id="OF13" sourceRef="OverviewVacancyClosedMessage" targetRef="OverviewResultForms" />
+    <bpmn:sequenceFlow id="OF14" name="ветка закрытия вакансии" sourceRef="OverviewDecisionGateway" targetRef="OverviewCloseVacancy" />
+    <bpmn:sequenceFlow id="OF15" name="ветка admin reset" sourceRef="OverviewCandidateResponse" targetRef="OverviewAdminReset" />
+    <bpmn:sequenceFlow id="OF16" name="ветка timeout scheduler" sourceRef="OverviewCandidateResponse" targetRef="OverviewTimeout" />
+    <bpmn:sequenceFlow id="OF17" name="результат показан" sourceRef="OverviewResultForms" targetRef="OverviewEnd" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_Overview">
-    <bpmndi:BPMNPlane id="BPMNPlane_Overview" bpmnElement="hhProcessOverview">
+    <bpmndi:BPMNPlane id="BPMNPlane_Overview" bpmnElement="Collaboration_hhProcessOverview">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_hhProcessOverview" bpmnElement="Participant_hhProcessOverview" isHorizontal="true">
+        <dc:Bounds x="0" y="20" width="2940" height="670" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_Candidate_O" bpmnElement="Lane_Candidate_O" isHorizontal="true">
-        <dc:Bounds x="20" y="40" width="2500" height="150"/>
+        <dc:Bounds x="100" y="40" width="2820" height="150" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_Recruiter_O" bpmnElement="Lane_Recruiter_O" isHorizontal="true">
-        <dc:Bounds x="20" y="200" width="2500" height="150"/>
+        <dc:Bounds x="100" y="200" width="2820" height="150" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_Admin_O" bpmnElement="Lane_Admin_O" isHorizontal="true">
-        <dc:Bounds x="20" y="360" width="2500" height="150"/>
+        <dc:Bounds x="100" y="360" width="2820" height="150" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_System_O" bpmnElement="Lane_System_O" isHorizontal="true">
-        <dc:Bounds x="20" y="520" width="2500" height="150"/>
+        <dc:Bounds x="100" y="520" width="2820" height="150" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewStart" bpmnElement="OverviewStart">
-        <dc:Bounds x="90" y="565" width="36" height="36"/>
+        <dc:Bounds x="130" y="565" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewCandidateApply" bpmnElement="OverviewCandidateApply">
-        <dc:Bounds x="90" y="85" width="170" height="70"/>
+        <dc:Bounds x="130" y="85" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewAutoScreen" bpmnElement="OverviewAutoScreen">
-        <dc:Bounds x="300" y="565" width="170" height="70"/>
+        <dc:Bounds x="340" y="565" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewRecruiterDecision" bpmnElement="OverviewRecruiterDecision">
-        <dc:Bounds x="90" y="245" width="170" height="70"/>
+        <dc:Bounds x="130" y="245" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewDecisionGateway" bpmnElement="OverviewDecisionGateway">
-        <dc:Bounds x="510" y="565" width="50" height="50"/>
+        <dc:Bounds x="550" y="565" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewInvitation" bpmnElement="OverviewInvitation">
-        <dc:Bounds x="300" y="245" width="170" height="70"/>
+        <dc:Bounds x="340" y="245" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewCandidateResponse" bpmnElement="OverviewCandidateResponse">
-        <dc:Bounds x="300" y="85" width="170" height="70"/>
+        <dc:Bounds x="340" y="85" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewCloseVacancy" bpmnElement="OverviewCloseVacancy">
-        <dc:Bounds x="510" y="245" width="170" height="70"/>
+        <dc:Bounds x="550" y="245" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewAdminReset" bpmnElement="OverviewAdminReset">
-        <dc:Bounds x="90" y="405" width="170" height="70"/>
+        <dc:Bounds x="130" y="405" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewTimeout" bpmnElement="OverviewTimeout">
-        <dc:Bounds x="720" y="565" width="170" height="70"/>
+        <dc:Bounds x="760" y="565" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewEnd" bpmnElement="OverviewEnd">
-        <dc:Bounds x="930" y="565" width="36" height="36"/>
+        <dc:Bounds x="970" y="565" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewVacancyClosedMessage" bpmnElement="OverviewVacancyClosedMessage">
-        <dc:Bounds x="1140" y="565" width="170" height="70"/>
+        <dc:Bounds x="1180" y="565" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_OverviewResultForms" bpmnElement="OverviewResultForms">
-        <dc:Bounds x="510" y="85" width="170" height="70"/>
+        <dc:Bounds x="550" y="85" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_OF1" bpmnElement="OF1">
-        <di:waypoint x="126" y="583.0"/>
-        <di:waypoint x="90" y="120.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="150.6" y="565.0" /><di:waypoint x="209.9" y="155.0" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF2" bpmnElement="OF2">
-        <di:waypoint x="260" y="120.0"/>
-        <di:waypoint x="300" y="600.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="230.3" y="155.0" /><di:waypoint x="409.7" y="565.0" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF3" bpmnElement="OF3">
-        <di:waypoint x="470" y="600.0"/>
-        <di:waypoint x="90" y="280.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="402" y="565.0" /><di:waypoint x="238" y="315.0" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF4" bpmnElement="OF4">
-        <di:waypoint x="260" y="280.0"/>
-        <di:waypoint x="510" y="590.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="255.6" y="315.0" /><di:waypoint x="550" y="568.5" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF5" bpmnElement="OF5">
-        <di:waypoint x="560" y="590.0"/>
-        <di:waypoint x="300" y="280.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="562.9" y="565.0" /><di:waypoint x="441.9" y="315.0" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF6" bpmnElement="OF6">
-        <di:waypoint x="470" y="280.0"/>
-        <di:waypoint x="300" y="120.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="425" y="245.0" /><di:waypoint x="425" y="155.0" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF7" bpmnElement="OF7">
-        <di:waypoint x="470" y="120.0"/>
-        <di:waypoint x="930" y="583.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="467.6" y="155.0" /><di:waypoint x="970" y="568.2" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF8" bpmnElement="OF8">
-        <di:waypoint x="560" y="590.0"/>
-        <di:waypoint x="930" y="583.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="600" y="589.6" /><di:waypoint x="970" y="583.3" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF9" bpmnElement="OF9">
-        <di:waypoint x="680" y="280.0"/>
-        <di:waypoint x="930" y="583.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="675.8" y="315.0" /><di:waypoint x="970" y="567.5" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF10" bpmnElement="OF10">
-        <di:waypoint x="260" y="440.0"/>
-        <di:waypoint x="930" y="583.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="300" y="455.7" /><di:waypoint x="970" y="579.7" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF11" bpmnElement="OF11">
-        <di:waypoint x="890" y="600.0"/>
-        <di:waypoint x="930" y="583.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="930" y="589.9" /><di:waypoint x="970" y="585.1" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF12" bpmnElement="OF12">
-        <di:waypoint x="680" y="280.0"/>
-        <di:waypoint x="1140" y="600.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="703.9" y="315.0" /><di:waypoint x="1196.1" y="565.0" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_OF13" bpmnElement="OF13">
-        <di:waypoint x="1310" y="600.0"/>
-        <di:waypoint x="510" y="120.0"/>
-      </bpmndi:BPMNEdge>
+        <di:waypoint x="1219.1" y="565.0" /><di:waypoint x="680.9" y="155.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_OF14" bpmnElement="OF14">
+        <di:waypoint x="579.8" y="565.0" /><di:waypoint x="628.2" y="315.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_OF15" bpmnElement="OF15">
+        <di:waypoint x="402" y="155.0" /><di:waypoint x="238" y="405.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_OF16" bpmnElement="OF16">
+        <di:waypoint x="455.6" y="155.0" /><di:waypoint x="814.4" y="565.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_OF17" bpmnElement="OF17">
+        <di:waypoint x="661.7" y="155.0" /><di:waypoint x="974.3" y="565.0" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

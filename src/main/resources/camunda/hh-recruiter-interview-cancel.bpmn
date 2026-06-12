@@ -1,43 +1,231 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_hh_recruiter_interview_cancel" targetNamespace="http://itmo.ru/hhprocess/camunda">
-  <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED"/>
-  <bpmn:error id="Error_ApplicationTxFailed" name="APPLICATION_TX_FAILED" errorCode="APPLICATION_TX_FAILED"/>
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_recruiter_interview_cancel" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+  <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
+  <bpmn:error id="Error_ApplicationTxFailed" name="APPLICATION_TX_FAILED" errorCode="APPLICATION_TX_FAILED" />
+  <bpmn:collaboration id="Collaboration_hhRecruiterInterviewCancelProcess" name="Pool: HH recruiter interview cancel">
+    <bpmn:participant id="Participant_hhRecruiterInterviewCancelProcess" name="POOL: HH recruiter interview cancel" processRef="hhRecruiterInterviewCancelProcess" />
+  </bpmn:collaboration>
   <bpmn:process id="hhRecruiterInterviewCancelProcess" name="HH recruiter interview cancel" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
-    <bpmn:startEvent id="RecruiterCancelStart" name="Рекрутер запросил отмену интервью" camunda:initiator="starterUserId"/>
-    <bpmn:userTask id="CancelInterviewTask" name="Подтвердить отмену интервью" camunda:formRef="cancel-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER"/>
-    <bpmn:serviceTask id="ValidateRecruiterCancelInterview" name="Проверить отмену интервью" camunda:type="external" camunda:topic="interview-cancel"/>
-    <bpmn:boundaryEvent id="RecruiterCancelValidationError" attachedToRef="ValidateRecruiterCancelInterview">
-      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed"/>
-    </bpmn:boundaryEvent>
+    <bpmn:laneSet id="LaneSet_RecruiterCancel">
+      <bpmn:lane id="Lane_System_RC" name="SYSTEM">
+        <bpmn:flowNodeRef>RecruiterCancelResultTask</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>NotifyRecruiterCancelParticipants</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ThrowCompensationRecruiterCancelRollback</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Compensate_Transaction_RecruiterCancelInterview</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>RecruiterCancelValidationError</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Compensate_Transaction_RecruiterCancelInterview_Boundary</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Cancel_Transaction_RecruiterCancelInterview</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>RecruiterCancelTxError</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Recruiter_RC" name="RECRUITER">
+        <bpmn:flowNodeRef>RecruiterCancelStart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CancelInterviewTask</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ValidateRecruiterCancelInterview</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>RollbackRecruiterCancel</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>RecruiterCancelEnd</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>RecruiterCancelRollbackEnd</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Transaction_RecruiterCancelInterview</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="RecruiterCancelStart" name="Рекрутер запросил отмену интервью" camunda:initiator="starterUserId" />
+    <bpmn:userTask id="CancelInterviewTask" name="Подтвердить отмену интервью" camunda:formRef="cancel-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:serviceTask id="ValidateRecruiterCancelInterview" name="Проверить отмену интервью" camunda:type="external" camunda:topic="interview-cancel" />
+    <bpmn:userTask id="RecruiterCancelResultTask" name="Показать результат отмены интервью" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:intermediateThrowEvent id="ThrowCompensationRecruiterCancelRollback" name="Явно запустить BPMN compensation handlers">
+      <bpmn:compensateEventDefinition waitForCompletion="true" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:serviceTask id="RollbackRecruiterCancel" name="Выполнить recovery отмены интервью" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:endEvent id="RecruiterCancelEnd" name="Интервью отменено" />
+    <bpmn:endEvent id="RecruiterCancelRollbackEnd" name="Отмена не выполнена" />
+    <bpmn:serviceTask id="Compensate_Transaction_RecruiterCancelInterview" name="Компенсация: отмена интервью рекрутером" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
     <bpmn:transaction id="Transaction_RecruiterCancelInterview" name="TX: отмена интервью рекрутером">
-      <bpmn:startEvent id="Transaction_RecruiterCancelInterview_Start"/>
-      <bpmn:serviceTask id="CancelInterviewByRecruiter" name="Отменить интервью" camunda:type="external" camunda:topic="interview-cancel"/>
-      <bpmn:serviceTask id="ReleaseRecruiterCancelSlot" name="Освободить слот расписания" camunda:type="external" camunda:topic="interview-cancel"/>
-      <bpmn:serviceTask id="ReturnCancelApplicationToReview" name="Вернуть отклик на рассмотрение" camunda:type="external" camunda:topic="interview-cancel"/>
-      <bpmn:serviceTask id="RecordRecruiterCancelHistory" name="Записать историю отмены" camunda:type="external" camunda:topic="interview-cancel"/>
-      <bpmn:endEvent id="Transaction_RecruiterCancelInterview_End"/>
-      <bpmn:sequenceFlow id="RC_TX1" sourceRef="Transaction_RecruiterCancelInterview_Start" targetRef="CancelInterviewByRecruiter"/>
-      <bpmn:sequenceFlow id="RC_TX2" sourceRef="CancelInterviewByRecruiter" targetRef="ReleaseRecruiterCancelSlot"/>
-      <bpmn:sequenceFlow id="RC_TX3" sourceRef="ReleaseRecruiterCancelSlot" targetRef="ReturnCancelApplicationToReview"/>
-      <bpmn:sequenceFlow id="RC_TX4" sourceRef="ReturnCancelApplicationToReview" targetRef="RecordRecruiterCancelHistory"/>
-      <bpmn:sequenceFlow id="RC_TX5" sourceRef="RecordRecruiterCancelHistory" targetRef="Transaction_RecruiterCancelInterview_End"/>
+      <bpmn:startEvent id="Transaction_RecruiterCancelInterview_Start" name="Начать транзакционный блок" />
+      <bpmn:serviceTask id="CancelInterviewByRecruiter" name="Отменить интервью" camunda:type="external" camunda:topic="interview-cancel" />
+      <bpmn:serviceTask id="ReleaseRecruiterCancelSlot" name="Освободить слот расписания" camunda:type="external" camunda:topic="interview-cancel" />
+      <bpmn:serviceTask id="ReturnCancelApplicationToReview" name="Вернуть отклик на рассмотрение" camunda:type="external" camunda:topic="interview-cancel" />
+      <bpmn:serviceTask id="RecordRecruiterCancelHistory" name="Записать историю отмены" camunda:type="external" camunda:topic="interview-cancel" />
+      <bpmn:endEvent id="Transaction_RecruiterCancelInterview_End" name="Завершить транзакционный блок" />
+      <bpmn:sequenceFlow id="RC_TX1" sourceRef="Transaction_RecruiterCancelInterview_Start" targetRef="CancelInterviewByRecruiter" />
+      <bpmn:sequenceFlow id="RC_TX2" sourceRef="CancelInterviewByRecruiter" targetRef="ReleaseRecruiterCancelSlot" />
+      <bpmn:sequenceFlow id="RC_TX3" sourceRef="ReleaseRecruiterCancelSlot" targetRef="ReturnCancelApplicationToReview" />
+      <bpmn:sequenceFlow id="RC_TX4" sourceRef="ReturnCancelApplicationToReview" targetRef="RecordRecruiterCancelHistory" />
+      <bpmn:sequenceFlow id="RC_TX5" sourceRef="RecordRecruiterCancelHistory" targetRef="Transaction_RecruiterCancelInterview_End" />
     </bpmn:transaction>
-    <bpmn:boundaryEvent id="RecruiterCancelTxError" attachedToRef="Transaction_RecruiterCancelInterview">
-      <bpmn:errorEventDefinition errorRef="Error_ApplicationTxFailed"/>
+    <bpmn:callActivity id="NotifyRecruiterCancelParticipants" name="Call: уведомить кандидата об отмене интервью" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+      <bpmn:extensionElements>
+        <camunda:in sourceExpression="${'RECRUITER_CANCEL'}" target="notificationKind" />
+        <camunda:in source="applicationId" target="applicationId" />
+        <camunda:in source="cancelReason" target="cancelReason" />
+        <camunda:out source="notificationDispatched" target="NotifyRecruiterCancelParticipantsDispatched" />
+        <camunda:out source="notificationKind" target="lastNotificationKind" />
+      </bpmn:extensionElements>
+    </bpmn:callActivity>
+    <bpmn:boundaryEvent id="RecruiterCancelValidationError" attachedToRef="ValidateRecruiterCancelInterview">
+      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="NotifyRecruiterCancelParticipants" name="Уведомить кандидата об отмене интервью" camunda:type="external" camunda:topic="interview-cancel"/>
-    <bpmn:serviceTask id="RollbackRecruiterCancel" name="Выполнить recovery отмены интервью" camunda:type="external" camunda:topic="transaction-rollback"/>
-    <bpmn:userTask id="RecruiterCancelResultTask" name="Показать результат отмены интервью" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN"/>
-    <bpmn:endEvent id="RecruiterCancelEnd" name="Интервью отменено"/>
-    <bpmn:endEvent id="RecruiterCancelRollbackEnd" name="Отмена не выполнена"/>
-    <bpmn:sequenceFlow id="RC1" sourceRef="RecruiterCancelStart" targetRef="CancelInterviewTask"/>
-    <bpmn:sequenceFlow id="RC2" sourceRef="CancelInterviewTask" targetRef="ValidateRecruiterCancelInterview"/>
-    <bpmn:sequenceFlow id="RC2e" sourceRef="RecruiterCancelValidationError" targetRef="CancelInterviewTask"/>
-    <bpmn:sequenceFlow id="RC3" sourceRef="ValidateRecruiterCancelInterview" targetRef="Transaction_RecruiterCancelInterview"/>
-    <bpmn:sequenceFlow id="RC4" sourceRef="Transaction_RecruiterCancelInterview" targetRef="NotifyRecruiterCancelParticipants"/>
-    <bpmn:sequenceFlow id="RC5" sourceRef="NotifyRecruiterCancelParticipants" targetRef="RecruiterCancelResultTask"/>
-    <bpmn:sequenceFlow id="RC6" sourceRef="RecruiterCancelResultTask" targetRef="RecruiterCancelEnd"/>
-    <bpmn:sequenceFlow id="RC_ERR1" sourceRef="RecruiterCancelTxError" targetRef="RollbackRecruiterCancel"/>
-    <bpmn:sequenceFlow id="RC_ERR2" sourceRef="RollbackRecruiterCancel" targetRef="RecruiterCancelRollbackEnd"/>
+    <bpmn:boundaryEvent id="Compensate_Transaction_RecruiterCancelInterview_Boundary" name="Compensation boundary: отмена интервью рекрутером" attachedToRef="Transaction_RecruiterCancelInterview">
+      <bpmn:compensateEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Cancel_Transaction_RecruiterCancelInterview" name="Cancel boundary: отмена интервью рекрутером" attachedToRef="Transaction_RecruiterCancelInterview">
+      <bpmn:cancelEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="RecruiterCancelTxError" attachedToRef="Transaction_RecruiterCancelInterview">
+      <bpmn:errorEventDefinition errorRef="Error_ApplicationTxFailed" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="RC1" sourceRef="RecruiterCancelStart" targetRef="CancelInterviewTask" />
+    <bpmn:sequenceFlow id="RC2e" sourceRef="RecruiterCancelValidationError" targetRef="CancelInterviewTask" />
+    <bpmn:sequenceFlow id="RC2" sourceRef="CancelInterviewTask" targetRef="ValidateRecruiterCancelInterview" />
+    <bpmn:sequenceFlow id="RC3" sourceRef="ValidateRecruiterCancelInterview" targetRef="Transaction_RecruiterCancelInterview" />
+    <bpmn:sequenceFlow id="RC4" name="интервью отменено -&gt; уведомить" sourceRef="Transaction_RecruiterCancelInterview" targetRef="NotifyRecruiterCancelParticipants" />
+    <bpmn:sequenceFlow id="RC5" name="уведомление отправлено" sourceRef="NotifyRecruiterCancelParticipants" targetRef="RecruiterCancelResultTask" />
+    <bpmn:sequenceFlow id="RC6" sourceRef="RecruiterCancelResultTask" targetRef="RecruiterCancelEnd" />
+    <bpmn:sequenceFlow id="RC_ERR1" name="ошибка TX -&gt; compensate" sourceRef="RecruiterCancelTxError" targetRef="ThrowCompensationRecruiterCancelRollback" />
+    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_RecruiterCancelInterview_Recovery" name="cancel -&gt; recovery" sourceRef="Cancel_Transaction_RecruiterCancelInterview" targetRef="ThrowCompensationRecruiterCancelRollback" />
+    <bpmn:sequenceFlow id="RC_ERR1_COMPENSATED" name="compensation выполнена" sourceRef="ThrowCompensationRecruiterCancelRollback" targetRef="RollbackRecruiterCancel" />
+    <bpmn:sequenceFlow id="RC_ERR2" sourceRef="RollbackRecruiterCancel" targetRef="RecruiterCancelRollbackEnd" />
+    <bpmn:association id="Association_Compensate_Transaction_RecruiterCancelInterview" sourceRef="Compensate_Transaction_RecruiterCancelInterview_Boundary" targetRef="Compensate_Transaction_RecruiterCancelInterview" />
   </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_hhRecruiterInterviewCancelProcess">
+    <bpmndi:BPMNPlane id="BPMNPlane_hhRecruiterInterviewCancelProcess" bpmnElement="Collaboration_hhRecruiterInterviewCancelProcess">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_hhRecruiterInterviewCancelProcess" bpmnElement="Participant_hhRecruiterInterviewCancelProcess" isHorizontal="true">
+        <dc:Bounds x="100" y="80" width="2780" height="520" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_System_RC" bpmnElement="Lane_System_RC" isHorizontal="true">
+        <dc:Bounds x="200" y="340" width="2660" height="240" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_Recruiter_RC" bpmnElement="Lane_Recruiter_RC" isHorizontal="true">
+        <dc:Bounds x="200" y="170" width="2660" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RecruiterCancelStart" bpmnElement="RecruiterCancelStart">
+        <dc:Bounds x="280" y="302" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="255" y="338" width="87" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_CancelInterviewTask" bpmnElement="CancelInterviewTask">
+        <dc:Bounds x="520" y="280" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ValidateRecruiterCancelInterview" bpmnElement="ValidateRecruiterCancelInterview">
+        <dc:Bounds x="760" y="280" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RecruiterCancelResultTask" bpmnElement="RecruiterCancelResultTask">
+        <dc:Bounds x="1895" y="360" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ThrowCompensationRecruiterCancelRollback" bpmnElement="ThrowCompensationRecruiterCancelRollback">
+        <dc:Bounds x="1690" y="510" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1669" y="546" width="79" height="53" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RollbackRecruiterCancel" bpmnElement="RollbackRecruiterCancel">
+        <dc:Bounds x="1780" y="480" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RecruiterCancelEnd" bpmnElement="RecruiterCancelEnd">
+        <dc:Bounds x="2140" y="382" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2133" y="418" width="51" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RecruiterCancelRollbackEnd" bpmnElement="RecruiterCancelRollbackEnd">
+        <dc:Bounds x="2140" y="502" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2130" y="538" width="57" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Compensate_Transaction_RecruiterCancelInterview" bpmnElement="Compensate_Transaction_RecruiterCancelInterview">
+        <dc:Bounds x="1480" y="480" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Transaction_RecruiterCancelInterview" bpmnElement="Transaction_RecruiterCancelInterview" isExpanded="true">
+        <dc:Bounds x="1000" y="140" width="620" height="290" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Transaction_RecruiterCancelInterview_Start" bpmnElement="Transaction_RecruiterCancelInterview_Start">
+        <dc:Bounds x="1030" y="337" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1006" y="373" width="85" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ReturnCancelApplicationToReview" bpmnElement="ReturnCancelApplicationToReview">
+        <dc:Bounds x="1480" y="325" width="135" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RecordRecruiterCancelHistory" bpmnElement="RecordRecruiterCancelHistory">
+        <dc:Bounds x="1630" y="325" width="135" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Transaction_RecruiterCancelInterview_End" bpmnElement="Transaction_RecruiterCancelInterview_End">
+        <dc:Bounds x="1605" y="337" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1581" y="373" width="85" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_NotifyRecruiterCancelParticipants" bpmnElement="NotifyRecruiterCancelParticipants">
+        <dc:Bounds x="1665" y="360" width="170" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_CancelInterviewByRecruiter" bpmnElement="CancelInterviewByRecruiter">
+        <dc:Bounds x="1179" y="325" width="135" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ReleaseRecruiterCancelSlot" bpmnElement="ReleaseRecruiterCancelSlot">
+        <dc:Bounds x="1329" y="325" width="135" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC_TX1" bpmnElement="RC_TX1">
+        <di:waypoint x="1066" y="355.0" /><di:waypoint x="1179" y="355.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC_TX3" bpmnElement="RC_TX3">
+        <di:waypoint x="1464" y="355.0" /><di:waypoint x="1480" y="355.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC_TX4" bpmnElement="RC_TX4">
+        <di:waypoint x="1615" y="355.0" /><di:waypoint x="1630" y="355.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC_TX5" bpmnElement="RC_TX5">
+        <di:waypoint x="1630" y="355.0" /><di:waypoint x="1641" y="355.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC_TX2" bpmnElement="RC_TX2">
+        <di:waypoint x="1314" y="355.0" /><di:waypoint x="1329" y="355.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Association_Compensate_Transaction_RecruiterCancelInterview" bpmnElement="Association_Compensate_Transaction_RecruiterCancelInterview">
+        <di:waypoint x="1563.6" y="481.0" /><di:waypoint x="1563.6" y="480.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="BPMNShape_RecruiterCancelValidationError" bpmnElement="RecruiterCancelValidationError">
+        <dc:Bounds x="912" y="342" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Compensate_Transaction_RecruiterCancelInterview_Boundary" bpmnElement="Compensate_Transaction_RecruiterCancelInterview_Boundary">
+        <dc:Bounds x="1545" y="445" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1518" y="481" width="90" height="53" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Cancel_Transaction_RecruiterCancelInterview" bpmnElement="Cancel_Transaction_RecruiterCancelInterview">
+        <dc:Bounds x="1600" y="445" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1573" y="481" width="90" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RecruiterCancelTxError" bpmnElement="RecruiterCancelTxError">
+        <dc:Bounds x="1602" y="412" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC1" bpmnElement="RC1">
+        <di:waypoint x="316" y="320.0" /><di:waypoint x="520" y="320.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC2e" bpmnElement="RC2e">
+        <di:waypoint x="912" y="357.8" /><di:waypoint x="690" y="330.5" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC2" bpmnElement="RC2">
+        <di:waypoint x="690" y="320.0" /><di:waypoint x="760" y="320.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC3" bpmnElement="RC3">
+        <di:waypoint x="930" y="313.6" /><di:waypoint x="1000" y="308.3" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC6" bpmnElement="RC6">
+        <di:waypoint x="2065" y="400.0" /><di:waypoint x="2140" y="400.0" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC_ERR1" bpmnElement="RC_ERR1">
+      <di:waypoint x="1636.2" y="448.0" /><di:waypoint x="1691.8" y="510.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1588" y="665" width="74" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Cancel_Transaction_RecruiterCancelInterview_Recovery" bpmnElement="Flow_Cancel_Transaction_RecruiterCancelInterview_Recovery">
+      <di:waypoint x="1636" y="476.0" /><di:waypoint x="1690" y="515.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1594" y="674" width="56" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC_ERR1_COMPENSATED" bpmnElement="RC_ERR1_COMPENSATED">
+      <di:waypoint x="1726" y="527.1" /><di:waypoint x="1780" y="524.3" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="9255" y="756" width="69" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_RC_ERR2" bpmnElement="RC_ERR2">
+        <di:waypoint x="1950" y="520.0" /><di:waypoint x="2140" y="520.0" /></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="BPMNEdge_RC4" bpmnElement="RC4"><di:waypoint x="1620" y="366.0" /><di:waypoint x="1665" y="377.8" /></bpmndi:BPMNEdge><bpmndi:BPMNEdge id="BPMNEdge_RC5" bpmnElement="RC5"><di:waypoint x="1835" y="400.0" /><di:waypoint x="1895" y="400.0" /></bpmndi:BPMNEdge></bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>

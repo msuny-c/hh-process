@@ -28,10 +28,11 @@ public class CamundaProperties {
     private String vacancyStatusUpdateProcessKey = "hhVacancyStatusUpdateProcess";
     private String recruiterInterviewCancelProcessKey = "hhRecruiterInterviewCancelProcess";
 
-    /** Initial password used only when the application creates a Camunda user for Tasklist access. */
     private String identitySyncInitialPassword = "camunda";
 
     private Worker worker = new Worker();
+
+    private TaskListener taskListener = new TaskListener();
 
     @Getter
     @Setter
@@ -43,5 +44,13 @@ public class CamundaProperties {
         private long lockDurationMs = 30000;
         private long pollIntervalMs = 3000;
         private long initialDelayMs = 10000;
+    }
+
+    @Getter
+    @Setter
+    public static class TaskListener {
+        private boolean enabled = true;
+        private long pollIntervalMs = 5000;
+        private long initialDelayMs = 12000;
     }
 }
