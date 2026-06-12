@@ -216,7 +216,7 @@ The application also synchronizes app users/groups into Camunda during startup.
 1. Do not use standard ports `8080`, `9990`, `5432` on Helios. Use repository variables such as `SERVER_PORT=18081`, `WORKER_SERVER_PORT=18082`, `POSTGRES_PORT=15432`.
 2. WildFly 21 is too old for this Spring Boot 3 / Jakarta project. The workflow installs WildFly `40.0.0.Final`.
 3. Camunda is not embedded into the app. It is a standalone Tomcat distribution on the second Helios machine.
-4. PostgreSQL must allow prepared transactions for Narayana/JTA: `max_prepared_transactions > 0`.
+4. PostgreSQL must allow prepared transactions for Narayana/JTA: `max_prepared_transactions > 0`. Docker CI uses `max_connections=200` to leave enough connection headroom for WildFly, Narayana and standalone Camunda.
 5. If the workflow passes build but app healthcheck fails, download the `helios-wildfly-log-*` artifact.
 
 ## CI Docker tests before deploy
@@ -224,7 +224,7 @@ The application also synchronizes app users/groups into Camunda during startup.
 Workflow `.github/workflows/deploy-split-helios.yml` now has a separate `ci-docker-tests` job. It runs only on branch `lab4` and is required before deployment to Helios. The job does the following:
 
 1. builds and starts the local Docker stack from `docker-compose.yml`:
-   - PostgreSQL with `max_prepared_transactions=100`;
+   - PostgreSQL with `max_prepared_transactions=200` and `max_connections=200`;
    - Camunda standalone container;
    - application container.
 2. waits for:

@@ -512,6 +512,13 @@ public class CamundaRestClient {
         try {
             camundaRestTemplate.postForEntity(url("/message"), body, Map.class);
             return true;
+        } catch (HttpStatusCodeException e) {
+            if (isMessageCorrelationMiss(e)) {
+                logSoftFailure("correlate Camunda message " + messageName + " businessKey=" + businessKey, e);
+                return false;
+            }
+            handle("correlate Camunda message " + messageName + " businessKey=" + businessKey, e);
+            return false;
         } catch (RuntimeException e) {
             handle("correlate Camunda message " + messageName + " businessKey=" + businessKey, e);
             return false;
@@ -710,6 +717,13 @@ public class CamundaRestClient {
                 }
             }
             return false;
+        } catch (HttpStatusCodeException e) {
+            if (isMissingTask(e)) {
+                logSoftFailure("read Camunda task identity links " + taskId, e);
+                return false;
+            }
+            handle("read Camunda task identity links " + taskId, e);
+            return false;
         } catch (RuntimeException e) {
             handle("read Camunda task identity links " + taskId, e);
             return false;
@@ -724,6 +738,13 @@ public class CamundaRestClient {
         try {
             camundaRestTemplate.postForEntity(url("/task/" + taskId + "/complete"), body, Void.class);
             return true;
+        } catch (HttpStatusCodeException e) {
+            if (isConcurrentTaskUpdate(e)) {
+                logSoftFailure("complete Camunda task " + taskId, e);
+                return false;
+            }
+            handle("complete Camunda task " + taskId, e);
+            return false;
         } catch (RuntimeException e) {
             handle("complete Camunda task " + taskId, e);
             return false;
@@ -900,5 +921,26 @@ public class CamundaRestClient {
         } else {
             log.warn("Cannot {}: {}", action, e.getMessage());
         }
+    }
+
+    private boolean isMessageCorrelationMiss(HttpStatusCodeException e) {
+        String body = e.getResponseBodyAsString();
+        return e.getStatusCode().is4xxClientError()
+                && (body.contains("MismatchingMessageCorrelationException")
+                || body.contains("Cannot correlate message"));
+    }
+
+    private boolean isConcurrentTaskUpdate(HttpStatusCodeException e) {
+        String body = e.getResponseBodyAsString();
+        return e.getStatusCode().is5xxServerError()
+                && (body.contains("updated by another transaction concurrently")
+                || body.contains("ENGINE-03005"));
+    }
+
+    private boolean isMissingTask(HttpStatusCodeException e) {
+        String body = e.getResponseBodyAsString();
+        return e.getStatusCode().is5xxServerError()
+                && body.contains("Cannot find task with id")
+                && body.contains("task is null");
     }
 }

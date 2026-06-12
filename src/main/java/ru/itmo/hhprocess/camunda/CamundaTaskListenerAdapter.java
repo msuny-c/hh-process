@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.repository.UserRepository;
 
@@ -19,14 +18,13 @@ import java.util.UUID;
 @ConditionalOnProperty(prefix = "app.camunda.task-listener", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class CamundaTaskListenerAdapter {
 
-    private static final int MAX_TASKS_PER_PASS = 500;
+    private static final int MAX_TASKS_PER_PASS = 100;
 
     private final CamundaRestClient camundaRestClient;
     private final UserRepository userRepository;
 
     @Scheduled(fixedDelayString = "${app.camunda.task-listener.poll-interval-ms:5000}",
             initialDelayString = "${app.camunda.task-listener.initial-delay-ms:12000}")
-    @Transactional(readOnly = true)
     public void reconcileActiveUserTasks() {
         if (!camundaRestClient.isEnabled()) {
             return;
@@ -92,7 +90,7 @@ public class CamundaTaskListenerAdapter {
         }
         try {
             UUID userId = UUID.fromString(String.valueOf(raw));
-            return userRepository.findById(userId)
+            return userRepository.findWithRolesById(userId)
                     .filter(UserEntity::isEnabled)
                     .filter(user -> expectedGroup == null || hasRole(user, expectedGroup))
                     .map(user -> new TaskOwner(user, expectedGroup));
@@ -108,7 +106,7 @@ public class CamundaTaskListenerAdapter {
         }
         String starter = String.valueOf(raw).trim().toLowerCase(java.util.Locale.ROOT);
         return userRepository.findWithRolesByEmail(starter)
-                .or(() -> userRepository.findAll().stream()
+                .or(() -> userRepository.findAllWithRolesBy().stream()
                         .filter(user -> starter.equals(CamundaIdentitySyncService.camundaUserId(user)))
                         .findFirst())
                 .filter(UserEntity::isEnabled)

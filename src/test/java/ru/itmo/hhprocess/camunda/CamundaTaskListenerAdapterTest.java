@@ -2,6 +2,7 @@ package ru.itmo.hhprocess.camunda;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.entity.RoleEntity;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.repository.UserRepository;
@@ -78,16 +79,23 @@ class CamundaTaskListenerAdapterTest {
         assertNull(camundaRestClient.authorizedTasks.get("candidateexamplecom"));
     }
 
+    @Test
+    void scheduledPassIsNotWrappedInOneLargeTransaction() throws NoSuchMethodException {
+        assertNull(CamundaTaskListenerAdapter.class
+                .getMethod("reconcileActiveUserTasks")
+                .getAnnotation(Transactional.class));
+    }
+
     private UserRepository userRepository() {
         return (UserRepository) Proxy.newProxyInstance(
                 UserRepository.class.getClassLoader(),
                 new Class<?>[]{UserRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "findById" -> Optional.ofNullable(users.get((UUID) args[0]));
+                    case "findWithRolesById" -> Optional.ofNullable(users.get((UUID) args[0]));
                     case "findWithRolesByEmail" -> users.values().stream()
                             .filter(user -> user.getEmail().equalsIgnoreCase(String.valueOf(args[0])))
                             .findFirst();
-                    case "findAll" -> List.copyOf(users.values());
+                    case "findAllWithRolesBy" -> List.copyOf(users.values());
                     default -> throw new UnsupportedOperationException(method.getName());
                 });
     }

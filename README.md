@@ -141,6 +141,7 @@ curl -sS -X POST http://localhost:8080/api/v1/auth/register/candidate \
 - For native запуск on the server, `infra/appctl.sh` creates the log directory before starting the JAR and passes `-Dnarayana.log-dir=...`.
 - `NARAYANA_NODE_IDENTIFIER` should be unique per instance if you ever run more than one app instance against the same resources.
 - PostgreSQL **must** be started with `max_prepared_transactions > 0`, otherwise XA/JTA transactions fail during the prepare phase with `ERROR: prepared transactions are disabled`.
+- For Docker and CI, PostgreSQL is also started with `max_connections=200` so WildFly, Narayana and standalone Camunda have enough room for parallel startup and smoke tests.
 
 
 ## Локальный прогон в Docker
@@ -162,7 +163,7 @@ curl -sS http://localhost:8080/actuator/health
 curl -sS http://localhost:8081/engine-rest/engine
 ```
 
-В `docker-compose.yml` PostgreSQL уже запускается с `max_prepared_transactions=100`, поэтому JTA/Narayana работает локально из коробки.
+В `docker-compose.yml` PostgreSQL уже запускается с `max_prepared_transactions=200` и `max_connections=200`, поэтому JTA/Narayana и локальные Docker smoke-тесты работают из коробки.
 
 Начиная с миграции `V4__repair_seed_data.sql`, приложение при старте дополнительно восстанавливает базовые роли и сидовых пользователей:
 - `admin@example.com`
@@ -176,7 +177,8 @@ curl -sS http://localhost:8081/engine-rest/engine
 Для любого окружения без Docker у PostgreSQL должна быть включена поддержка prepared transactions. Минимум:
 
 ```conf
-max_prepared_transactions = 100
+max_prepared_transactions = 200
+max_connections = 200
 ```
 
 После изменения параметра нужен restart PostgreSQL. Без этого приложение стартует, но первые write-операции под JTA будут падать на commit/prepare.

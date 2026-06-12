@@ -48,7 +48,8 @@ curl http://localhost:8080/actuator/health
 Если проект запускается не через Docker, важно включить PostgreSQL prepared transactions:
 
 ```conf
-max_prepared_transactions = 100
+max_prepared_transactions = 200
+max_connections = 200
 ```
 
 Это нужно для JTA/Narayana.
@@ -1072,7 +1073,7 @@ python test/test_camunda_tasklist_candidate_apply.py
 
 [^notification-process]: `src/main/resources/camunda/hh-notification-process.bpmn` — reusable process `hhNotificationProcess` с `PrepareNotificationTemplateDecision`, business rule task `EvaluateNotificationTemplate` и external task `DispatchNotification`. Основные процессы вызывают его через `bpmn:callActivity` (`NotifyRecruiter`, `NotifyInvitation`, `NotifyRejection`, `NotifyCandidateResponse`, timeout/admin/vacancy notifications).
 
-[^jta]: `src/main/java/ru/itmo/hhprocess/config/NarayanaJtaConfig.java`, `src/main/resources/application.yml`, `docker-compose.yml` — JTA включён через Spring/Narayana, Hibernate работает с `transaction.coordinator_class=jta`, PostgreSQL в Docker стартует с `max_prepared_transactions=100`, Narayana пишет object store в `NARAYANA_LOG_DIR`.
+[^jta]: `src/main/java/ru/itmo/hhprocess/config/NarayanaJtaConfig.java`, `src/main/resources/application.yml`, `docker-compose.yml` — JTA включён через Spring/Narayana, Hibernate работает с `transaction.coordinator_class=jta`, PostgreSQL в Docker стартует с `max_prepared_transactions=200` и `max_connections=200`, Narayana пишет object store в `NARAYANA_LOG_DIR`.
 
 [^helios-demo-cleanup]: `.github/workflows/deploy-split-helios.yml` и `infra/helios-split/camundactl.sh` — split deploy, env для WildFly/Camunda, cleanup demo deployments/filters на Helios.
 

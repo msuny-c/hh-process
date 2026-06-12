@@ -30,7 +30,7 @@ public class CamundaIdentitySyncService {
 
         int syncedUsers = 0;
         int syncedMemberships = 0;
-        for (UserEntity user : userRepository.findAll()) {
+        for (UserEntity user : userRepository.findAllWithRolesBy()) {
             if (!user.isEnabled()) {
                 continue;
             }
@@ -48,7 +48,7 @@ public class CamundaIdentitySyncService {
         if (!properties.isEnabled()) {
             return;
         }
-        userRepository.findById(userId)
+        userRepository.findWithRolesById(userId)
                 .filter(UserEntity::isEnabled)
                 .ifPresent(this::syncUser);
     }
