@@ -271,7 +271,23 @@ jobs:
         with:
           sparse-checkout: |
             infra/helios-split/camundactl.sh
+            scripts/helios-bootstrap-camunda.sh
           sparse-checkout-cone-mode: false
+      - name: Debug Camunda sparse checkout
+        run: |
+          set -eu
+          echo "github.ref=${GITHUB_REF}"
+          echo "github.sha=${GITHUB_SHA}"
+          echo "pwd=$(pwd)"
+          git rev-parse --show-toplevel
+          git status --short
+          echo "Checked out files:"
+          find . -maxdepth 4 -type f | sort
+          echo "Required deploy files:"
+          ls -la infra/helios-split || true
+          ls -la scripts || true
+          test -f infra/helios-split/camundactl.sh
+          test -f scripts/helios-bootstrap-camunda.sh
       - name: Prepare SSH to Camunda Helios
         run: |
           set -eu
@@ -389,7 +405,24 @@ jobs:
           sparse-checkout: |
             infra/helios-split/wildflyctl.sh
             infra/helios-split/app.env.example
+            scripts/helios-bootstrap-camunda.sh
           sparse-checkout-cone-mode: false
+      - name: Debug App sparse checkout
+        run: |
+          set -eu
+          echo "github.ref=${GITHUB_REF}"
+          echo "github.sha=${GITHUB_SHA}"
+          echo "pwd=$(pwd)"
+          git rev-parse --show-toplevel
+          git status --short
+          echo "Checked out files:"
+          find . -maxdepth 4 -type f | sort
+          echo "Required deploy files:"
+          ls -la infra/helios-split || true
+          ls -la scripts || true
+          test -f infra/helios-split/wildflyctl.sh
+          test -f infra/helios-split/app.env.example
+          test -f scripts/helios-bootstrap-camunda.sh
       - uses: actions/download-artifact@v8.0.1
         with:
           name: app-war
