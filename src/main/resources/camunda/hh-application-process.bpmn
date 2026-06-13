@@ -197,7 +197,7 @@
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="InvitationTimeoutBoundary" attachedToRef="CandidateInvitationResponseTask">
       <bpmn:timerEventDefinition>
-        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">${invitationTimeoutDuration != null ? invitationTimeoutDuration : "PT24H"}</bpmn:timeDuration>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">${execution.hasVariable('invitationTimeoutDuration') ? invitationTimeoutDuration : 'PT24H'}</bpmn:timeDuration>
       </bpmn:timerEventDefinition>
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="CandidateResponseFormError" attachedToRef="ValidateCandidateResponseForm">
