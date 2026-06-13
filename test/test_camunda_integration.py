@@ -100,26 +100,34 @@ def start_authorization_exists(group_id: str, process_key: str) -> bool:
     return resp.status_code == 200 and bool(resp.json())
 
 
+def start_authorization_absent(group_id: str, process_key: str) -> bool:
+    resp = get(
+        f'/authorization?type=1&groupIdIn={quote(group_id, safe="")}'
+        f'&resourceType=6&resourceId={quote(process_key, safe="")}'
+    )
+    return resp.status_code == 200 and not bool(resp.json())
+
+
 def main() -> int:
     if not wait_for_camunda():
         print(f'Camunda REST is unavailable: {CAMUNDA_URL}')
         return 1
 
     required_processes = {
-        'hhApplicationProcess': 'CANDIDATE,ADMIN',
-        'hhVacancyProcess': 'RECRUITER,ADMIN',
+        'hhApplicationProcess': 'CANDIDATE',
+        'hhVacancyProcess': 'RECRUITER',
         'hhTimeoutSchedulerProcess': 'ADMIN',
         'hhAdminInterviewResetProcess': 'ADMIN',
-        'hhVacancyStatusUpdateProcess': 'RECRUITER,ADMIN',
-        'hhRecruiterInterviewCancelProcess': 'RECRUITER,ADMIN',
+        'hhVacancyStatusUpdateProcess': 'RECRUITER',
+        'hhRecruiterInterviewCancelProcess': 'RECRUITER',
         'hhNotificationProcess': '',
-        'hhUiCandidateVacancyList': 'CANDIDATE,ADMIN',
-        'hhUiCandidateApplicationList': 'CANDIDATE,ADMIN',
-        'hhUiCandidateApplicationView': 'CANDIDATE,ADMIN',
-        'hhUiRecruiterVacancyList': 'RECRUITER,ADMIN',
-        'hhUiRecruiterApplicationList': 'RECRUITER,ADMIN',
-        'hhUiRecruiterApplicationView': 'RECRUITER,ADMIN',
-        'hhUiRecruiterSchedule': 'RECRUITER,ADMIN',
+        'hhUiCandidateVacancyList': 'CANDIDATE',
+        'hhUiCandidateApplicationList': 'CANDIDATE',
+        'hhUiCandidateApplicationView': 'CANDIDATE',
+        'hhUiRecruiterVacancyList': 'RECRUITER',
+        'hhUiRecruiterApplicationList': 'RECRUITER',
+        'hhUiRecruiterApplicationView': 'RECRUITER',
+        'hhUiRecruiterSchedule': 'RECRUITER',
         'hhUiNotificationList': 'CANDIDATE,RECRUITER,ADMIN',
         'hhUiAdminTimeoutReview': 'ADMIN',
     }
@@ -260,12 +268,41 @@ def main() -> int:
         ('ADMIN', 'hhAdminInterviewResetProcess'),
         ('ADMIN', 'hhTimeoutSchedulerProcess'),
         ('ADMIN', 'hhUiAdminTimeoutReview'),
+        ('ADMIN', 'hhUiNotificationList'),
     ]
     for group, process_key in required_authorizations:
         if not start_authorization_exists(group, process_key):
             print(f'Camunda start authorization is missing: {group} -> {process_key}')
             return 1
         print(f'OK Camunda start authorization: {group} -> {process_key}')
+
+    forbidden_authorizations = [
+        ('CANDIDATE', '*'),
+        ('RECRUITER', '*'),
+        ('ADMIN', '*'),
+        ('CANDIDATE', 'hhVacancyProcess'),
+        ('CANDIDATE', 'hhVacancyStatusUpdateProcess'),
+        ('CANDIDATE', 'hhRecruiterInterviewCancelProcess'),
+        ('CANDIDATE', 'hhAdminInterviewResetProcess'),
+        ('CANDIDATE', 'hhTimeoutSchedulerProcess'),
+        ('CANDIDATE', 'hhUiAdminTimeoutReview'),
+        ('RECRUITER', 'hhApplicationProcess'),
+        ('RECRUITER', 'hhUiCandidateVacancyList'),
+        ('RECRUITER', 'hhUiCandidateApplicationList'),
+        ('RECRUITER', 'hhUiCandidateApplicationView'),
+        ('RECRUITER', 'hhAdminInterviewResetProcess'),
+        ('RECRUITER', 'hhTimeoutSchedulerProcess'),
+        ('RECRUITER', 'hhUiAdminTimeoutReview'),
+        ('ADMIN', 'hhVacancyProcess'),
+        ('ADMIN', 'hhApplicationProcess'),
+        ('ADMIN', 'hhUiCandidateVacancyList'),
+        ('ADMIN', 'hhUiRecruiterVacancyList'),
+    ]
+    for group, process_key in forbidden_authorizations:
+        if not start_authorization_absent(group, process_key):
+            print(f'Forbidden Camunda start authorization is present: {group} -> {process_key}')
+            return 1
+        print(f'OK forbidden Camunda start authorization absent: {group} -> {process_key}')
 
     return 0
 

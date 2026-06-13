@@ -190,6 +190,38 @@ public class CamundaRestClient {
         return ensureGroupAuthorization(groupId, 5, filterId, List.of("READ"));
     }
 
+    public boolean deleteGroupAuthorization(String groupId, int resourceType, String resourceId) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        String targetResourceId = resourceId == null || resourceId.isBlank() ? "*" : resourceId;
+        boolean deleted = false;
+        try {
+            String uri = UriComponentsBuilder.fromHttpUrl(url("/authorization"))
+                    .queryParam("type", 1)
+                    .queryParam("groupIdIn", groupId)
+                    .queryParam("resourceType", resourceType)
+                    .queryParam("resourceId", targetResourceId)
+                    .toUriString();
+            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
+            List<?> raw = response.getBody();
+            if (raw == null || raw.isEmpty()) {
+                return false;
+            }
+            for (Object item : raw) {
+                if (item instanceof Map<?, ?> map && map.get("id") != null) {
+                    camundaRestTemplate.delete(url("/authorization/" + encodePath(String.valueOf(map.get("id")))));
+                    deleted = true;
+                }
+            }
+            return deleted;
+        } catch (RuntimeException e) {
+            handle("delete Camunda authorization group=" + groupId
+                    + " resourceType=" + resourceType + " resourceId=" + targetResourceId, e);
+            return deleted;
+        }
+    }
+
     public boolean ensureGroupAuthorization(String groupId, int resourceType, String resourceId, List<String> permissions) {
         if (!properties.isEnabled()) {
             return false;

@@ -27,6 +27,7 @@ from urllib.request import Request, urlopen
 base = sys.argv[1].rstrip("/")
 username = os.getenv("CAMUNDA_USERNAME", "")
 password = os.getenv("CAMUNDA_PASSWORD", "")
+clean_runtime = os.getenv("CAMUNDA_CLEAN_RUNTIME", "false").lower() == "true"
 
 def request(method, path, body=None, ok=(200, 204)):
     data = None if body is None else json.dumps(body).encode("utf-8")
@@ -137,6 +138,61 @@ def remove_authorization(group_id, resource_type, resource_id):
             request("DELETE", f"/authorization/{quote(authorization_id)}")
             print(f"removed authorization {group_id} resourceType={resource_type} resourceId={resource_id}")
 
+managed_process_keys = (
+    "hhAdminInterviewResetProcess",
+    "hhApplicationProcess",
+    "hhNotificationProcess",
+    "hhRecruiterInterviewCancelProcess",
+    "hhTimeoutSchedulerProcess",
+    "hhUiAdminTimeoutReview",
+    "hhUiCandidateApplicationList",
+    "hhUiCandidateApplicationView",
+    "hhUiCandidateVacancyList",
+    "hhUiNotificationList",
+    "hhUiRecruiterApplicationList",
+    "hhUiRecruiterApplicationView",
+    "hhUiRecruiterSchedule",
+    "hhUiRecruiterVacancyList",
+    "hhVacancyProcess",
+    "hhVacancyStatusUpdateProcess",
+)
+
+def cleanup_managed_process_instances():
+    if not clean_runtime:
+        print("Camunda managed process cleanup skipped; set CAMUNDA_CLEAN_RUNTIME=true to enable it.")
+        return
+    print("Cleaning active and historic hh-process Camunda instances before deploy...")
+    for process_key in managed_process_keys:
+        runtime_instances = request(
+            "GET",
+            "/process-instance?" + urlencode({"processDefinitionKey": process_key})
+        ) or []
+        for item in runtime_instances:
+            instance_id = item.get("id")
+            if instance_id:
+                request(
+                    "DELETE",
+                    f"/process-instance/{quote(instance_id)}?skipCustomListeners=true&skipIoMappings=true",
+                    ok=(204, 404),
+                )
+                print(f"deleted active process instance {process_key}: {instance_id}")
+
+        historic_instances = request(
+            "GET",
+            "/history/process-instance?" + urlencode({"processDefinitionKey": process_key})
+        ) or []
+        for item in historic_instances:
+            instance_id = item.get("id")
+            if instance_id:
+                try:
+                    request("DELETE", f"/history/process-instance/{quote(instance_id)}", ok=(204, 404))
+                    print(f"deleted historic process instance {process_key}: {instance_id}")
+                except RuntimeError as exc:
+                    print(f"historic process instance cleanup skipped {process_key}: {instance_id}: {exc}")
+    print("Camunda managed process cleanup finished.")
+
+cleanup_managed_process_instances()
+
 for group_id, name, group_type in (
     ("ADMIN", "Administrators", "WORKFLOW"),
     ("RECRUITER", "Recruiters", "WORKFLOW"),
@@ -166,7 +222,41 @@ DECISION_DEFINITION = 10
 
 for group in ("CANDIDATE", "RECRUITER", "ADMIN", "camunda-admin"):
     ensure_authorization(group, APPLICATION, "tasklist", ["ACCESS"])
-    ensure_authorization(group, PROCESS_DEFINITION, "*", ["CREATE_INSTANCE", "READ"])
+
+for group in ("CANDIDATE", "RECRUITER", "ADMIN"):
+    remove_authorization(group, PROCESS_DEFINITION, "*")
+
+ensure_authorization("camunda-admin", PROCESS_DEFINITION, "*", ["CREATE_INSTANCE", "READ"])
+
+start_process_groups = {
+    "CANDIDATE": (
+        "hhApplicationProcess",
+        "hhUiCandidateVacancyList",
+        "hhUiCandidateApplicationList",
+        "hhUiCandidateApplicationView",
+        "hhUiNotificationList",
+    ),
+    "RECRUITER": (
+        "hhVacancyProcess",
+        "hhVacancyStatusUpdateProcess",
+        "hhRecruiterInterviewCancelProcess",
+        "hhUiRecruiterVacancyList",
+        "hhUiRecruiterApplicationList",
+        "hhUiRecruiterApplicationView",
+        "hhUiRecruiterSchedule",
+        "hhUiNotificationList",
+    ),
+    "ADMIN": (
+        "hhAdminInterviewResetProcess",
+        "hhTimeoutSchedulerProcess",
+        "hhUiAdminTimeoutReview",
+        "hhUiNotificationList",
+    ),
+}
+
+for group, process_keys in start_process_groups.items():
+    for process_key in process_keys:
+        ensure_authorization(group, PROCESS_DEFINITION, process_key, ["CREATE_INSTANCE", "READ"])
 
 for group in ("ADMIN", "camunda-admin"):
     ensure_authorization(group, APPLICATION, "cockpit", ["ACCESS"])

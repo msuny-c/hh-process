@@ -4,7 +4,7 @@
   <bpmn:collaboration id="Collaboration_hhVacancyStatusUpdateProcess" name="Пул: изменение статуса вакансии">
     <bpmn:participant id="Participant_hhVacancyStatusUpdateProcess" name="Пул: изменение статуса вакансии" processRef="hhVacancyStatusUpdateProcess" />
   </bpmn:collaboration>
-  <bpmn:process id="hhVacancyStatusUpdateProcess" name="Изменение статуса вакансии" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhVacancyStatusUpdateProcess" name="Изменение статуса вакансии" isExecutable="true" camunda:candidateStarterGroups="RECRUITER" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhVacancyStatusUpdateProcess">
       <bpmn:lane id="Lane_hhVacancyStatusUpdateProcess_RoleSystem" name="Рекрутер / администратор / система">
         <bpmn:flowNodeRef>VacancyStatusUpdateStart</bpmn:flowNodeRef>

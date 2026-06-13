@@ -362,7 +362,7 @@ jobs:
             if curl -fsS "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1 || wget -qO - "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1; then
               echo "Camunda REST OK on $CAMUNDA_HTTP_PORT"
               CAMUNDA_DIR="$CAMUNDA_DIR" CAMUNDA_HOME="$CAMUNDA_HOME" CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" "$CAMUNDA_DIR/camundactl.sh" cleanup-demo
-              CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" "$CAMUNDA_DIR/helios-bootstrap-camunda.sh"
+              CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" CAMUNDA_CLEAN_RUNTIME=true "$CAMUNDA_DIR/helios-bootstrap-camunda.sh"
               exit 0
             fi
             sleep 2

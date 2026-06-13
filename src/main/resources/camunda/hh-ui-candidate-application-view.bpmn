@@ -4,7 +4,7 @@
   <bpmn:collaboration id="Collaboration_hhUiCandidateApplicationView" name="Пул: экран одного отклика кандидата">
     <bpmn:participant id="Participant_hhUiCandidateApplicationView" name="Пул: экран одного отклика кандидата" processRef="hhUiCandidateApplicationView" />
   </bpmn:collaboration>
-  <bpmn:process id="hhUiCandidateApplicationView" name="Экран одного отклика кандидата" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhUiCandidateApplicationView" name="Экран одного отклика кандидата" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhUiCandidateApplicationView">
       <bpmn:lane id="Lane_hhUiCandidateApplicationView_RoleSystem" name="Кандидат / администратор / система">
         <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>

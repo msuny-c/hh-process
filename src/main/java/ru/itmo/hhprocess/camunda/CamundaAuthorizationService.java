@@ -37,6 +37,7 @@ public class CamundaAuthorizationService {
         ensureAdminUser();
 
         configureWebAppAccess();
+        removeRoleWildcardProcessStartAuthorizations();
         grantStart(GROUP_CANDIDATE, properties.getApplicationProcessKey());
         grantStart(GROUP_CANDIDATE, "hhUiCandidateVacancyList");
         grantStart(GROUP_CANDIDATE, "hhUiCandidateApplicationList");
@@ -52,21 +53,10 @@ public class CamundaAuthorizationService {
         grantStart(GROUP_RECRUITER, "hhUiNotificationList");
 
         for (String processKey : List.of(
-                properties.getApplicationProcessKey(),
-                properties.getVacancyProcessKey(),
                 properties.getAdminInterviewResetProcessKey(),
                 properties.getTimeoutSchedulerProcessKey(),
-                properties.getVacancyStatusUpdateProcessKey(),
-                properties.getRecruiterInterviewCancelProcessKey(),
-                "hhUiCandidateVacancyList",
-                "hhUiCandidateApplicationList",
-                "hhUiCandidateApplicationView",
-                "hhUiRecruiterVacancyList",
-                "hhUiRecruiterApplicationList",
-                "hhUiRecruiterApplicationView",
-                "hhUiRecruiterSchedule",
-                "hhUiNotificationList",
-                "hhUiAdminTimeoutReview")) {
+                "hhUiAdminTimeoutReview",
+                "hhUiNotificationList")) {
             grantStart(GROUP_ADMIN, processKey);
         }
     }
@@ -97,8 +87,8 @@ public class CamundaAuthorizationService {
     private void configureWebAppAccess() {
         for (String group : List.of(GROUP_CANDIDATE, GROUP_RECRUITER, GROUP_ADMIN, GROUP_CAMUNDA_ADMIN)) {
             grant(group, RESOURCE_APPLICATION, "tasklist", List.of("ACCESS"));
-            grant(group, RESOURCE_PROCESS_DEFINITION, "*", List.of("CREATE_INSTANCE", "READ"));
         }
+        grant(GROUP_CAMUNDA_ADMIN, RESOURCE_PROCESS_DEFINITION, "*", List.of("CREATE_INSTANCE", "READ"));
         for (String group : List.of(GROUP_ADMIN, GROUP_CAMUNDA_ADMIN)) {
             grant(group, RESOURCE_APPLICATION, "cockpit", List.of("ACCESS"));
             grant(group, RESOURCE_APPLICATION, "admin", List.of("ACCESS"));
@@ -106,6 +96,12 @@ public class CamundaAuthorizationService {
             grant(group, RESOURCE_PROCESS_INSTANCE, "*", List.of("READ", "UPDATE"));
             grant(group, RESOURCE_DECISION_DEFINITION, "*", List.of("READ"));
             grant(group, RESOURCE_AUTHORIZATION, "*", List.of("READ", "CREATE", "UPDATE", "DELETE"));
+        }
+    }
+
+    private void removeRoleWildcardProcessStartAuthorizations() {
+        for (String group : List.of(GROUP_CANDIDATE, GROUP_RECRUITER, GROUP_ADMIN)) {
+            camundaRestClient.deleteGroupAuthorization(group, RESOURCE_PROCESS_DEFINITION, "*");
         }
     }
 
