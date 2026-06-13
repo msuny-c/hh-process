@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_hh_v3" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
   <bpmn:error id="Error_ApplicationTxFailed" name="APPLICATION_TX_FAILED" errorCode="APPLICATION_TX_FAILED" />
@@ -100,7 +100,7 @@
     <bpmn:exclusiveGateway id="ApplicationSubmissionModeGateway" name="Способ подачи отклика" default="F1b" />
     <bpmn:userTask id="ApplyToVacancyTask" name="Кандидат заполняет форму отклика" camunda:formRef="apply-to-vacancy-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
     <bpmn:exclusiveGateway id="ScreeningGateway" name="Скрининг пройден?" />
-    <bpmn:businessRuleTask id="EvaluateRecruiterDecisionTransition" name="Таблица решений: разрешить новый статус после решения рекрутера" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" />
+    <bpmn:businessRuleTask id="EvaluateRecruiterDecisionTransition" name="Таблица решений: разрешить новый статус после решения рекрутера" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" camunda:decisionRefBinding="latest" />
     <bpmn:exclusiveGateway id="RecruiterDecisionGateway" name="Какое решение принял рекрутер?" />
     <bpmn:userTask id="VacancyClosedApplicationResultTask" name="Показать результат закрытия вакансии" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
     <bpmn:userTask id="RejectionResultTask" name="Показать результат отказа" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
@@ -108,24 +108,24 @@
     <bpmn:serviceTask id="PrepareRecruiterDecisionTransition" name="Система: подготовить статус и действие рекрутера для таблицы решений" camunda:type="external" camunda:topic="status-transition" />
     <bpmn:endEvent id="RejectedEnd" name="Отклик закрыт отказом рекрутера" />
     <bpmn:serviceTask id="PrepareCandidateResponseTransition" name="Система: подготовить статус и ответ кандидата для таблицы решений" camunda:type="external" camunda:topic="status-transition" />
-    <bpmn:businessRuleTask id="EvaluateCandidateResponseTransition" name="Таблица решений: разрешить новый статус после ответа кандидата" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" />
+    <bpmn:businessRuleTask id="EvaluateCandidateResponseTransition" name="Таблица решений: разрешить новый статус после ответа кандидата" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" camunda:decisionRefBinding="latest" />
     <bpmn:endEvent id="TimeoutEnd" name="Отклик закрыт по таймауту приглашения" />
     <bpmn:serviceTask id="HandleVacancyClosedMessage" name="Закрыть отклик после закрытия вакансии" camunda:type="external" camunda:topic="application-message" />
     <bpmn:userTask id="ScreeningResultTask" name="Показать результат скрининга" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
     <bpmn:endEvent id="ClosedByVacancyEnd" name="Отклик закрыт, потому что вакансия закрыта" />
     <bpmn:endEvent id="CandidateResponsePermissionDenied" name="Кандидату запрещено отвечать на это приглашение" />
     <bpmn:serviceTask id="Compensate_Transaction_Rejection" name="Компенсация: откатить отказ рекрутера" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:callActivity id="NotifyScreeningFailed" name="Подпроцесс: уведомить кандидата об отказе по скринингу" calledElement="hhNotificationProcess">
+    <bpmn:callActivity id="NotifyScreeningFailed" name="Подпроцесс: уведомить кандидата об отказе по скринингу" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
-        <camunda:in sourceExpression="${&#39;SCREENING_FAILED&#39;}" target="notificationKind" />
+        <camunda:in sourceExpression="${'SCREENING_FAILED'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
         <camunda:out source="notificationDispatched" target="NotifyScreeningFailedDispatched" />
         <camunda:out source="notificationKind" target="lastNotificationKind" />
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:callActivity id="NotifyInvitation" name="Подпроцесс: уведомить кандидата о приглашении" calledElement="hhNotificationProcess">
+    <bpmn:callActivity id="NotifyInvitation" name="Подпроцесс: уведомить кандидата о приглашении" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
-        <camunda:in sourceExpression="${&#39;INVITATION&#39;}" target="notificationKind" />
+        <camunda:in sourceExpression="${'INVITATION'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
         <camunda:in source="invitationMessage" target="invitationMessage" />
         <camunda:out source="notificationDispatched" target="NotifyInvitationDispatched" />
@@ -135,11 +135,11 @@
     <bpmn:serviceTask id="ValidateApplyToVacancyForm" name="Проверить обязательные поля отклика" camunda:type="external" camunda:topic="form-validation" />
     <bpmn:serviceTask id="CreateApplicationFromForm" name="Создать отклик кандидата в БД" camunda:type="external" camunda:topic="application-persistence" />
     <bpmn:serviceTask id="AutoScreenApplication" name="Система: подготовить балл и порог для автоскрининга" camunda:type="external" camunda:topic="application-auto-screening" />
-    <bpmn:businessRuleTask id="EvaluateAutoScreeningDecision" name="Таблица решений: проверить навыки и порог автоскрининга" camunda:resultVariable="screeningPassed" camunda:decisionRef="hhAutoScreening" camunda:mapDecisionResult="singleEntry" />
+    <bpmn:businessRuleTask id="EvaluateAutoScreeningDecision" name="Таблица решений: проверить навыки и порог автоскрининга" camunda:resultVariable="screeningPassed" camunda:decisionRef="hhAutoScreening" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
     <bpmn:serviceTask id="SaveAutoScreenDecision" name="Система: сохранить результат автоскрининга" camunda:type="external" camunda:topic="application-auto-screening" />
-    <bpmn:callActivity id="NotifyRecruiter" name="Подпроцесс: уведомить рекрутера о новом отклике" calledElement="hhNotificationProcess">
+    <bpmn:callActivity id="NotifyRecruiter" name="Подпроцесс: уведомить рекрутера о новом отклике" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
-        <camunda:in sourceExpression="${&#39;NEW_APPLICATION&#39;}" target="notificationKind" />
+        <camunda:in sourceExpression="${'NEW_APPLICATION'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
         <camunda:out source="notificationDispatched" target="NotifyRecruiterDispatched" />
         <camunda:out source="notificationKind" target="lastNotificationKind" />
@@ -147,7 +147,7 @@
     </bpmn:callActivity>
     <bpmn:endEvent id="ScreeningFailedEnd" name="Отклик закрыт: автоскрининг не пройден" />
     <bpmn:serviceTask id="ResolveRecruiterDecisionPermission" name="Система: собрать данные для проверки права рассматривать отклик" camunda:type="external" camunda:topic="permission-check" />
-    <bpmn:businessRuleTask id="EvaluateRecruiterDecisionPermission" name="Таблица решений: проверить право рекрутера на рассмотрение отклика" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:mapDecisionResult="singleEntry" />
+    <bpmn:businessRuleTask id="EvaluateRecruiterDecisionPermission" name="Таблица решений: проверить право рекрутера на рассмотрение отклика" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
     <bpmn:exclusiveGateway id="RecruiterDecisionPermissionGateway" name="Рекрутер имеет право рассмотреть этот отклик?" />
     <bpmn:userTask id="RecruiterDecisionTask" name="Рекрутер рассматривает отклик" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
     <bpmn:serviceTask id="ValidateInvitationForm" name="Проверить дату, длительность и текст приглашения" camunda:type="external" camunda:topic="form-validation" />
@@ -157,9 +157,9 @@
     <bpmn:userTask id="WriteInvitationTask" name="Рекрутер заполняет приглашение на интервью" camunda:formRef="invitation-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
     <bpmn:endEvent id="ResponseEnd" name="Ответ кандидата обработан" />
     <bpmn:userTask id="CandidateResponseResultTask" name="Показать результат ответа кандидата" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
-    <bpmn:callActivity id="NotifyCandidateResponse" name="Подпроцесс: уведомить рекрутера об ответе кандидата" calledElement="hhNotificationProcess">
+    <bpmn:callActivity id="NotifyCandidateResponse" name="Подпроцесс: уведомить рекрутера об ответе кандидата" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
-        <camunda:in sourceExpression="${&#39;CANDIDATE_RESPONSE&#39;}" target="notificationKind" />
+        <camunda:in sourceExpression="${'CANDIDATE_RESPONSE'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
         <camunda:out source="notificationDispatched" target="NotifyCandidateResponseDispatched" />
         <camunda:out source="notificationKind" target="lastNotificationKind" />
@@ -168,7 +168,7 @@
     <bpmn:serviceTask id="RollbackApplicationTransaction" name="Восстановить данные отклика после ошибки" camunda:type="external" camunda:topic="transaction-rollback" />
     <bpmn:endEvent id="ApplicationRollbackEnd" name="Процесс завершён после восстановления" />
     <bpmn:intermediateThrowEvent id="ThrowCompensationApplicationRollback" name="Запустить компенсацию отката после ошибки">
-      <bpmn:compensateEventDefinition />
+      <bpmn:compensateEventDefinition waitForCompletion="true" />
     </bpmn:intermediateThrowEvent>
     <bpmn:endEvent id="CandidateResponseTransitionDenied" name="Таблица решений запретила статус после ответа кандидата" />
     <bpmn:exclusiveGateway id="CandidateResponseTransitionGateway" name="Таблица решений разрешила новый статус после ответа кандидата?" />
@@ -372,11 +372,11 @@
     </bpmn:boundaryEvent>
     <bpmn:exclusiveGateway id="CandidateResponseGateway" name="Как ответил кандидат?" />
     <bpmn:exclusiveGateway id="CandidateResponsePermissionGateway" name="Кандидат имеет право ответить на это приглашение?" />
-    <bpmn:businessRuleTask id="EvaluateCandidateResponsePermission" name="Таблица решений: проверить право кандидата ответить на приглашение" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:mapDecisionResult="singleEntry" />
+    <bpmn:businessRuleTask id="EvaluateCandidateResponsePermission" name="Таблица решений: проверить право кандидата ответить на приглашение" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
     <bpmn:serviceTask id="ResolveCandidateResponsePermission" name="Система: собрать данные для проверки права ответить на приглашение" camunda:type="external" camunda:topic="permission-check" />
-    <bpmn:callActivity id="NotifyRejection" name="Подпроцесс: уведомить кандидата об отказе" calledElement="hhNotificationProcess">
+    <bpmn:callActivity id="NotifyRejection" name="Подпроцесс: уведомить кандидата об отказе" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
-        <camunda:in sourceExpression="${&#39;REJECTION&#39;}" target="notificationKind" />
+        <camunda:in sourceExpression="${'REJECTION'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
         <camunda:out source="notificationDispatched" target="NotifyRejectionDispatched" />
         <camunda:out source="notificationKind" target="lastNotificationKind" />

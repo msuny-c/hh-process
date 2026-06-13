@@ -9,7 +9,7 @@ PID_FILE="${PID_FILE:-$APP_DIR/wildfly.pid}"
 
 if [ -f "$ENV_FILE" ]; then
   set -a
-  # shellcheck disable=SC1090
+
   . "$ENV_FILE"
   set +a
 fi

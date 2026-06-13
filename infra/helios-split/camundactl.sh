@@ -17,7 +17,7 @@ is_running() {
 
 patch_ports() {
   local server_xml="$CAMUNDA_HOME/server/apache-tomcat-*/conf/server.xml"
-  # Expand glob safely.
+
   for f in $server_xml; do
     [ -f "$f" ] || continue
     python3 - "$f" "$CAMUNDA_HTTP_PORT" "$CAMUNDA_SHUTDOWN_PORT" "$CAMUNDA_AJP_PORT" <<'PY'

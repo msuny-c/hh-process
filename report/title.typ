@@ -1,7 +1,7 @@
 #let title_page(
   lab_no: 4,
   subject: "бизнес-логика программных систем",
-  variant: "3212",
+  variant: "101",
   student: "Григорий Садовой\nБайрамгулов Мунир",
   teacher: "Кривоносов Егор Дмитриевич",
   logo: "logo.png",

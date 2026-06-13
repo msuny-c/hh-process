@@ -325,7 +325,7 @@ jobs:
           set -eu
           REM="${CAMUNDA_SSH_USER}@${CAMUNDA_SSH_HOST}"
           ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "mkdir -p \$HOME/apps/camunda"
-          # Helios has `python`, but not always `python3`. Make camundactl.sh compatible before upload.
+
           sed -i 's/python3 -/python -/g' infra/helios-split/camundactl.sh
           ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "cat > \$HOME/apps/camunda/camundactl.sh" < infra/helios-split/camundactl.sh
           ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "chmod +x \$HOME/apps/camunda/camundactl.sh"
@@ -461,7 +461,7 @@ jobs:
       - name: Generate app.env for WildFly host
         run: |
           set -eu
-          # The app host connects to Camunda through SSH local tunnel created below.
+
           cat > app.env <<EOF_ENV
           APP_ROLE=api
           APP_INSTANCE_NAME=hh-api-wildfly
@@ -511,7 +511,7 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_vps
           chmod 600 ~/.ssh/id_vps
           ssh-keyscan -p "$VPS_SSH_PORT" -H "$VPS_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          # Upload the private key that VPS uses to open reverse tunnel to app Helios.
+
           printf '%s\n' "$HELIOS_TUNNEL_PRIVATE_KEY" > helios_tunnel_key
           chmod 600 helios_tunnel_key
           ssh -p "$VPS_SSH_PORT" -i ~/.ssh/id_vps "$VPS_SSH_USER@$VPS_SSH_HOST" "umask 077; mkdir -p ~/.ssh; cat > ~/.ssh/id_helios_tunnel" < helios_tunnel_key
@@ -555,10 +555,10 @@ jobs:
           rm -f "$WF_HOME/standalone/deployments/ROOT.war" "$WF_HOME/standalone/deployments/ROOT.war."*
           mv -f "$APP_DIR/ROOT.war.new" "$WF_HOME/standalone/deployments/ROOT.war"
           touch "$WF_HOME/standalone/deployments/ROOT.war.dodeploy"
-          # Local SSH tunnel from app Helios to Camunda Helios. The app always calls 127.0.0.1:${CAMUNDA_HTTP_PORT}.
+
           pkill -f "[s]sh .* -L ${CAMUNDA_HTTP_PORT}:127.0.0.1:${CAMUNDA_HTTP_PORT} .*${CAMUNDA_SSH_HOST}" 2>/dev/null || true
           ssh-keyscan -p "$CAMUNDA_SSH_PORT" -H "$CAMUNDA_SSH_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
-          # Reuse normal SSH identity on app host. If unavailable, configure direct CAMUNDA_BASE_URL instead.
+
           if [ -f "$HOME/.ssh/id_camunda_tunnel" ]; then
             chmod 600 "$HOME/.ssh/id_camunda_tunnel"
             ssh -f -N -i "$HOME/.ssh/id_camunda_tunnel" -p "$CAMUNDA_SSH_PORT" -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L "${CAMUNDA_HTTP_PORT}:127.0.0.1:${CAMUNDA_HTTP_PORT}" "$CAMUNDA_SSH_USER@$CAMUNDA_SSH_HOST"

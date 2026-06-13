@@ -1,0 +1,62 @@
+@startuml
+!theme plain
+skinparam backgroundColor #F8FAFC
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 18
+skinparam rectangle {
+  RoundCorner 18
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #94A3B8
+}
+skinparam database {
+  BackgroundColor #FDF2F8
+  BorderColor #DB2777
+}
+skinparam node {
+  BackgroundColor #FFFFFF
+  BorderColor #0F172A
+}
+skinparam ArrowColor #334155
+skinparam ArrowThickness 2
+
+title Архитектура HH Process на Helios и точки интеграции Camunda
+
+actor "Пользователь\nкандидат / рекрутер / админ" as User
+
+node "Camunda standalone\nотдельный BPM-сервис на Helios" as Camunda #FFF7ED {
+  component "Camunda Engine\nBPMN / DMN / history" as Engine
+  component "Tasklist / Cockpit\nформы / задачи / диаграммы" as Tasklist
+  component "Engine REST API\nstart / tasks / messages\nexternal tasks / auth" as EngineRest
+}
+
+node "WildFly + приложение\nSpring Boot WAR на Helios" as App #ECFDF5 {
+  component "REST API\nsecurity / controllers" as Api
+  component "Camunda adapter\nExternal Task Worker\nprocess sync / auth sync" as Adapter
+  component "Business services\nvacancy / application / interview" as Services
+}
+
+database "PostgreSQL\nданные приложения" as Db {
+  component "users / roles\nvacancies / applications" as AppData
+  component "interviews / slots\nnotifications" as ScheduleData
+}
+
+User --> Tasklist : Camunda Forms
+User --> Api : пользовательские REST-сценарии
+User --> Tasklist : мониторинг и выполнение задач
+
+Api --> EngineRest : запуск процессов\nкорреляция сообщений
+Adapter --> EngineRest : fetch & complete\nexternal tasks
+Adapter --> EngineRest : синхронизация пользователей\nгрупп и авторизаций
+Services --> Db : JTA / JDBC
+Db -[hidden] AppData
+Db -[hidden] ScheduleData
+
+note bottom
+Camunda управляет маршрутом процесса, задачами, формами, таймерами и DMN.
+WildFly-приложение выполняет бизнес-операции, server-side валидацию,
+транзакции и работу с PostgreSQL.
+end note
+@enduml

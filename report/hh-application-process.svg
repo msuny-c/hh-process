@@ -1,0 +1,485 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="9580" height="1340" viewBox="0 0 9580 1340">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+  </marker>
+  <style><![CDATA[
+    .pool { fill: #f8fafc; stroke: #0f172a; stroke-width: 1.4; }
+    .lane { fill: #ffffff; stroke: #94a3b8; stroke-width: 1; }
+    .task { fill: #eef6ff; stroke: #2563eb; stroke-width: 1.2; rx: 7; }
+    .service { fill: #ecfdf5; stroke: #16a34a; stroke-width: 1.2; rx: 7; }
+    .call { fill: #fff7ed; stroke: #ea580c; stroke-width: 1.2; rx: 7; }
+    .tx { fill: #fefce8; stroke: #ca8a04; stroke-width: 1.4; stroke-dasharray: 8 4; rx: 8; }
+    .event { fill: #ffffff; stroke: #334155; stroke-width: 1.3; }
+    .gateway { fill: #fdf2f8; stroke: #db2777; stroke-width: 1.2; }
+    .edge { fill: none; stroke: #475569; stroke-width: 1; marker-end: url(#arrow); }
+    .label { font-family: Arial, sans-serif; font-size: 19px; fill: #0f172a; text-anchor: middle; dominant-baseline: middle; }
+    .small { font-size: 16px; fill: #334155; }
+    .lane-text { font-family: Arial, sans-serif; font-size: 24px; fill: #0f172a; font-weight: 700; }
+  ]]></style>
+</defs>
+<rect class="pool" x="40" y="40" width="9500" height="1260"/>
+<rect class="lane" x="140" y="560" width="9380" height="720"/>
+<text class="lane-text" x="158" y="602">Система</text>
+<rect class="lane" x="140" y="330" width="9380" height="220"/>
+<text class="lane-text" x="158" y="372">Рекрутер</text>
+<rect class="lane" x="140" y="60" width="9380" height="260"/>
+<text class="lane-text" x="158" y="102">Кандидат</text>
+<polyline class="edge" points="4021,1068 4065,1068"/>
+<polyline class="edge" points="4205,1068 4235,1068"/>
+<polyline class="edge" points="4375,1068 4405,1068"/>
+<polyline class="edge" points="4545,1068 4575,1068"/>
+<polyline class="edge" points="4715,1068 4785,1068"/>
+<polyline class="edge" points="4221,675 4265,675"/>
+<polyline class="edge" points="4405,675 4420,675 4420,690 4435,690"/>
+<polyline class="edge" points="4575,690 4590,690 4590,675 4605,675"/>
+<polyline class="edge" points="4745,675 4775,675"/>
+<polyline class="edge" points="4915,675 5020,675"/>
+<polyline class="edge" points="7841,753 7885,753"/>
+<polyline class="edge" points="8025,753 8055,753"/>
+<polyline class="edge" points="8195,753 8225,753"/>
+<polyline class="edge" points="8365,753 8395,753"/>
+<polyline class="edge" points="8535,753 8640,753"/>
+<polyline class="edge" points="5050,746 5050,810 5060,810 5060,910"/>
+<polyline class="edge" points="146,658 290,658"/>
+<polyline class="edge" points="340,658 410,658 410,150 480,150"/>
+<polyline class="edge" points="315,683 315,983 345,983"/>
+<polyline class="edge" points="473,1028 473,1048 565,1048 565,190"/>
+<polyline class="edge" points="565,190 565,560 430,560 430,930"/>
+<polyline class="edge" points="1605,720 1623,720 1623,680 1640,680"/>
+<polyline class="edge" points="1690,680 1805,680"/>
+<polyline class="edge" points="1665,705 1665,1030 1860,1030"/>
+<polyline class="edge" points="3190,680 3240,680"/>
+<polyline class="edge" points="3430,680 3605,680"/>
+<polyline class="edge" points="3630,655 3630,440 3720,440"/>
+<polyline class="edge" points="3770,440 3855,440 3855,1072 3940,1072"/>
+<polyline class="edge" points="3745,415 3745,380 3924,380"/>
+<polyline class="edge" points="3745,465 3745,530 5235,530 5235,930 6700,930"/>
+<polyline class="edge" points="4815,990 4815,930"/>
+<polyline class="edge" points="4900,890 5285,890 5285,255 5320,255"/>
+<polyline class="edge" points="6870,1160 6905,1160 6905,150 6940,150"/>
+<polyline class="edge" points="7110,150 7145,150 7145,1158 7180,1158"/>
+<polyline class="edge" points="5490,255 5525,255 5525,1028 5560,1028"/>
+<polyline class="edge" points="2635,380 2800,380 2800,640"/>
+<polyline class="edge" points="2930,680 3000,680"/>
+<polyline class="edge" points="6305,150 6700,150 6700,200 6460,200 6460,255"/>
+<polyline class="edge" points="6228,191 6228,280 6435,280"/>
+<polyline class="edge" points="6274,191 6410,191 6410,280 6435,280"/>
+<polyline class="edge" points="6294,226 6294,270 6620,270 6620,280 6485,280"/>
+<polyline class="edge" points="6435,280 5690,280 5690,1072 4900,1072"/>
+<polyline class="edge" points="6485,280 6550,280 6550,910 6700,910"/>
+<polyline class="edge" points="6435,280 4120,280 4120,840 2250,840"/>
+<polyline class="edge" points="6460,255 6460,220 6615,220 6615,650 6715,650"/>
+<polyline class="edge" points="6885,650 6913,650 6913,680 6940,680"/>
+<polyline class="edge" points="7130,680 7180,680"/>
+<polyline class="edge" points="7370,680 7418,680 7418,640 7515,640"/>
+<polyline class="edge" points="7345,260 7400,260 7400,1028 7216,1028"/>
+<polyline class="edge" points="2635,420 6960,420 6960,1160 6870,1160"/>
+<polyline class="edge" points="4027,420 4027,490 5380,490 5380,1160 6700,1160"/>
+<polyline class="edge" points="6319,190 6570,190 6570,1160 6700,1160"/>
+<polyline class="edge" points="2030,1030 2055,1030 2055,255 2080,255"/>
+<polyline class="edge" points="2250,255 2285,255 2285,1008 2512,1008"/>
+<polyline class="edge" points="5510,680 5575,680"/>
+<polyline class="edge" points="5745,680 5815,680"/>
+<polyline class="edge" points="6005,680 6075,680"/>
+<polyline class="edge" points="6100,655 6100,150 6135,150"/>
+<polyline class="edge" points="6100,705 6100,808 6240,808"/>
+<polyline class="edge" points="5170,680 5340,680"/>
+<polyline class="edge" points="515,970 795,970"/>
+<polyline class="edge" points="900,930 900,760"/>
+<polyline class="edge" points="985,720 1095,720"/>
+<polyline class="edge" points="1285,720 1415,720"/>
+<polyline class="edge" points="1975,680 2035,680 2035,840 2080,840"/>
+<polyline class="edge" points="2165,800 2165,749 2200,749 2200,698"/>
+<polyline class="edge" points="2295,658 2505,658"/>
+<polyline class="edge" points="2530,633 2530,532 2550,532 2550,450"/>
+<polyline class="edge" points="2530,683 2530,790 2760,790"/>
+<polyline class="edge" points="2863,622 2863,491 2550,450"/>
+<polyline class="edge" points="3946,420 3946,718"/>
+<polyline class="edge" points="4065,758 4142,758"/>
+<polyline class="edge" points="3630,705 3630,790 3752,790"/>
+<polyline class="edge" points="3998,700 3998,560 3964,560 3964,420"/>
+<polyline class="edge" points="9225,170 9245,170 9245,680 9382,680"/>
+<polyline class="edge" points="8950,640 8950,170 9055,170"/>
+<polyline class="edge" points="8789,680 8865,680"/>
+<polyline class="edge" points="8430,1258 8430,1280 8910,1280 8910,1240"/>
+<polyline class="edge" points="8995,1202 9149,1202 9149,1199 9302,1199"/>
+<polyline class="edge" points="4911,1028 6506,1028 6506,1240 8412,1240"/>
+<polyline class="edge" points="5146,635 6653,635 6653,1240 8412,1240"/>
+<polyline class="edge" points="8510,858 8510,1240 8448,1240"/>
+<polyline class="edge" points="4891,1134 6496,1134 6496,1240 8412,1240"/>
+<polyline class="edge" points="5096,741 6628,741 6628,1240 8412,1240"/>
+<polyline class="edge" points="8295,858 8295,1100 8330,1100 8330,1200 8430,1200 8430,1222"/>
+<polyline class="edge" points="7540,665 7540,1008 7508,1008"/>
+<polyline class="edge" points="7565,640 7638,640 7638,680 7761,680"/>
+<polyline class="edge" points="6870,930 6930,930 6930,260 7175,260"/>
+<polyline class="edge" points="6183,208 6183,470 6400,470 6400,1100 6785,1100 6785,970"/>
+<polyline class="edge" points="6750,592 6750,80 6220,80 6220,110"/>
+<polyline class="edge" points="4810,1134 4460,1134 4460,1200 4110,1200"/>
+<polyline class="edge" points="8671,819 8990,819 8990,1030 8935,1030"/>
+<ellipse class="event" cx="128" cy="658" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="128" y="648">Создан новый</text>
+<text class="label" text-anchor="middle" x="128" y="670">отклик кандидата</text>
+<polygon class="gateway" points="315,633 340,658 315,683 290,658"/>
+<text class="label" text-anchor="middle" x="315" y="648">Способ подачи</text>
+<text class="label" text-anchor="middle" x="315" y="670">отклика</text>
+<rect class="task" x="480" y="110" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="565" y="130">Кандидат</text>
+<text class="label" text-anchor="middle" x="565" y="152">заполняет</text>
+<text class="label" text-anchor="middle" x="565" y="174">форму отклика</text>
+<polygon class="gateway" points="1665,655 1690,680 1665,705 1640,680"/>
+<text class="label" text-anchor="middle" x="1665" y="680">Скрининг пройден?</text>
+<rect class="service" x="3240" y="640" width="190" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="3335" y="650">Таблица</text>
+<text class="label" text-anchor="middle" x="3335" y="672">решений:</text>
+<text class="label" text-anchor="middle" x="3335" y="694">разрешить новый</text>
+<text class="label" text-anchor="middle" x="3335" y="716">статус после</text>
+<polygon class="gateway" points="3745,415 3770,440 3745,465 3720,440"/>
+<text class="label" text-anchor="middle" x="3745" y="430">Какое решение</text>
+<text class="label" text-anchor="middle" x="3745" y="452">принял рекрутер?</text>
+<rect class="task" x="6940" y="110" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="7025" y="120">Показать</text>
+<text class="label" text-anchor="middle" x="7025" y="142">результат</text>
+<text class="label" text-anchor="middle" x="7025" y="164">закрытия</text>
+<text class="label" text-anchor="middle" x="7025" y="186">вакансии</text>
+<rect class="task" x="5320" y="215" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="5405" y="235">Показать</text>
+<text class="label" text-anchor="middle" x="5405" y="257">результат</text>
+<text class="label" text-anchor="middle" x="5405" y="279">отказа</text>
+<rect class="service" x="2760" y="640" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="2845" y="660">Проверить</text>
+<text class="label" text-anchor="middle" x="2845" y="682">форму решения</text>
+<text class="label" text-anchor="middle" x="2845" y="704">рекрутера</text>
+<rect class="service" x="3000" y="640" width="190" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="3095" y="650">подготовить</text>
+<text class="label" text-anchor="middle" x="3095" y="672">статус и</text>
+<text class="label" text-anchor="middle" x="3095" y="694">действие</text>
+<text class="label" text-anchor="middle" x="3095" y="716">рекрутера для</text>
+<ellipse class="event" cx="5578" cy="1028" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="5578" y="1018">Отклик закрыт</text>
+<text class="label" text-anchor="middle" x="5578" y="1040">отказом рекрутера</text>
+<rect class="service" x="6940" y="640" width="190" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="7035" y="650">подготовить</text>
+<text class="label" text-anchor="middle" x="7035" y="672">статус и ответ</text>
+<text class="label" text-anchor="middle" x="7035" y="694">кандидата для</text>
+<text class="label" text-anchor="middle" x="7035" y="716">таблицы решений</text>
+<rect class="service" x="7180" y="640" width="190" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="7275" y="650">Таблица</text>
+<text class="label" text-anchor="middle" x="7275" y="672">решений:</text>
+<text class="label" text-anchor="middle" x="7275" y="694">разрешить новый</text>
+<text class="label" text-anchor="middle" x="7275" y="716">статус после</text>
+<ellipse class="event" cx="7198" cy="1028" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="7198" y="1008">Отклик закрыт по</text>
+<text class="label" text-anchor="middle" x="7198" y="1030">таймауту</text>
+<text class="label" text-anchor="middle" x="7198" y="1052">приглашения</text>
+<rect class="service" x="6700" y="1120" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="6785" y="1140">Закрыть отклик</text>
+<text class="label" text-anchor="middle" x="6785" y="1162">после закрытия</text>
+<text class="label" text-anchor="middle" x="6785" y="1184">вакансии</text>
+<rect class="task" x="2080" y="215" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="2165" y="235">Показать</text>
+<text class="label" text-anchor="middle" x="2165" y="257">результат</text>
+<text class="label" text-anchor="middle" x="2165" y="279">скрининга</text>
+<ellipse class="event" cx="7198" cy="1158" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="7198" y="1138">Отклик закрыт,</text>
+<text class="label" text-anchor="middle" x="7198" y="1160">потому что</text>
+<text class="label" text-anchor="middle" x="7198" y="1182">вакансия закрыта</text>
+<ellipse class="event" cx="6258" cy="808" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="6258" y="788">Кандидату</text>
+<text class="label" text-anchor="middle" x="6258" y="810">запрещено отвечать</text>
+<text class="label" text-anchor="middle" x="6258" y="832">на это приглашение</text>
+<rect class="service" x="3940" y="1160" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="4025" y="1180">Компенсация:</text>
+<text class="label" text-anchor="middle" x="4025" y="1202">откатить отказ</text>
+<text class="label" text-anchor="middle" x="4025" y="1224">рекрутера</text>
+<rect class="call" x="1860" y="990" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="1945" y="1000">Подпроцесс:</text>
+<text class="label" text-anchor="middle" x="1945" y="1022">уведомить</text>
+<text class="label" text-anchor="middle" x="1945" y="1044">кандидата об</text>
+<text class="label" text-anchor="middle" x="1945" y="1066">отказе по</text>
+<rect class="call" x="5340" y="640" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="5425" y="650">Подпроцесс:</text>
+<text class="label" text-anchor="middle" x="5425" y="672">уведомить</text>
+<text class="label" text-anchor="middle" x="5425" y="694">кандидата о</text>
+<text class="label" text-anchor="middle" x="5425" y="716">приглашении</text>
+<rect class="service" x="345" y="930" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="430" y="950">Проверить</text>
+<text class="label" text-anchor="middle" x="430" y="972">обязательные</text>
+<text class="label" text-anchor="middle" x="430" y="994">поля отклика</text>
+<rect class="service" x="795" y="930" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="880" y="960">Создать отклик</text>
+<text class="label" text-anchor="middle" x="880" y="982">кандидата в БД</text>
+<rect class="service" x="815" y="680" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="900" y="690">подготовить</text>
+<text class="label" text-anchor="middle" x="900" y="712">балл и порог</text>
+<text class="label" text-anchor="middle" x="900" y="734">для</text>
+<text class="label" text-anchor="middle" x="900" y="756">автоскрининга</text>
+<rect class="service" x="1095" y="680" width="190" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="1190" y="690">Таблица</text>
+<text class="label" text-anchor="middle" x="1190" y="712">решений:</text>
+<text class="label" text-anchor="middle" x="1190" y="734">проверить</text>
+<text class="label" text-anchor="middle" x="1190" y="756">навыки и порог</text>
+<rect class="service" x="1415" y="680" width="190" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="1510" y="700">сохранить</text>
+<text class="label" text-anchor="middle" x="1510" y="722">результат</text>
+<text class="label" text-anchor="middle" x="1510" y="744">автоскрининга</text>
+<rect class="call" x="1805" y="640" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="1890" y="650">Подпроцесс:</text>
+<text class="label" text-anchor="middle" x="1890" y="672">уведомить</text>
+<text class="label" text-anchor="middle" x="1890" y="694">рекрутера о</text>
+<text class="label" text-anchor="middle" x="1890" y="716">новом отклике</text>
+<ellipse class="event" cx="2530" cy="1008" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="2530" y="988">Отклик закрыт:</text>
+<text class="label" text-anchor="middle" x="2530" y="1010">автоскрининг не</text>
+<text class="label" text-anchor="middle" x="2530" y="1032">пройден</text>
+<rect class="service" x="2080" y="800" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="2165" y="810">собрать данные</text>
+<text class="label" text-anchor="middle" x="2165" y="832">для проверки</text>
+<text class="label" text-anchor="middle" x="2165" y="854">права</text>
+<text class="label" text-anchor="middle" x="2165" y="876">рассматривать</text>
+<rect class="service" x="2105" y="618" width="190" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="2200" y="628">Таблица</text>
+<text class="label" text-anchor="middle" x="2200" y="650">решений:</text>
+<text class="label" text-anchor="middle" x="2200" y="672">проверить право</text>
+<text class="label" text-anchor="middle" x="2200" y="694">рекрутера на</text>
+<polygon class="gateway" points="2530,633 2555,658 2530,683 2505,658"/>
+<text class="label" text-anchor="middle" x="2530" y="638">Рекрутер имеет</text>
+<text class="label" text-anchor="middle" x="2530" y="660">право рассмотреть</text>
+<text class="label" text-anchor="middle" x="2530" y="682">этот отклик?</text>
+<rect class="task" x="2465" y="370" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="2550" y="390">Рекрутер</text>
+<text class="label" text-anchor="middle" x="2550" y="412">рассматривает</text>
+<text class="label" text-anchor="middle" x="2550" y="434">отклик</text>
+<rect class="service" x="3895" y="718" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="3980" y="728">Проверить</text>
+<text class="label" text-anchor="middle" x="3980" y="750">дату,</text>
+<text class="label" text-anchor="middle" x="3980" y="772">длительность и</text>
+<text class="label" text-anchor="middle" x="3980" y="794">текст</text>
+<ellipse class="event" cx="2778" cy="790" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="2778" y="760">Рекрутеру</text>
+<text class="label" text-anchor="middle" x="2778" y="782">запрещено</text>
+<text class="label" text-anchor="middle" x="2778" y="804">рассматривать этот</text>
+<text class="label" text-anchor="middle" x="2778" y="826">отклик</text>
+<polygon class="gateway" points="3630,655 3655,680 3630,705 3605,680"/>
+<text class="label" text-anchor="middle" x="3630" y="650">Таблица решений</text>
+<text class="label" text-anchor="middle" x="3630" y="672">разрешила новый</text>
+<text class="label" text-anchor="middle" x="3630" y="694">статус после</text>
+<text class="label" text-anchor="middle" x="3630" y="716">решения рекрутера?</text>
+<ellipse class="event" cx="3770" cy="790" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="3770" y="770">Таблица решений</text>
+<text class="label" text-anchor="middle" x="3770" y="792">запретила новый</text>
+<text class="label" text-anchor="middle" x="3770" y="814">статус отклика</text>
+<rect class="task" x="3924" y="340" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="4009" y="350">Рекрутер</text>
+<text class="label" text-anchor="middle" x="4009" y="372">заполняет</text>
+<text class="label" text-anchor="middle" x="4009" y="394">приглашение на</text>
+<text class="label" text-anchor="middle" x="4009" y="416">интервью</text>
+<ellipse class="event" cx="9400" cy="680" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="9400" y="670">Ответ кандидата</text>
+<text class="label" text-anchor="middle" x="9400" y="692">обработан</text>
+<rect class="task" x="9055" y="130" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="9140" y="140">Показать</text>
+<text class="label" text-anchor="middle" x="9140" y="162">результат</text>
+<text class="label" text-anchor="middle" x="9140" y="184">ответа</text>
+<text class="label" text-anchor="middle" x="9140" y="206">кандидата</text>
+<rect class="call" x="8865" y="640" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="8950" y="650">Подпроцесс:</text>
+<text class="label" text-anchor="middle" x="8950" y="672">уведомить</text>
+<text class="label" text-anchor="middle" x="8950" y="694">рекрутера об</text>
+<text class="label" text-anchor="middle" x="8950" y="716">ответе</text>
+<rect class="service" x="8825" y="1160" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="8910" y="1180">Восстановить</text>
+<text class="label" text-anchor="middle" x="8910" y="1202">данные отклика</text>
+<text class="label" text-anchor="middle" x="8910" y="1224">после ошибки</text>
+<ellipse class="event" cx="9320" cy="1200" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="9320" y="1180">Процесс завершён</text>
+<text class="label" text-anchor="middle" x="9320" y="1202">после</text>
+<text class="label" text-anchor="middle" x="9320" y="1224">восстановления</text>
+<ellipse class="event" cx="8430" cy="1240" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="8430" y="1220">Запустить</text>
+<text class="label" text-anchor="middle" x="8430" y="1242">компенсацию отката</text>
+<text class="label" text-anchor="middle" x="8430" y="1264">после ошибки</text>
+<ellipse class="event" cx="7490" cy="1008" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="7490" y="978">Таблица решений</text>
+<text class="label" text-anchor="middle" x="7490" y="1000">запретила статус</text>
+<text class="label" text-anchor="middle" x="7490" y="1022">после ответа</text>
+<text class="label" text-anchor="middle" x="7490" y="1044">кандидата</text>
+<polygon class="gateway" points="7540,615 7565,640 7540,665 7515,640"/>
+<text class="label" text-anchor="middle" x="7540" y="610">Таблица решений</text>
+<text class="label" text-anchor="middle" x="7540" y="632">разрешила новый</text>
+<text class="label" text-anchor="middle" x="7540" y="654">статус после</text>
+<text class="label" text-anchor="middle" x="7540" y="676">ответа кандидата?</text>
+<rect class="service" x="8765" y="990" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="8850" y="1000">Компенсация:</text>
+<text class="label" text-anchor="middle" x="8850" y="1022">откатить</text>
+<text class="label" text-anchor="middle" x="8850" y="1044">сохранённый</text>
+<text class="label" text-anchor="middle" x="8850" y="1066">ответ</text>
+<rect class="task" x="7175" y="220" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="7260" y="240">Показать</text>
+<text class="label" text-anchor="middle" x="7260" y="262">результат</text>
+<text class="label" text-anchor="middle" x="7260" y="284">таймаута</text>
+<rect class="service" x="6700" y="890" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="6785" y="900">Закрыть</text>
+<text class="label" text-anchor="middle" x="6785" y="922">отклик:</text>
+<text class="label" text-anchor="middle" x="6785" y="944">кандидат не</text>
+<text class="label" text-anchor="middle" x="6785" y="966">ответил</text>
+<rect class="service" x="6715" y="610" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="6800" y="630">Проверить</text>
+<text class="label" text-anchor="middle" x="6800" y="652">форму ответа</text>
+<text class="label" text-anchor="middle" x="6800" y="674">кандидата</text>
+<polygon class="gateway" points="6460,255 6485,280 6460,305 6435,280"/>
+<text class="label" text-anchor="middle" x="6460" y="270">Как ответил</text>
+<text class="label" text-anchor="middle" x="6460" y="292">кандидат?</text>
+<polygon class="gateway" points="6100,655 6125,680 6100,705 6075,680"/>
+<text class="label" text-anchor="middle" x="6100" y="660">Кандидат имеет</text>
+<text class="label" text-anchor="middle" x="6100" y="682">право ответить на</text>
+<text class="label" text-anchor="middle" x="6100" y="704">это приглашение?</text>
+<rect class="service" x="5815" y="640" width="190" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="5910" y="650">Таблица</text>
+<text class="label" text-anchor="middle" x="5910" y="672">решений:</text>
+<text class="label" text-anchor="middle" x="5910" y="694">проверить право</text>
+<text class="label" text-anchor="middle" x="5910" y="716">кандидата</text>
+<rect class="service" x="5575" y="640" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="5660" y="650">собрать данные</text>
+<text class="label" text-anchor="middle" x="5660" y="672">для проверки</text>
+<text class="label" text-anchor="middle" x="5660" y="694">права ответить</text>
+<text class="label" text-anchor="middle" x="5660" y="716">на приглашение</text>
+<rect class="call" x="4730" y="850" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="4815" y="860">Подпроцесс:</text>
+<text class="label" text-anchor="middle" x="4815" y="882">уведомить</text>
+<text class="label" text-anchor="middle" x="4815" y="904">кандидата об</text>
+<text class="label" text-anchor="middle" x="4815" y="926">отказе</text>
+<rect class="service" x="4975" y="910" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="5060" y="920">Компенсация:</text>
+<text class="label" text-anchor="middle" x="5060" y="942">отменить</text>
+<text class="label" text-anchor="middle" x="5060" y="964">созданное</text>
+<text class="label" text-anchor="middle" x="5060" y="986">приглашение</text>
+<rect class="task" x="6135" y="110" width="170" height="80" rx="7"/>
+<text class="label" text-anchor="middle" x="6220" y="130">Кандидат</text>
+<text class="label" text-anchor="middle" x="6220" y="152">отвечает на</text>
+<text class="label" text-anchor="middle" x="6220" y="174">приглашение</text>
+<rect class="tx" x="3940" y="990" width="960" height="165" rx="8"/>
+<text class="label small" text-anchor="start" x="3952" y="1014">Транзакция: отказ рекрутера</text>
+<ellipse class="event" cx="4003" cy="1068" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="4003" y="1058">Начать транзакцию</text>
+<text class="label" text-anchor="middle" x="4003" y="1080">бизнес-операции</text>
+<rect class="service" x="4065" y="1038" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="4135" y="1038">Проверить, что</text>
+<text class="label" text-anchor="middle" x="4135" y="1060">рекрутер может</text>
+<text class="label" text-anchor="middle" x="4135" y="1082">отказать</text>
+<text class="label" text-anchor="middle" x="4135" y="1104">кандидату</text>
+<rect class="service" x="4235" y="1038" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="4305" y="1038">Отменить</text>
+<text class="label" text-anchor="middle" x="4305" y="1060">активное</text>
+<text class="label" text-anchor="middle" x="4305" y="1082">интервью перед</text>
+<text class="label" text-anchor="middle" x="4305" y="1104">отказом</text>
+<rect class="service" x="4405" y="1038" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="4475" y="1038">Сохранить</text>
+<text class="label" text-anchor="middle" x="4475" y="1060">отказ</text>
+<text class="label" text-anchor="middle" x="4475" y="1082">рекрутера по</text>
+<text class="label" text-anchor="middle" x="4475" y="1104">отклику</text>
+<rect class="service" x="4575" y="1038" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="4645" y="1048">Записать</text>
+<text class="label" text-anchor="middle" x="4645" y="1070">историю отказа</text>
+<text class="label" text-anchor="middle" x="4645" y="1092">рекрутера</text>
+<ellipse class="event" cx="4803" cy="1068" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="4803" y="1048">Завершить</text>
+<text class="label" text-anchor="middle" x="4803" y="1070">транзакцию бизнес-</text>
+<text class="label" text-anchor="middle" x="4803" y="1092">операции</text>
+<rect class="tx" x="4140" y="597" width="1030" height="165" rx="8"/>
+<text class="label small" text-anchor="start" x="4152" y="621">Транзакция: оформление приглашения</text>
+<ellipse class="event" cx="4203" cy="675" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="4203" y="665">Начать транзакцию</text>
+<text class="label" text-anchor="middle" x="4203" y="687">бизнес-операции</text>
+<rect class="service" x="4265" y="645" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="4335" y="655">Сохранить</text>
+<text class="label" text-anchor="middle" x="4335" y="677">приглашение в</text>
+<text class="label" text-anchor="middle" x="4335" y="699">БД</text>
+<rect class="service" x="4435" y="660" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="4505" y="670">Создать</text>
+<text class="label" text-anchor="middle" x="4505" y="692">интервью по</text>
+<text class="label" text-anchor="middle" x="4505" y="714">приглашению</text>
+<rect class="service" x="4605" y="645" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="4675" y="645">Зарезервироват</text>
+<text class="label" text-anchor="middle" x="4675" y="667">ь слот в</text>
+<text class="label" text-anchor="middle" x="4675" y="689">расписании</text>
+<text class="label" text-anchor="middle" x="4675" y="711">рекрутера</text>
+<rect class="service" x="4775" y="645" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="4845" y="645">Записать</text>
+<text class="label" text-anchor="middle" x="4845" y="667">историю</text>
+<text class="label" text-anchor="middle" x="4845" y="689">отправки</text>
+<text class="label" text-anchor="middle" x="4845" y="711">приглашения</text>
+<ellipse class="event" cx="5038" cy="675" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="5038" y="655">Завершить</text>
+<text class="label" text-anchor="middle" x="5038" y="677">транзакцию бизнес-</text>
+<text class="label" text-anchor="middle" x="5038" y="699">операции</text>
+<rect class="tx" x="7760" y="675" width="1030" height="165" rx="8"/>
+<text class="label small" text-anchor="start" x="7772" y="699">Транзакция: сохранение ответа кандидата</text>
+<ellipse class="event" cx="7823" cy="753" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="7823" y="743">Начать транзакцию</text>
+<text class="label" text-anchor="middle" x="7823" y="765">бизнес-операции</text>
+<rect class="service" x="7885" y="723" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="7955" y="733">Проверить, что</text>
+<text class="label" text-anchor="middle" x="7955" y="755">приглашение</text>
+<text class="label" text-anchor="middle" x="7955" y="777">ещё активно</text>
+<rect class="service" x="8055" y="723" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="8125" y="733">Сохранить</text>
+<text class="label" text-anchor="middle" x="8125" y="755">ответ</text>
+<text class="label" text-anchor="middle" x="8125" y="777">кандидата в БД</text>
+<rect class="service" x="8225" y="723" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="8295" y="733">Обновить</text>
+<text class="label" text-anchor="middle" x="8295" y="755">статус отклика</text>
+<text class="label" text-anchor="middle" x="8295" y="777">после ответа</text>
+<rect class="service" x="8395" y="723" width="140" height="60" rx="7"/>
+<text class="label" text-anchor="middle" x="8465" y="733">Записать</text>
+<text class="label" text-anchor="middle" x="8465" y="755">историю ответа</text>
+<text class="label" text-anchor="middle" x="8465" y="777">кандидата</text>
+<ellipse class="event" cx="8658" cy="753" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="8658" y="733">Завершить</text>
+<text class="label" text-anchor="middle" x="8658" y="755">транзакцию бизнес-</text>
+<text class="label" text-anchor="middle" x="8658" y="777">операции</text>
+<ellipse class="event" cx="8295" cy="840" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="8295" y="830">Ошибка транзакции:</text>
+<text class="label" text-anchor="middle" x="8295" y="852">ответ кандидата</text>
+<ellipse class="event" cx="8510" cy="840" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="8510" y="820">PersistCandidateRe</text>
+<text class="label" text-anchor="middle" x="8510" y="842">sponseErrorBoundar</text>
+<text class="label" text-anchor="middle" x="8510" y="864">y</text>
+<ellipse class="event" cx="8653" cy="819" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="8653" y="809">Компенсация: откат</text>
+<text class="label" text-anchor="middle" x="8653" y="831">ответа кандидата</text>
+<ellipse class="event" cx="3998" cy="718" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="3998" y="708">InvitationFormVali</text>
+<text class="label" text-anchor="middle" x="3998" y="730">dationError</text>
+<ellipse class="event" cx="5033" cy="741" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="5033" y="721">Компенсация: откат</text>
+<text class="label" text-anchor="middle" x="5033" y="743">оформления</text>
+<text class="label" text-anchor="middle" x="5033" y="765">приглашения</text>
+<ellipse class="event" cx="5078" cy="741" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="5078" y="721">Ошибка транзакции:</text>
+<text class="label" text-anchor="middle" x="5078" y="743">оформление</text>
+<text class="label" text-anchor="middle" x="5078" y="765">приглашения</text>
+<ellipse class="event" cx="5128" cy="635" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="5128" y="625">PersistInvitationE</text>
+<text class="label" text-anchor="middle" x="5128" y="647">rrorBoundary</text>
+<ellipse class="event" cx="473" cy="1010" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="473" y="1000">ApplyFormValidatio</text>
+<text class="label" text-anchor="middle" x="473" y="1022">nError</text>
+<ellipse class="event" cx="4828" cy="1134" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="4828" y="1124">Компенсация: откат</text>
+<text class="label" text-anchor="middle" x="4828" y="1146">отказа рекрутера</text>
+<ellipse class="event" cx="4873" cy="1134" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="4873" y="1124">Ошибка транзакции:</text>
+<text class="label" text-anchor="middle" x="4873" y="1146">отказ рекрутера</text>
+<ellipse class="event" cx="4893" cy="1028" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="4893" y="1028">RejectionTxError</text>
+<ellipse class="event" cx="2863" cy="640" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="2863" y="630">RecruiterDecisionF</text>
+<text class="label" text-anchor="middle" x="2863" y="652">ormError</text>
+<ellipse class="event" cx="6750" cy="610" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="6750" y="600">CandidateResponseF</text>
+<text class="label" text-anchor="middle" x="6750" y="622">ormError</text>
+<ellipse class="event" cx="6183" cy="190" rx="18" ry="18"/>
+<text class="label" text-anchor="middle" x="6183" y="180">InvitationTimeoutB</text>
+<text class="label" text-anchor="middle" x="6183" y="202">oundary</text>
+</svg>
