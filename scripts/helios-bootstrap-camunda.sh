@@ -123,6 +123,20 @@ def ensure_authorization(group_id, resource_type, resource_id, permissions):
     })
     print(f"authorized {group_id} resourceType={resource_type} resourceId={resource_id} permissions={','.join(permissions)}")
 
+def remove_authorization(group_id, resource_type, resource_id):
+    query = urlencode({
+        "type": 1,
+        "groupIdIn": group_id,
+        "resourceType": resource_type,
+        "resourceId": resource_id,
+    })
+    existing = request("GET", f"/authorization?{query}") or []
+    for item in existing:
+        authorization_id = item.get("id")
+        if authorization_id:
+            request("DELETE", f"/authorization/{quote(authorization_id)}")
+            print(f"removed authorization {group_id} resourceType={resource_type} resourceId={resource_id}")
+
 for group_id, name, group_type in (
     ("ADMIN", "Administrators", "WORKFLOW"),
     ("RECRUITER", "Recruiters", "WORKFLOW"),
@@ -162,7 +176,15 @@ for group in ("ADMIN", "camunda-admin"):
     ensure_authorization(group, DECISION_DEFINITION, "*", ["READ"])
     ensure_authorization(group, AUTHORIZATION, "*", ["READ", "CREATE", "UPDATE", "DELETE"])
 
-for name in ("Задачи кандидата", "Задачи рекрутера", "Задачи администратора", "Мои активные задачи"):
+filter_read_groups = {
+    "Задачи кандидата": ("CANDIDATE",),
+    "Задачи рекрутера": ("RECRUITER",),
+    "Задачи администратора": ("ADMIN",),
+    "Мои активные задачи": ("CANDIDATE", "RECRUITER", "ADMIN"),
+}
+managed_filter_groups = ("CANDIDATE", "RECRUITER", "ADMIN", "camunda-admin")
+
+for name, allowed_groups in filter_read_groups.items():
     filters = request("GET", "/filter?" + urlencode({"name": name})) or []
     for item in filters[1:]:
         filter_id = item.get("id")
@@ -171,8 +193,11 @@ for name in ("Задачи кандидата", "Задачи рекрутера
             print(f"deleted duplicate filter {name}: {filter_id}")
     if filters:
         filter_id = filters[0].get("id")
-        for group in ("CANDIDATE", "RECRUITER", "ADMIN"):
-            ensure_authorization(group, FILTER, filter_id, ["READ"])
+        for group in managed_filter_groups:
+            if group in allowed_groups:
+                ensure_authorization(group, FILTER, filter_id, ["READ"])
+            else:
+                remove_authorization(group, FILTER, filter_id)
 
 print("Helios Camunda bootstrap finished.")
 PY
