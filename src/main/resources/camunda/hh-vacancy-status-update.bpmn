@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_hh_vacancy_status_update" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
-  <bpmn:collaboration id="Collaboration_hhVacancyStatusUpdateProcess" name="Pool: HH vacancy status update">
-    <bpmn:participant id="Participant_hhVacancyStatusUpdateProcess" name="POOL: HH vacancy status update" processRef="hhVacancyStatusUpdateProcess" />
+  <bpmn:collaboration id="Collaboration_hhVacancyStatusUpdateProcess" name="Пул: изменение статуса вакансии">
+    <bpmn:participant id="Participant_hhVacancyStatusUpdateProcess" name="Пул: изменение статуса вакансии" processRef="hhVacancyStatusUpdateProcess" />
   </bpmn:collaboration>
-  <bpmn:process id="hhVacancyStatusUpdateProcess" name="HH vacancy status update" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhVacancyStatusUpdateProcess" name="Изменение статуса вакансии" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhVacancyStatusUpdateProcess">
-      <bpmn:lane id="Lane_hhVacancyStatusUpdateProcess_RoleSystem" name="RECRUITER / ADMIN / SYSTEM">
+      <bpmn:lane id="Lane_hhVacancyStatusUpdateProcess_RoleSystem" name="Рекрутер / администратор / система">
         <bpmn:flowNodeRef>VacancyStatusUpdateStart</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>PrepareVacancyStatusTransition</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>EvaluateVacancyStatusTransition</bpmn:flowNodeRef>
@@ -20,27 +20,27 @@
         <bpmn:flowNodeRef>VacancyStatusValidationError</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="VacancyStatusUpdateStart" name="Запрошено изменение статуса" camunda:initiator="starterUserId" />
-    <bpmn:serviceTask id="PrepareVacancyStatusTransition" name="SYSTEM: подготовить DMN currentStatus + UPDATE_VACANCY_STATUS" camunda:type="external" camunda:topic="status-transition" />
-    <bpmn:businessRuleTask id="EvaluateVacancyStatusTransition" name="DMN: currentStatus + action -&#62; allowed/nextStatus" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleResult" />
-    <bpmn:exclusiveGateway id="VacancyStatusTransitionGateway" name="Переход статуса вакансии разрешён?" />
-    <bpmn:serviceTask id="ApplyVacancyStatusUpdate" name="Сохранить статус вакансии" camunda:type="external" camunda:topic="vacancy-status-update" />
-    <bpmn:userTask id="VacancyStatusResultTask" name="Показать результат изменения статуса" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
-    <bpmn:endEvent id="VacancyStatusUpdateEnd" name="Статус обновлён" />
-    <bpmn:endEvent id="VacancyStatusTransitionDenied" name="DMN запретила переход статуса" />
-    <bpmn:userTask id="UpdateVacancyStatusTask" name="Изменить статус вакансии" camunda:formRef="vacancy-status-update-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
-    <bpmn:serviceTask id="ValidateVacancyStatusUpdate" name="Проверить форму и владельца вакансии" camunda:type="external" camunda:topic="vacancy-status-update" />
+    <bpmn:startEvent id="VacancyStatusUpdateStart" name="Рекрутер запросил изменение статуса вакансии" camunda:initiator="starterUserId" />
+    <bpmn:serviceTask id="PrepareVacancyStatusTransition" name="Система: подготовить текущий и новый статус вакансии для таблицы решений" camunda:type="external" camunda:topic="status-transition" />
+    <bpmn:businessRuleTask id="EvaluateVacancyStatusTransition" name="Таблица решений: разрешить или запретить новый статус вакансии" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleResult" />
+    <bpmn:exclusiveGateway id="VacancyStatusTransitionGateway" name="Таблица решений разрешила новый статус вакансии?" />
+    <bpmn:serviceTask id="ApplyVacancyStatusUpdate" name="Сохранить новый статус вакансии" camunda:type="external" camunda:topic="vacancy-status-update" />
+    <bpmn:userTask id="VacancyStatusResultTask" name="Показать результат изменения статуса вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:endEvent id="VacancyStatusUpdateEnd" name="Статус вакансии обновлён" />
+    <bpmn:endEvent id="VacancyStatusTransitionDenied" name="Таблица решений запретила новый статус вакансии" />
+    <bpmn:userTask id="UpdateVacancyStatusTask" name="Рекрутер выбирает новый статус вакансии" camunda:formRef="vacancy-status-update-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:serviceTask id="ValidateVacancyStatusUpdate" name="Проверить форму и что вакансия принадлежит рекрутеру" camunda:type="external" camunda:topic="vacancy-status-update" />
     <bpmn:boundaryEvent id="VacancyStatusValidationError" attachedToRef="ValidateVacancyStatusUpdate">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
     <bpmn:sequenceFlow id="VS1" sourceRef="VacancyStatusUpdateStart" targetRef="UpdateVacancyStatusTask" />
     <bpmn:sequenceFlow id="VS3" sourceRef="ValidateVacancyStatusUpdate" targetRef="PrepareVacancyStatusTransition" />
-    <bpmn:sequenceFlow id="VS4" name="контекст статуса подготовлен" sourceRef="PrepareVacancyStatusTransition" targetRef="EvaluateVacancyStatusTransition" />
-    <bpmn:sequenceFlow id="VS5" name="DMN вернула allowed/nextStatus" sourceRef="EvaluateVacancyStatusTransition" targetRef="VacancyStatusTransitionGateway" />
-    <bpmn:sequenceFlow id="VS6" name="разрешено DMN" sourceRef="VacancyStatusTransitionGateway" targetRef="ApplyVacancyStatusUpdate">
+    <bpmn:sequenceFlow id="VS4" name="данные статуса подготовлены" sourceRef="PrepareVacancyStatusTransition" targetRef="EvaluateVacancyStatusTransition" />
+    <bpmn:sequenceFlow id="VS5" name="таблица решений вернула разрешение и следующий статус" sourceRef="EvaluateVacancyStatusTransition" targetRef="VacancyStatusTransitionGateway" />
+    <bpmn:sequenceFlow id="VS6" name="таблица решений разрешила доступ" sourceRef="VacancyStatusTransitionGateway" targetRef="ApplyVacancyStatusUpdate">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="VS7" name="запрещено DMN" sourceRef="VacancyStatusTransitionGateway" targetRef="VacancyStatusTransitionDenied">
+    <bpmn:sequenceFlow id="VS7" name="таблица решений запретила доступ" sourceRef="VacancyStatusTransitionGateway" targetRef="VacancyStatusTransitionDenied">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed != true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="VS8" sourceRef="ApplyVacancyStatusUpdate" targetRef="VacancyStatusResultTask" />

@@ -1,12 +1,12 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_admin_timeout_review" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
-  <bpmn:collaboration id="Collaboration_hhUiAdminTimeoutReview" name="Pool: HH UI admin timeout review">
-    <bpmn:participant id="Participant_hhUiAdminTimeoutReview" name="POOL: HH UI admin timeout review" processRef="hhUiAdminTimeoutReview" />
+  <bpmn:collaboration id="Collaboration_hhUiAdminTimeoutReview" name="Пул: экран админской проверки таймаутов">
+    <bpmn:participant id="Participant_hhUiAdminTimeoutReview" name="Пул: экран админской проверки таймаутов" processRef="hhUiAdminTimeoutReview" />
   </bpmn:collaboration>
-  <bpmn:process id="hhUiAdminTimeoutReview" name="HH UI admin timeout review" isExecutable="true" camunda:candidateStarterGroups="ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhUiAdminTimeoutReview" name="Экран админской проверки таймаутов" isExecutable="true" camunda:candidateStarterGroups="ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhUiAdminTimeoutReview">
-      <bpmn:lane id="Lane_hhUiAdminTimeoutReview_RoleSystem" name="ADMIN / SYSTEM">
+      <bpmn:lane id="Lane_hhUiAdminTimeoutReview_RoleSystem" name="Администратор / система">
         <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ConfirmTimeoutReview</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>RunTimeoutReview</bpmn:flowNodeRef>
@@ -15,17 +15,17 @@
         <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Запущен экран проверки таймаутов" />
-    <bpmn:userTask id="ConfirmTimeoutReview" name="Запустить проверку таймаутов" camunda:formRef="admin-timeout-run-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
-    <bpmn:serviceTask id="RunTimeoutReview" name="Закрыть просроченные приглашения" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Администратор открыл проверку таймаутов" />
+    <bpmn:userTask id="ConfirmTimeoutReview" name="Администратор запускает закрытие просроченных приглашений" camunda:formRef="admin-timeout-run-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
+    <bpmn:serviceTask id="RunTimeoutReview" name="Закрыть все найденные просроченные приглашения" camunda:type="external" camunda:topic="ui-query" />
     <bpmn:boundaryEvent id="TimeoutReviewValidationError" attachedToRef="RunTimeoutReview">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:userTask id="DisplayTimeoutReview" name="Результат проверки таймаутов" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
-    <bpmn:endEvent id="End" name="Проверка таймаутов показана" />
+    <bpmn:userTask id="DisplayTimeoutReview" name="Показать результат проверки таймаутов" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
+    <bpmn:endEvent id="End" name="Результат проверки таймаутов показан" />
     <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="ConfirmTimeoutReview" />
     <bpmn:sequenceFlow id="F2" sourceRef="ConfirmTimeoutReview" targetRef="RunTimeoutReview" />
-    <bpmn:sequenceFlow id="F2e" name="ошибка формы -> повторить ввод" sourceRef="TimeoutReviewValidationError" targetRef="ConfirmTimeoutReview" />
+    <bpmn:sequenceFlow id="F2e" name="ошибка формы: повторить ввод" sourceRef="TimeoutReviewValidationError" targetRef="ConfirmTimeoutReview" />
     <bpmn:sequenceFlow id="F3" sourceRef="RunTimeoutReview" targetRef="DisplayTimeoutReview" />
     <bpmn:sequenceFlow id="F4" sourceRef="DisplayTimeoutReview" targetRef="End" />
   </bpmn:process>

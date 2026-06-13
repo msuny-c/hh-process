@@ -54,7 +54,7 @@ public class CamundaIdentitySyncService {
     }
 
     public SyncResult syncUser(UserEntity user) {
-        return syncUser(user, properties.getIdentitySyncInitialPassword(), false);
+        return syncUser(user, initialPasswordFor(user), true);
     }
 
     public SyncResult syncUserWithPassword(UserEntity user, String plainPassword) {
@@ -85,6 +85,11 @@ public class CamundaIdentitySyncService {
                 membershipsSynced++;
             }
         }
+        if (desiredGroups.contains("ADMIN")
+                && camundaRestClient.ensureGroupExists("camunda-admin", "camunda BPM Administrators", "SYSTEM")
+                && camundaRestClient.ensureMembershipExists(camundaUserId, "camunda-admin")) {
+            membershipsSynced++;
+        }
 
         for (String existingGroup : camundaRestClient.findMembershipGroupIds(camundaUserId)) {
             if (isApplicationRoleGroup(existingGroup) && !desiredGroups.contains(existingGroup)) {
@@ -112,6 +117,13 @@ public class CamundaIdentitySyncService {
 
     private String normalizeGroup(String roleCode) {
         return roleCode == null ? "" : roleCode.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String initialPasswordFor(UserEntity user) {
+        if (user.getEmail() != null && "candidate-demo@example.com".equalsIgnoreCase(user.getEmail().trim())) {
+            return "password123";
+        }
+        return properties.getIdentitySyncInitialPassword();
     }
 
     public record SyncResult(boolean userSynced, int membershipsSynced) {

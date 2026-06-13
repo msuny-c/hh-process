@@ -313,6 +313,8 @@ jobs:
           sed -i 's/python3 -/python -/g' infra/helios-split/camundactl.sh
           ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "cat > \$HOME/apps/camunda/camundactl.sh" < infra/helios-split/camundactl.sh
           ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "chmod +x \$HOME/apps/camunda/camundactl.sh"
+          ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "cat > \$HOME/apps/camunda/helios-bootstrap-camunda.sh" < scripts/helios-bootstrap-camunda.sh
+          ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" "chmod +x \$HOME/apps/camunda/helios-bootstrap-camunda.sh"
           ssh -p "$CAMUNDA_SSH_PORT" -i ~/.ssh/id_camunda "$REM" \
             "env CAMUNDA_ZIP_URL='${{ env.CAMUNDA_ZIP_URL }}' CAMUNDA_HTTP_PORT='$CAMUNDA_HTTP_PORT' bash -s" <<'REMOTE'
           set -eu
@@ -344,6 +346,7 @@ jobs:
             if curl -fsS "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1 || wget -qO - "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1; then
               echo "Camunda REST OK on $CAMUNDA_HTTP_PORT"
               CAMUNDA_DIR="$CAMUNDA_DIR" CAMUNDA_HOME="$CAMUNDA_HOME" CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" "$CAMUNDA_DIR/camundactl.sh" cleanup-demo
+              CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" "$CAMUNDA_DIR/helios-bootstrap-camunda.sh"
               exit 0
             fi
             sleep 2
@@ -494,6 +497,8 @@ jobs:
           ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "umask 077; mkdir -p \$HOME/.ssh; cat > \$HOME/.ssh/id_camunda_tunnel" <<< "$CAMUNDA_SSH_KEY"
           ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "cat > \$HOME/apps/hh-process/wildflyctl.sh" < infra/helios-split/wildflyctl.sh
           ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "chmod +x \$HOME/apps/hh-process/wildflyctl.sh"
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "cat > \$HOME/apps/hh-process/helios-bootstrap-camunda.sh" < scripts/helios-bootstrap-camunda.sh
+          ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "chmod +x \$HOME/apps/hh-process/helios-bootstrap-camunda.sh"
           ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" "cat > \$HOME/apps/hh-process/ROOT.war.new" < "$WAR"
           ssh -p "$APP_SSH_PORT" -i ~/.ssh/id_app "$REM" \
             "env WILDFLY_VERSION='${{ env.WILDFLY_VERSION }}' WILDFLY_ZIP_URL='${{ env.WILDFLY_ZIP_URL }}' APP_HTTP_PORT='$APP_HTTP_PORT' APP_MGMT_PORT='$APP_MGMT_PORT' CAMUNDA_SSH_HOST='$CAMUNDA_SSH_HOST' CAMUNDA_SSH_USER='$CAMUNDA_SSH_USER' CAMUNDA_SSH_PORT='$CAMUNDA_SSH_PORT' CAMUNDA_HTTP_PORT='$CAMUNDA_HTTP_PORT' bash -s" <<'REMOTE'
@@ -550,6 +555,7 @@ jobs:
           done
           if curl -fsS "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1 || wget -qO - "http://127.0.0.1:$CAMUNDA_HTTP_PORT/engine-rest/version" >/dev/null 2>&1; then
             echo "Camunda tunnel/API OK from app host"
+            CAMUNDA_HTTP_PORT="$CAMUNDA_HTTP_PORT" "$HOME/apps/hh-process/helios-bootstrap-camunda.sh"
           else
             echo "WARNING: Camunda is not reachable from app host on 127.0.0.1:$CAMUNDA_HTTP_PORT"
           fi

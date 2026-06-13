@@ -81,11 +81,13 @@ public class CamundaWorkflowFacade {
         variables.put("applicationId", application.getId());
         variables.put("vacancyId", application.getVacancy().getId());
         variables.put("candidateUserId", application.getCandidateUser().getId());
+        variables.put("candidateCamundaUserId", CamundaIdentitySyncService.camundaUserId(application.getCandidateUser()));
         variables.put("recruiterUserId", application.getVacancy().getRecruiterUser().getId());
         variables.put("vacancyTitle", application.getVacancy().getTitle());
         variables.put("screeningPassed", screeningPassed);
         variables.put("status", application.getStatus().name());
         variables.put("restAutoSubmit", true);
+        variables.put("invitationTimeoutDuration", "PT24H");
         Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
                 properties.getApplicationProcessKey(),
                 applicationBusinessKey(application.getId()),
@@ -100,12 +102,14 @@ public class CamundaWorkflowFacade {
         Map<String, Object> variables = new LinkedHashMap<>();
         variables.put("vacancyId", vacancy.getId());
         variables.put("candidateUserId", candidateUser.getId());
+        variables.put("candidateCamundaUserId", CamundaIdentitySyncService.camundaUserId(candidateUser));
         variables.put("recruiterUserId", vacancy.getRecruiterUser().getId());
         variables.put("vacancyTitle", vacancy.getTitle());
         variables.put("resumeText", safe(resumeText));
         variables.put("coverLetter", safe(coverLetter));
         variables.put("status", ApplicationStatus.SCREENING_IN_PROGRESS.name());
         variables.put("restAutoSubmit", true);
+        variables.put("invitationTimeoutDuration", "PT24H");
         Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
                 properties.getApplicationProcessKey(),
                 requestBusinessKey,
@@ -160,10 +164,11 @@ public class CamundaWorkflowFacade {
 
     public boolean invitationResponded(ApplicationEntity application, UserEntity candidateUser, ResponseType responseType, String message) {
         assertCandidateCanComplete(application, candidateUser);
-        return completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, CANDIDATE_GROUP, candidateUser.getId(), Map.of(
+        return completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, null, candidateUser.getId(), Map.of(
                 "responseType", responseType.name(),
                 "responseMessage", safe(message),
-                "responseReceivedAt", Instant.now()
+                "responseReceivedAt", Instant.now(),
+                "completedByGroup", CANDIDATE_GROUP
         ));
     }
 

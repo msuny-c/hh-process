@@ -1,28 +1,37 @@
 package ru.itmo.hhprocess.security;
 
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.xml.sax.SAXException;
 import ru.itmo.hhprocess.security.xml.XmlCredentialUser;
 import ru.itmo.hhprocess.security.xml.XmlCredentialUsers;
 
 @Service
 @RequiredArgsConstructor
 public class XmlCredentialStore {
-    private final XmlMapper xmlMapper = new XmlMapper();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     @Value("${app.security.users-xml-path}")
@@ -73,9 +82,20 @@ public class XmlCredentialStore {
 
     private XmlCredentialUsers readAll() {
         try (InputStream in = Files.newInputStream(path())) {
-            XmlCredentialUsers users = xmlMapper.readValue(in, XmlCredentialUsers.class);
-            return users == null || users.getUsers() == null ? new XmlCredentialUsers() : users;
-        } catch (IOException e) {
+            DocumentBuilderFactory factory = secureDocumentBuilderFactory();
+            Document document = factory.newDocumentBuilder().parse(in);
+            XmlCredentialUsers users = new XmlCredentialUsers();
+            var nodes = document.getDocumentElement().getElementsByTagName("user");
+            for (int i = 0; i < nodes.getLength(); i++) {
+                if (nodes.item(i) instanceof Element element) {
+                    users.getUsers().add(XmlCredentialUser.builder()
+                            .email(element.getAttribute("email"))
+                            .passwordHash(element.getAttribute("passwordHash"))
+                            .build());
+                }
+            }
+            return users;
+        } catch (IOException | ParserConfigurationException | SAXException e) {
             throw new IllegalStateException("Failed to read users XML", e);
         }
     }
@@ -84,8 +104,23 @@ public class XmlCredentialStore {
         Path target = path();
         Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
         try (OutputStream out = Files.newOutputStream(tmp)) {
-            xmlMapper.writerWithDefaultPrettyPrinter().writeValue(out, users);
-        } catch (IOException e) {
+            DocumentBuilderFactory factory = secureDocumentBuilderFactory();
+            Document document = factory.newDocumentBuilder().newDocument();
+            Element root = document.createElement("users");
+            document.appendChild(root);
+            for (XmlCredentialUser user : users.getUsers()) {
+                Element element = document.createElement("user");
+                element.setAttribute("email", user.getEmail() == null ? "" : user.getEmail());
+                element.setAttribute("passwordHash", user.getPasswordHash() == null ? "" : user.getPasswordHash());
+                root.appendChild(element);
+            }
+            TransformerFactory transformerFactory = TransformerFactory.newInstance();
+            transformerFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            var transformer = transformerFactory.newTransformer();
+            transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+            transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+            transformer.transform(new DOMSource(document), new StreamResult(out));
+        } catch (IOException | ParserConfigurationException | TransformerException e) {
             throw new IllegalStateException("Failed to write users XML", e);
         }
 
@@ -108,5 +143,16 @@ public class XmlCredentialStore {
 
     private String normalize(String email) {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private DocumentBuilderFactory secureDocumentBuilderFactory() throws ParserConfigurationException {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        return factory;
     }
 }

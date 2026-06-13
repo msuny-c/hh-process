@@ -1,21 +1,21 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_notification_list" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
-  <bpmn:collaboration id="Collaboration_hhUiNotificationList" name="Pool: HH UI notification list">
-    <bpmn:participant id="Participant_hhUiNotificationList" name="POOL: HH UI notification list" processRef="hhUiNotificationList" />
+  <bpmn:collaboration id="Collaboration_hhUiNotificationList" name="Пул: экран уведомлений">
+    <bpmn:participant id="Participant_hhUiNotificationList" name="Пул: экран уведомлений" processRef="hhUiNotificationList" />
   </bpmn:collaboration>
-  <bpmn:process id="hhUiNotificationList" name="HH UI notification list" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhUiNotificationList" name="Экран уведомлений" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,RECRUITER,ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhUiNotificationList">
-      <bpmn:lane id="Lane_hhUiNotificationList_RoleSystem" name="CANDIDATE / RECRUITER / ADMIN / SYSTEM">
+      <bpmn:lane id="Lane_hhUiNotificationList_RoleSystem" name="Кандидат / рекрутер / администратор / система">
         <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>LoadNotificationList</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>DisplayNotificationList</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Запущен список уведомлений" />
-    <bpmn:serviceTask id="LoadNotificationList" name="Загрузить уведомления" camunda:type="external" camunda:topic="ui-query" />
-    <bpmn:userTask id="DisplayNotificationList" name="Уведомления" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE,RECRUITER,ADMIN" />
-    <bpmn:endEvent id="End" name="Список уведомлений показан" />
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Пользователь открыл список уведомлений" />
+    <bpmn:serviceTask id="LoadNotificationList" name="Загрузить только уведомления текущего пользователя" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:userTask id="DisplayNotificationList" name="Показать уведомления текущего пользователя" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
+    <bpmn:endEvent id="End" name="Уведомления показаны пользователю" />
     <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadNotificationList" />
     <bpmn:sequenceFlow id="F2" sourceRef="LoadNotificationList" targetRef="DisplayNotificationList" />
     <bpmn:sequenceFlow id="F3" sourceRef="DisplayNotificationList" targetRef="End" />

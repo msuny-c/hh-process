@@ -2,12 +2,12 @@
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_recruiter_interview_cancel" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
   <bpmn:error id="Error_ApplicationTxFailed" name="APPLICATION_TX_FAILED" errorCode="APPLICATION_TX_FAILED" />
-  <bpmn:collaboration id="Collaboration_hhRecruiterInterviewCancelProcess" name="Pool: HH recruiter interview cancel">
-    <bpmn:participant id="Participant_hhRecruiterInterviewCancelProcess" name="POOL: HH recruiter interview cancel" processRef="hhRecruiterInterviewCancelProcess" />
+  <bpmn:collaboration id="Collaboration_hhRecruiterInterviewCancelProcess" name="Пул: отмена интервью рекрутером">
+    <bpmn:participant id="Participant_hhRecruiterInterviewCancelProcess" name="Пул: отмена интервью рекрутером" processRef="hhRecruiterInterviewCancelProcess" />
   </bpmn:collaboration>
-  <bpmn:process id="hhRecruiterInterviewCancelProcess" name="HH recruiter interview cancel" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhRecruiterInterviewCancelProcess" name="Отмена интервью рекрутером" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_RecruiterCancel">
-      <bpmn:lane id="Lane_System_RC" name="SYSTEM">
+      <bpmn:lane id="Lane_System_RC" name="Система">
         <bpmn:flowNodeRef>RecruiterCancelResultTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>NotifyRecruiterCancelParticipants</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ThrowCompensationRecruiterCancelRollback</bpmn:flowNodeRef>
@@ -17,7 +17,7 @@
         <bpmn:flowNodeRef>Cancel_Transaction_RecruiterCancelInterview</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>RecruiterCancelTxError</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_Recruiter_RC" name="RECRUITER">
+      <bpmn:lane id="Lane_Recruiter_RC" name="Рекрутер">
         <bpmn:flowNodeRef>RecruiterCancelStart</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>CancelInterviewTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ValidateRecruiterCancelInterview</bpmn:flowNodeRef>
@@ -27,31 +27,31 @@
         <bpmn:flowNodeRef>Transaction_RecruiterCancelInterview</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="RecruiterCancelStart" name="Рекрутер запросил отмену интервью" camunda:initiator="starterUserId" />
+    <bpmn:startEvent id="RecruiterCancelStart" name="Рекрутер начал отмену интервью" camunda:initiator="starterUserId" />
     <bpmn:userTask id="CancelInterviewTask" name="Подтвердить отмену интервью" camunda:formRef="cancel-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
-    <bpmn:serviceTask id="ValidateRecruiterCancelInterview" name="Проверить отмену интервью" camunda:type="external" camunda:topic="interview-cancel" />
+    <bpmn:serviceTask id="ValidateRecruiterCancelInterview" name="Проверить, что интервью можно отменить" camunda:type="external" camunda:topic="interview-cancel" />
     <bpmn:userTask id="RecruiterCancelResultTask" name="Показать результат отмены интервью" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
-    <bpmn:intermediateThrowEvent id="ThrowCompensationRecruiterCancelRollback" name="Явно запустить BPMN compensation handlers">
+    <bpmn:intermediateThrowEvent id="ThrowCompensationRecruiterCancelRollback" name="Запустить компенсацию отката после ошибки">
       <bpmn:compensateEventDefinition waitForCompletion="true" />
     </bpmn:intermediateThrowEvent>
-    <bpmn:serviceTask id="RollbackRecruiterCancel" name="Выполнить recovery отмены интервью" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:endEvent id="RecruiterCancelEnd" name="Интервью отменено" />
-    <bpmn:endEvent id="RecruiterCancelRollbackEnd" name="Отмена не выполнена" />
-    <bpmn:serviceTask id="Compensate_Transaction_RecruiterCancelInterview" name="Компенсация: отмена интервью рекрутером" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:transaction id="Transaction_RecruiterCancelInterview" name="TX: отмена интервью рекрутером">
-      <bpmn:startEvent id="Transaction_RecruiterCancelInterview_Start" name="Начать транзакционный блок" />
-      <bpmn:serviceTask id="CancelInterviewByRecruiter" name="Отменить интервью" camunda:type="external" camunda:topic="interview-cancel" />
-      <bpmn:serviceTask id="ReleaseRecruiterCancelSlot" name="Освободить слот расписания" camunda:type="external" camunda:topic="interview-cancel" />
-      <bpmn:serviceTask id="ReturnCancelApplicationToReview" name="Вернуть отклик на рассмотрение" camunda:type="external" camunda:topic="interview-cancel" />
-      <bpmn:serviceTask id="RecordRecruiterCancelHistory" name="Записать историю отмены" camunda:type="external" camunda:topic="interview-cancel" />
-      <bpmn:endEvent id="Transaction_RecruiterCancelInterview_End" name="Завершить транзакционный блок" />
+    <bpmn:serviceTask id="RollbackRecruiterCancel" name="Восстановить данные после ошибки отмены" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:endEvent id="RecruiterCancelEnd" name="Интервью отменено и отклик возвращён рекрутеру" />
+    <bpmn:endEvent id="RecruiterCancelRollbackEnd" name="Отмена интервью не выполнена" />
+    <bpmn:serviceTask id="Compensate_Transaction_RecruiterCancelInterview" name="Компенсация: вернуть интервью после ошибки отмены" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:transaction id="Transaction_RecruiterCancelInterview" name="Транзакция: отмена интервью рекрутером">
+      <bpmn:startEvent id="Transaction_RecruiterCancelInterview_Start" name="Начать транзакцию бизнес-операции" />
+      <bpmn:serviceTask id="CancelInterviewByRecruiter" name="Отменить интервью в БД" camunda:type="external" camunda:topic="interview-cancel" />
+      <bpmn:serviceTask id="ReleaseRecruiterCancelSlot" name="Освободить слот в расписании рекрутера" camunda:type="external" camunda:topic="interview-cancel" />
+      <bpmn:serviceTask id="ReturnCancelApplicationToReview" name="Вернуть отклик рекрутеру на повторное рассмотрение" camunda:type="external" camunda:topic="interview-cancel" />
+      <bpmn:serviceTask id="RecordRecruiterCancelHistory" name="Записать историю отмены интервью" camunda:type="external" camunda:topic="interview-cancel" />
+      <bpmn:endEvent id="Transaction_RecruiterCancelInterview_End" name="Завершить транзакцию бизнес-операции" />
       <bpmn:sequenceFlow id="RC_TX1" sourceRef="Transaction_RecruiterCancelInterview_Start" targetRef="CancelInterviewByRecruiter" />
       <bpmn:sequenceFlow id="RC_TX2" sourceRef="CancelInterviewByRecruiter" targetRef="ReleaseRecruiterCancelSlot" />
       <bpmn:sequenceFlow id="RC_TX3" sourceRef="ReleaseRecruiterCancelSlot" targetRef="ReturnCancelApplicationToReview" />
       <bpmn:sequenceFlow id="RC_TX4" sourceRef="ReturnCancelApplicationToReview" targetRef="RecordRecruiterCancelHistory" />
       <bpmn:sequenceFlow id="RC_TX5" sourceRef="RecordRecruiterCancelHistory" targetRef="Transaction_RecruiterCancelInterview_End" />
     </bpmn:transaction>
-    <bpmn:callActivity id="NotifyRecruiterCancelParticipants" name="Call: уведомить кандидата об отмене интервью" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+    <bpmn:callActivity id="NotifyRecruiterCancelParticipants" name="Подпроцесс: уведомить кандидата об отмене интервью" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
         <camunda:in sourceExpression="${'RECRUITER_CANCEL'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
@@ -63,10 +63,10 @@
     <bpmn:boundaryEvent id="RecruiterCancelValidationError" attachedToRef="ValidateRecruiterCancelInterview">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="Compensate_Transaction_RecruiterCancelInterview_Boundary" name="Compensation boundary: отмена интервью рекрутером" attachedToRef="Transaction_RecruiterCancelInterview">
+    <bpmn:boundaryEvent id="Compensate_Transaction_RecruiterCancelInterview_Boundary" name="Компенсация: откат отмены интервью" attachedToRef="Transaction_RecruiterCancelInterview">
       <bpmn:compensateEventDefinition />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="Cancel_Transaction_RecruiterCancelInterview" name="Cancel boundary: отмена интервью рекрутером" attachedToRef="Transaction_RecruiterCancelInterview">
+    <bpmn:boundaryEvent id="Cancel_Transaction_RecruiterCancelInterview" name="Ошибка транзакции: отмена интервью рекрутером" attachedToRef="Transaction_RecruiterCancelInterview">
       <bpmn:cancelEventDefinition />
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="RecruiterCancelTxError" attachedToRef="Transaction_RecruiterCancelInterview">
@@ -76,12 +76,12 @@
     <bpmn:sequenceFlow id="RC2e" sourceRef="RecruiterCancelValidationError" targetRef="CancelInterviewTask" />
     <bpmn:sequenceFlow id="RC2" sourceRef="CancelInterviewTask" targetRef="ValidateRecruiterCancelInterview" />
     <bpmn:sequenceFlow id="RC3" sourceRef="ValidateRecruiterCancelInterview" targetRef="Transaction_RecruiterCancelInterview" />
-    <bpmn:sequenceFlow id="RC4" name="интервью отменено -&gt; уведомить" sourceRef="Transaction_RecruiterCancelInterview" targetRef="NotifyRecruiterCancelParticipants" />
-    <bpmn:sequenceFlow id="RC5" name="уведомление отправлено" sourceRef="NotifyRecruiterCancelParticipants" targetRef="RecruiterCancelResultTask" />
+    <bpmn:sequenceFlow id="RC4" name="после отмены интервью отправить уведомление" sourceRef="Transaction_RecruiterCancelInterview" targetRef="NotifyRecruiterCancelParticipants" />
+    <bpmn:sequenceFlow id="RC5" name="уведомление создано" sourceRef="NotifyRecruiterCancelParticipants" targetRef="RecruiterCancelResultTask" />
     <bpmn:sequenceFlow id="RC6" sourceRef="RecruiterCancelResultTask" targetRef="RecruiterCancelEnd" />
-    <bpmn:sequenceFlow id="RC_ERR1" name="ошибка TX -&gt; compensate" sourceRef="RecruiterCancelTxError" targetRef="ThrowCompensationRecruiterCancelRollback" />
-    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_RecruiterCancelInterview_Recovery" name="cancel -&gt; recovery" sourceRef="Cancel_Transaction_RecruiterCancelInterview" targetRef="ThrowCompensationRecruiterCancelRollback" />
-    <bpmn:sequenceFlow id="RC_ERR1_COMPENSATED" name="compensation выполнена" sourceRef="ThrowCompensationRecruiterCancelRollback" targetRef="RollbackRecruiterCancel" />
+    <bpmn:sequenceFlow id="RC_ERR1" name="ошибка транзакции: запустить компенсацию" sourceRef="RecruiterCancelTxError" targetRef="ThrowCompensationRecruiterCancelRollback" />
+    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_RecruiterCancelInterview_Recovery" name="отмена транзакции: восстановить данные" sourceRef="Cancel_Transaction_RecruiterCancelInterview" targetRef="ThrowCompensationRecruiterCancelRollback" />
+    <bpmn:sequenceFlow id="RC_ERR1_COMPENSATED" name="компенсация выполнена" sourceRef="ThrowCompensationRecruiterCancelRollback" targetRef="RollbackRecruiterCancel" />
     <bpmn:sequenceFlow id="RC_ERR2" sourceRef="RollbackRecruiterCancel" targetRef="RecruiterCancelRollbackEnd" />
     <bpmn:association id="Association_Compensate_Transaction_RecruiterCancelInterview" sourceRef="Compensate_Transaction_RecruiterCancelInterview_Boundary" targetRef="Compensate_Transaction_RecruiterCancelInterview" />
   </bpmn:process>

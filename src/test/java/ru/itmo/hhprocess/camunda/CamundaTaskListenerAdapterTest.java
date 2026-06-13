@@ -48,7 +48,7 @@ class CamundaTaskListenerAdapterTest {
     }
 
     @Test
-    void doesNotAssignTaskWhenCandidateGroupIsMissingInCamundaTask() {
+    void assignsPersonalTaskEvenWhenGroupIdentityLinkIsMissing() {
         UUID recruiterId = UUID.fromString("22222222-2222-2222-2222-222222222222");
         users.put(recruiterId, user(recruiterId, "recruiter@example.com", "RECRUITER"));
         camundaRestClient.taskVariables.put("task-2", Map.of("recruiterUserId", CamundaVariable.variable(recruiterId)));
@@ -59,8 +59,8 @@ class CamundaTaskListenerAdapterTest {
                 "taskDefinitionKey", "RecruiterDecisionTask",
                 "assignee", ""));
 
-        assertNull(camundaRestClient.assignees.get("task-2"));
-        assertNull(camundaRestClient.authorizedTasks.get("recruiterexamplecom"));
+        assertEquals("recruiterexamplecom", camundaRestClient.assignees.get("task-2"));
+        assertEquals("task-2", camundaRestClient.authorizedTasks.get("recruiterexamplecom"));
     }
 
     @Test

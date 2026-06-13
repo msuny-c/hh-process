@@ -1,25 +1,25 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_v3" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:message id="Message_VacancyClosed" name="MSG_VACANCY_CLOSED" />
-  <bpmn:collaboration id="Collaboration_hhProcessOverview" name="Pool: Overview: роли и процессы HH">
-    <bpmn:participant id="Participant_hhProcessOverview" name="POOL: Overview: роли и процессы HH" processRef="hhProcessOverview" />
+  <bpmn:collaboration id="Collaboration_hhProcessOverview" name="Пул: обзор ролей и процессов системы найма">
+    <bpmn:participant id="Participant_hhProcessOverview" name="Пул: обзор ролей и процессов системы найма" processRef="hhProcessOverview" />
   </bpmn:collaboration>
-  <bpmn:process id="hhProcessOverview" name="Overview: роли и процессы HH" isExecutable="false">
+  <bpmn:process id="hhProcessOverview" name="Обзор ролей и процессов системы найма" isExecutable="false">
     <bpmn:laneSet id="LaneSet_Overview">
-      <bpmn:lane id="Lane_Candidate_O" name="CANDIDATE">
+      <bpmn:lane id="Lane_Candidate_O" name="Кандидат">
         <bpmn:flowNodeRef>OverviewCandidateApply</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>OverviewCandidateResponse</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>OverviewResultForms</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_Recruiter_O" name="RECRUITER">
+      <bpmn:lane id="Lane_Recruiter_O" name="Рекрутер">
         <bpmn:flowNodeRef>OverviewRecruiterDecision</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>OverviewInvitation</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>OverviewCloseVacancy</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_Admin_O" name="ADMIN">
+      <bpmn:lane id="Lane_Admin_O" name="Администратор">
         <bpmn:flowNodeRef>OverviewAdminReset</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_System_O" name="SYSTEM">
+      <bpmn:lane id="Lane_System_O" name="Система">
         <bpmn:flowNodeRef>OverviewStart</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>OverviewAutoScreen</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>OverviewDecisionGateway</bpmn:flowNodeRef>
@@ -28,19 +28,19 @@
         <bpmn:flowNodeRef>OverviewEnd</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="OverviewStart" name="Начало" />
+    <bpmn:startEvent id="OverviewStart" name="Начало обзорной схемы" />
     <bpmn:userTask id="OverviewCandidateApply" name="Кандидат заполняет отклик" camunda:formRef="apply-to-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
-    <bpmn:serviceTask id="OverviewAutoScreen" name="Система выполняет автоскрининг" camunda:type="external" camunda:topic="application-auto-screening" />
+    <bpmn:serviceTask id="OverviewAutoScreen" name="Система оценивает отклик через автоскрининг" camunda:type="external" camunda:topic="application-auto-screening" />
     <bpmn:userTask id="OverviewRecruiterDecision" name="Рекрутер принимает решение" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
-    <bpmn:exclusiveGateway id="OverviewDecisionGateway" name="Решение" />
+    <bpmn:exclusiveGateway id="OverviewDecisionGateway" name="Выбор ветки процесса" />
     <bpmn:userTask id="OverviewInvitation" name="Рекрутер готовит приглашение" camunda:formRef="invitation-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
     <bpmn:userTask id="OverviewCandidateResponse" name="Кандидат отвечает на приглашение" camunda:formRef="invitation-response-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
     <bpmn:userTask id="OverviewCloseVacancy" name="Рекрутер закрывает вакансию" camunda:formRef="close-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
     <bpmn:userTask id="OverviewAdminReset" name="Админ сбрасывает интервью" camunda:formRef="reset-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
-    <bpmn:serviceTask id="OverviewTimeout" name="Таймер закрывает просрочки" camunda:type="external" camunda:topic="timeout-close-expired" />
-    <bpmn:endEvent id="OverviewEnd" name="Процесс завершён" />
-    <bpmn:serviceTask id="OverviewVacancyClosedMessage" name="MSG_VACANCY_CLOSED закрывает активные процессы откликов" />
-    <bpmn:userTask id="OverviewResultForms" name="Camunda result forms показывают итог операции" />
+    <bpmn:serviceTask id="OverviewTimeout" name="Планировщик закрывает просроченные приглашения" camunda:type="external" camunda:topic="timeout-close-expired" />
+    <bpmn:endEvent id="OverviewEnd" name="Обзорный процесс завершён" />
+    <bpmn:serviceTask id="OverviewVacancyClosedMessage" name="Сообщение о закрытии вакансии завершает активные отклики" />
+    <bpmn:userTask id="OverviewResultForms" name="Формы Camunda показывают итог операции пользователю" />
     <bpmn:sequenceFlow id="OF1" sourceRef="OverviewStart" targetRef="OverviewCandidateApply" />
     <bpmn:sequenceFlow id="OF2" sourceRef="OverviewCandidateApply" targetRef="OverviewAutoScreen" />
     <bpmn:sequenceFlow id="OF3" sourceRef="OverviewAutoScreen" targetRef="OverviewRecruiterDecision" />
@@ -54,10 +54,10 @@
     <bpmn:sequenceFlow id="OF11" sourceRef="OverviewTimeout" targetRef="OverviewEnd" />
     <bpmn:sequenceFlow id="OF12" sourceRef="OverviewCloseVacancy" targetRef="OverviewVacancyClosedMessage" />
     <bpmn:sequenceFlow id="OF13" sourceRef="OverviewVacancyClosedMessage" targetRef="OverviewResultForms" />
-    <bpmn:sequenceFlow id="OF14" name="ветка закрытия вакансии" sourceRef="OverviewDecisionGateway" targetRef="OverviewCloseVacancy" />
-    <bpmn:sequenceFlow id="OF15" name="ветка admin reset" sourceRef="OverviewCandidateResponse" targetRef="OverviewAdminReset" />
-    <bpmn:sequenceFlow id="OF16" name="ветка timeout scheduler" sourceRef="OverviewCandidateResponse" targetRef="OverviewTimeout" />
-    <bpmn:sequenceFlow id="OF17" name="результат показан" sourceRef="OverviewResultForms" targetRef="OverviewEnd" />
+    <bpmn:sequenceFlow id="OF14" name="переход к закрытию вакансии" sourceRef="OverviewDecisionGateway" targetRef="OverviewCloseVacancy" />
+    <bpmn:sequenceFlow id="OF15" name="переход к админскому сбросу интервью" sourceRef="OverviewCandidateResponse" targetRef="OverviewAdminReset" />
+    <bpmn:sequenceFlow id="OF16" name="переход к проверке таймаутов" sourceRef="OverviewCandidateResponse" targetRef="OverviewTimeout" />
+    <bpmn:sequenceFlow id="OF17" name="результат операции показан" sourceRef="OverviewResultForms" targetRef="OverviewEnd" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_Overview">
     <bpmndi:BPMNPlane id="BPMNPlane_Overview" bpmnElement="Collaboration_hhProcessOverview">

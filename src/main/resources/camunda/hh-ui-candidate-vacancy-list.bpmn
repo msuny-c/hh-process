@@ -1,21 +1,21 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_candidate_vacancy_list" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
-  <bpmn:collaboration id="Collaboration_hhUiCandidateVacancyList" name="Pool: HH UI candidate vacancy list">
-    <bpmn:participant id="Participant_hhUiCandidateVacancyList" name="POOL: HH UI candidate vacancy list" processRef="hhUiCandidateVacancyList" />
+  <bpmn:collaboration id="Collaboration_hhUiCandidateVacancyList" name="Пул: экран вакансий кандидата">
+    <bpmn:participant id="Participant_hhUiCandidateVacancyList" name="Пул: экран вакансий кандидата" processRef="hhUiCandidateVacancyList" />
   </bpmn:collaboration>
-  <bpmn:process id="hhUiCandidateVacancyList" name="HH UI candidate vacancy list" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhUiCandidateVacancyList" name="Экран вакансий кандидата" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhUiCandidateVacancyList">
-      <bpmn:lane id="Lane_hhUiCandidateVacancyList_RoleSystem" name="CANDIDATE / ADMIN / SYSTEM">
+      <bpmn:lane id="Lane_hhUiCandidateVacancyList_RoleSystem" name="Кандидат / администратор / система">
         <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>LoadCandidateVacancyList</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>DisplayCandidateVacancyList</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Запущен список вакансий кандидата" />
-    <bpmn:serviceTask id="LoadCandidateVacancyList" name="Загрузить активные вакансии" camunda:type="external" camunda:topic="ui-query" />
-    <bpmn:userTask id="DisplayCandidateVacancyList" name="Список вакансий кандидата" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE,ADMIN" />
-    <bpmn:endEvent id="End" name="Список вакансий кандидата показан" />
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Кандидат открыл список доступных вакансий" />
+    <bpmn:serviceTask id="LoadCandidateVacancyList" name="Загрузить активные вакансии для кандидата" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:userTask id="DisplayCandidateVacancyList" name="Показать кандидату доступные вакансии" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
+    <bpmn:endEvent id="End" name="Список вакансий показан кандидату" />
     <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadCandidateVacancyList" />
     <bpmn:sequenceFlow id="F2" sourceRef="LoadCandidateVacancyList" targetRef="DisplayCandidateVacancyList" />
     <bpmn:sequenceFlow id="F3" sourceRef="DisplayCandidateVacancyList" targetRef="End" />

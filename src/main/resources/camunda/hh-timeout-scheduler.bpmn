@@ -1,17 +1,17 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_hh_v3" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
-  <bpmn:collaboration id="Collaboration_hhTimeoutSchedulerProcess" name="Pool: HH timeout scheduler with roles">
-    <bpmn:participant id="Participant_hhTimeoutSchedulerProcess" name="POOL: HH timeout scheduler with roles" processRef="hhTimeoutSchedulerProcess" />
+  <bpmn:collaboration id="Collaboration_hhTimeoutSchedulerProcess" name="Пул: планировщик просроченных приглашений">
+    <bpmn:participant id="Participant_hhTimeoutSchedulerProcess" name="Пул: планировщик просроченных приглашений" processRef="hhTimeoutSchedulerProcess" />
   </bpmn:collaboration>
-  <bpmn:process id="hhTimeoutSchedulerProcess" name="HH timeout scheduler with roles" isExecutable="true" camunda:candidateStarterGroups="ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhTimeoutSchedulerProcess" name="Планировщик просроченных приглашений" isExecutable="true" camunda:candidateStarterGroups="ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_Timeout">
-      <bpmn:lane id="Lane_System_T" name="SYSTEM">
+      <bpmn:lane id="Lane_System_T" name="Система">
         <bpmn:flowNodeRef>Compensate_Transaction_TimeoutOneInvitation</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ThrowCompensationTimeoutRollback</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Cancel_Transaction_TimeoutOneInvitation</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Compensate_Transaction_TimeoutOneInvitation_Boundary</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_Timer_T" name="TIMER">
+      <bpmn:lane id="Lane_Timer_T" name="Таймер">
         <bpmn:flowNodeRef>CompleteExpiredInvitationProcess</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>TimeoutTimerStart</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Transaction_TimeoutOneInvitation_End</bpmn:flowNodeRef>
@@ -23,27 +23,27 @@
         <bpmn:flowNodeRef>NotifyExpiredInvitationParticipants</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="TimeoutTimerStart" name="Периодический запуск проверки таймаутов">
+    <bpmn:startEvent id="TimeoutTimerStart" name="Таймер запускает проверку просроченных приглашений">
       <bpmn:timerEventDefinition>
         <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT5M</bpmn:timeCycle>
       </bpmn:timerEventDefinition>
     </bpmn:startEvent>
-    <bpmn:serviceTask id="FindOneExpiredInvitation" name="Найти одно просроченное приглашение" camunda:type="external" camunda:topic="timeout-close-expired" />
-    <bpmn:exclusiveGateway id="ExpiredFoundGateway" name="Просроченное приглашение найдено?" />
-    <bpmn:transaction id="Transaction_TimeoutOneInvitation" name="TX: обработка одной просрочки">
-      <bpmn:startEvent id="Transaction_TimeoutOneInvitation_Start" name="Начать транзакционный блок" />
-      <bpmn:serviceTask id="CancelExpiredInvitationInterview" name="Отменить интервью по таймауту" camunda:type="external" camunda:topic="timeout-close-expired" />
-      <bpmn:serviceTask id="ReleaseExpiredInvitationSlot" name="Освободить слот по таймауту" camunda:type="external" camunda:topic="timeout-close-expired" />
-      <bpmn:serviceTask id="CloseExpiredInvitationApplication" name="Закрыть отклик по таймауту" camunda:type="external" camunda:topic="timeout-close-expired" />
-      <bpmn:serviceTask id="RecordExpiredInvitationHistory" name="Записать историю таймаута" camunda:type="external" camunda:topic="timeout-close-expired" />
-      <bpmn:endEvent id="Transaction_TimeoutOneInvitation_End" name="Завершить транзакционный блок" />
+    <bpmn:serviceTask id="FindOneExpiredInvitation" name="Найти приглашение, срок ответа по которому истёк" camunda:type="external" camunda:topic="timeout-close-expired" />
+    <bpmn:exclusiveGateway id="ExpiredFoundGateway" name="Есть просроченное приглашение?" />
+    <bpmn:transaction id="Transaction_TimeoutOneInvitation" name="Транзакция: обработка одной просрочки">
+      <bpmn:startEvent id="Transaction_TimeoutOneInvitation_Start" name="Начать транзакцию бизнес-операции" />
+      <bpmn:serviceTask id="CancelExpiredInvitationInterview" name="Отменить интервью из-за таймаута ответа" camunda:type="external" camunda:topic="timeout-close-expired" />
+      <bpmn:serviceTask id="ReleaseExpiredInvitationSlot" name="Освободить слот интервью после таймаута" camunda:type="external" camunda:topic="timeout-close-expired" />
+      <bpmn:serviceTask id="CloseExpiredInvitationApplication" name="Закрыть отклик из-за просроченного ответа" camunda:type="external" camunda:topic="timeout-close-expired" />
+      <bpmn:serviceTask id="RecordExpiredInvitationHistory" name="Записать историю закрытия по таймауту" camunda:type="external" camunda:topic="timeout-close-expired" />
+      <bpmn:endEvent id="Transaction_TimeoutOneInvitation_End" name="Завершить транзакцию бизнес-операции" />
       <bpmn:sequenceFlow id="Transaction_TimeoutOneInvitation_SF_Start" sourceRef="Transaction_TimeoutOneInvitation_Start" targetRef="CancelExpiredInvitationInterview" />
       <bpmn:sequenceFlow id="TTX1" sourceRef="CancelExpiredInvitationInterview" targetRef="ReleaseExpiredInvitationSlot" />
       <bpmn:sequenceFlow id="TTX2" sourceRef="ReleaseExpiredInvitationSlot" targetRef="CloseExpiredInvitationApplication" />
       <bpmn:sequenceFlow id="TTX3" sourceRef="CloseExpiredInvitationApplication" targetRef="RecordExpiredInvitationHistory" />
       <bpmn:sequenceFlow id="Transaction_TimeoutOneInvitation_SF_End" sourceRef="RecordExpiredInvitationHistory" targetRef="Transaction_TimeoutOneInvitation_End" />
     </bpmn:transaction>
-    <bpmn:callActivity id="NotifyExpiredInvitationParticipants" name="Call: уведомить участников о таймауте" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+    <bpmn:callActivity id="NotifyExpiredInvitationParticipants" name="Подпроцесс: уведомить участников о таймауте" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
         <camunda:in sourceExpression="${'TIMEOUT'}" target="notificationKind" />
         <camunda:in source="expiredApplicationId" target="applicationId" />
@@ -52,18 +52,18 @@
         <camunda:out source="notificationKind" target="lastNotificationKind" />
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:serviceTask id="CompleteExpiredInvitationProcess" name="Завершить процесс отклика по таймауту" camunda:type="external" camunda:topic="timeout-close-expired" />
-    <bpmn:endEvent id="NoExpiredInvitationsEnd" name="Просрочек нет" />
-    <bpmn:boundaryEvent id="Cancel_Transaction_TimeoutOneInvitation" name="Cancel boundary: обработка таймаута приглашения" attachedToRef="Transaction_TimeoutOneInvitation">
+    <bpmn:serviceTask id="CompleteExpiredInvitationProcess" name="Сообщить процессу отклика о таймауте" camunda:type="external" camunda:topic="timeout-close-expired" />
+    <bpmn:endEvent id="NoExpiredInvitationsEnd" name="Просроченных приглашений нет" />
+    <bpmn:boundaryEvent id="Cancel_Transaction_TimeoutOneInvitation" name="Ошибка транзакции: обработка таймаута приглашения" attachedToRef="Transaction_TimeoutOneInvitation">
       <bpmn:cancelEventDefinition />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="Compensate_Transaction_TimeoutOneInvitation_Boundary" name="Compensation boundary: обработка таймаута приглашения" attachedToRef="Transaction_TimeoutOneInvitation">
+    <bpmn:boundaryEvent id="Compensate_Transaction_TimeoutOneInvitation_Boundary" name="Компенсация: откат обработки таймаута" attachedToRef="Transaction_TimeoutOneInvitation">
       <bpmn:compensateEventDefinition />
     </bpmn:boundaryEvent>
-    <bpmn:intermediateThrowEvent id="ThrowCompensationTimeoutRollback" name="Явно запустить BPMN compensation handlers">
+    <bpmn:intermediateThrowEvent id="ThrowCompensationTimeoutRollback" name="Запустить компенсацию отката после ошибки">
       <bpmn:compensateEventDefinition waitForCompletion="true" />
     </bpmn:intermediateThrowEvent>
-    <bpmn:serviceTask id="Compensate_Transaction_TimeoutOneInvitation" name="Компенсация: обработка таймаута приглашения" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:serviceTask id="Compensate_Transaction_TimeoutOneInvitation" name="Компенсация: откатить закрытие по таймауту" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
     <bpmn:sequenceFlow id="TF1" sourceRef="TimeoutTimerStart" targetRef="FindOneExpiredInvitation" />
     <bpmn:sequenceFlow id="TF2" sourceRef="FindOneExpiredInvitation" targetRef="ExpiredFoundGateway" />
     <bpmn:sequenceFlow id="TF3" sourceRef="ExpiredFoundGateway" targetRef="NoExpiredInvitationsEnd">
@@ -75,8 +75,8 @@
     <bpmn:sequenceFlow id="TF5" sourceRef="Transaction_TimeoutOneInvitation" targetRef="NotifyExpiredInvitationParticipants" />
     <bpmn:sequenceFlow id="TF6" sourceRef="NotifyExpiredInvitationParticipants" targetRef="CompleteExpiredInvitationProcess" />
     <bpmn:sequenceFlow id="TF7" sourceRef="CompleteExpiredInvitationProcess" targetRef="FindOneExpiredInvitation" />
-    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_TimeoutOneInvitation_Recovery" name="cancel -&gt; compensation" sourceRef="Cancel_Transaction_TimeoutOneInvitation" targetRef="ThrowCompensationTimeoutRollback" />
-    <bpmn:sequenceFlow id="TF_CANCEL_COMPENSATED" name="compensation выполнена" sourceRef="ThrowCompensationTimeoutRollback" targetRef="CompleteExpiredInvitationProcess" />
+    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_TimeoutOneInvitation_Recovery" name="отмена транзакции: запустить компенсацию" sourceRef="Cancel_Transaction_TimeoutOneInvitation" targetRef="ThrowCompensationTimeoutRollback" />
+    <bpmn:sequenceFlow id="TF_CANCEL_COMPENSATED" name="компенсация выполнена" sourceRef="ThrowCompensationTimeoutRollback" targetRef="CompleteExpiredInvitationProcess" />
     <bpmn:association id="Association_Compensate_Transaction_TimeoutOneInvitation" sourceRef="Compensate_Transaction_TimeoutOneInvitation_Boundary" targetRef="Compensate_Transaction_TimeoutOneInvitation" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_AutoLayout">

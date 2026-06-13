@@ -6,12 +6,12 @@
   <bpmn:message id="Message_InterviewCancelled" name="MSG_INTERVIEW_CANCELLED" />
   <bpmn:message id="Message_AdminResetDone" name="MSG_ADMIN_RESET_DONE" />
   <bpmn:message id="Message_InvitationExpired" name="MSG_INVITATION_EXPIRED" />
-  <bpmn:collaboration id="Collaboration_hhApplicationProcess" name="Pool: HH application process with roles">
-    <bpmn:participant id="Participant_hhApplicationProcess" name="POOL: HH application process with roles" processRef="hhApplicationProcess" />
+  <bpmn:collaboration id="Collaboration_hhApplicationProcess" name="Пул: процесс отклика кандидата">
+    <bpmn:participant id="Participant_hhApplicationProcess" name="Пул: процесс отклика кандидата" processRef="hhApplicationProcess" />
   </bpmn:collaboration>
-  <bpmn:process id="hhApplicationProcess" name="HH application process with roles" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhApplicationProcess" name="Процесс отклика кандидата" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_Application">
-      <bpmn:lane id="Lane_Candidate" name="CANDIDATE">
+      <bpmn:lane id="Lane_Candidate" name="Кандидат">
         <bpmn:flowNodeRef>ApplyToVacancyTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>VacancyClosedApplicationResultTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>TimeoutResultTask</bpmn:flowNodeRef>
@@ -22,13 +22,13 @@
         <bpmn:flowNodeRef>ScreeningResultTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>CandidateResponseFormError</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_Recruiter" name="RECRUITER">
+      <bpmn:lane id="Lane_Recruiter" name="Рекрутер">
         <bpmn:flowNodeRef>RecruiterDecisionTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>RecruiterDecisionGateway</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>WriteInvitationTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>RecruiterDecisionFormError</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_System" name="SYSTEM">
+      <bpmn:lane id="Lane_System" name="Система">
         <bpmn:flowNodeRef>ApplicationStart</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ApplicationSubmissionModeGateway</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ValidateApplyToVacancyForm</bpmn:flowNodeRef>
@@ -74,22 +74,22 @@
         <bpmn:flowNodeRef>ApplyFormValidationError</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="ApplicationStart" name="Отклик создан" camunda:initiator="starterUserId" />
+    <bpmn:startEvent id="ApplicationStart" name="Создан новый отклик кандидата" camunda:initiator="starterUserId" />
     <bpmn:exclusiveGateway id="ApplicationSubmissionModeGateway" name="Способ подачи отклика" default="F1b" />
-    <bpmn:userTask id="ApplyToVacancyTask" name="Заполнить форму отклика" camunda:formRef="apply-to-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
-    <bpmn:serviceTask id="ValidateApplyToVacancyForm" name="Проверить данные формы отклика" camunda:type="external" camunda:topic="form-validation" />
-    <bpmn:serviceTask id="CreateApplicationFromForm" name="Создать отклик в БД" camunda:type="external" camunda:topic="application-persistence" />
-    <bpmn:serviceTask id="AutoScreenApplication" name="SYSTEM: подготовить score/threshold для DMN автоскрининга" camunda:type="external" camunda:topic="application-auto-screening" />
-    <bpmn:businessRuleTask id="EvaluateAutoScreeningDecision" name="DMN: requiredSkills + threshold -&gt; screeningPassed" camunda:resultVariable="screeningPassed" camunda:decisionRef="hhAutoScreening" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
-    <bpmn:serviceTask id="SaveAutoScreenDecision" name="SYSTEM: сохранить DMN-решение автоскрининга" camunda:type="external" camunda:topic="application-auto-screening" />
+    <bpmn:userTask id="ApplyToVacancyTask" name="Кандидат заполняет форму отклика" camunda:formRef="apply-to-vacancy-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
+    <bpmn:serviceTask id="ValidateApplyToVacancyForm" name="Проверить обязательные поля отклика" camunda:type="external" camunda:topic="form-validation" />
+    <bpmn:serviceTask id="CreateApplicationFromForm" name="Создать отклик кандидата в БД" camunda:type="external" camunda:topic="application-persistence" />
+    <bpmn:serviceTask id="AutoScreenApplication" name="Система: подготовить балл и порог для автоскрининга" camunda:type="external" camunda:topic="application-auto-screening" />
+    <bpmn:businessRuleTask id="EvaluateAutoScreeningDecision" name="Таблица решений: проверить навыки и порог автоскрининга" camunda:resultVariable="screeningPassed" camunda:decisionRef="hhAutoScreening" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
+    <bpmn:serviceTask id="SaveAutoScreenDecision" name="Система: сохранить результат автоскрининга" camunda:type="external" camunda:topic="application-auto-screening" />
     <bpmn:exclusiveGateway id="ScreeningGateway" name="Скрининг пройден?" />
-    <bpmn:endEvent id="ScreeningFailedEnd" name="Отклик закрыт после скрининга" />
-    <bpmn:userTask id="RecruiterDecisionTask" name="Рассмотреть отклик рекрутером" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
-    <bpmn:businessRuleTask id="EvaluateRecruiterDecisionTransition" name="DMN: статус отклика + действие рекрутера -&gt; allowed/nextStatus" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" camunda:decisionRefBinding="latest" />
-    <bpmn:exclusiveGateway id="RecruiterDecisionTransitionGateway" name="Переход статуса после решения рекрутера разрешён?" />
-    <bpmn:endEvent id="RecruiterDecisionTransitionDenied" name="DMN запретила переход статуса отклика" />
-    <bpmn:exclusiveGateway id="RecruiterDecisionGateway" name="Решение рекрутера" />
-    <bpmn:callActivity id="NotifyRejection" name="Call: уведомить кандидата об отказе" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+    <bpmn:endEvent id="ScreeningFailedEnd" name="Отклик закрыт: автоскрининг не пройден" />
+    <bpmn:userTask id="RecruiterDecisionTask" name="Рекрутер рассматривает отклик" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:businessRuleTask id="EvaluateRecruiterDecisionTransition" name="Таблица решений: разрешить новый статус после решения рекрутера" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" camunda:decisionRefBinding="latest" />
+    <bpmn:exclusiveGateway id="RecruiterDecisionTransitionGateway" name="Таблица решений разрешила новый статус после решения рекрутера?" />
+    <bpmn:endEvent id="RecruiterDecisionTransitionDenied" name="Таблица решений запретила новый статус отклика" />
+    <bpmn:exclusiveGateway id="RecruiterDecisionGateway" name="Какое решение принял рекрутер?" />
+    <bpmn:callActivity id="NotifyRejection" name="Подпроцесс: уведомить кандидата об отказе" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
         <camunda:in sourceExpression="${'REJECTION'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
@@ -97,16 +97,16 @@
         <camunda:out source="notificationKind" target="lastNotificationKind" />
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:userTask id="VacancyClosedApplicationResultTask" name="Показать результат закрытия вакансии" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
-    <bpmn:userTask id="TimeoutResultTask" name="Показать результат таймаута" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
-    <bpmn:userTask id="CandidateResponseResultTask" name="Показать результат ответа кандидата" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
-    <bpmn:userTask id="RejectionResultTask" name="Показать результат отказа" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
-    <bpmn:serviceTask id="ValidateRecruiterDecisionForm" name="Проверить решение рекрутера" camunda:type="external" camunda:topic="form-validation" />
-    <bpmn:serviceTask id="PrepareRecruiterDecisionTransition" name="SYSTEM: подготовить DMN currentStatus + recruiter action" camunda:type="external" camunda:topic="status-transition" />
-    <bpmn:endEvent id="RejectedEnd" name="Отклик отклонён" />
-    <bpmn:userTask id="WriteInvitationTask" name="Подготовить приглашение на интервью" camunda:formRef="invitation-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
-    <bpmn:serviceTask id="ValidateInvitationForm" name="Проверить данные формы приглашения" camunda:type="external" camunda:topic="form-validation" />
-    <bpmn:callActivity id="NotifyInvitation" name="Call: уведомить кандидата о приглашении" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+    <bpmn:userTask id="VacancyClosedApplicationResultTask" name="Показать результат закрытия вакансии" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
+    <bpmn:userTask id="TimeoutResultTask" name="Показать результат таймаута" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
+    <bpmn:userTask id="CandidateResponseResultTask" name="Показать результат ответа кандидата" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
+    <bpmn:userTask id="RejectionResultTask" name="Показать результат отказа" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
+    <bpmn:serviceTask id="ValidateRecruiterDecisionForm" name="Проверить форму решения рекрутера" camunda:type="external" camunda:topic="form-validation" />
+    <bpmn:serviceTask id="PrepareRecruiterDecisionTransition" name="Система: подготовить статус и действие рекрутера для таблицы решений" camunda:type="external" camunda:topic="status-transition" />
+    <bpmn:endEvent id="RejectedEnd" name="Отклик закрыт отказом рекрутера" />
+    <bpmn:userTask id="WriteInvitationTask" name="Рекрутер заполняет приглашение на интервью" camunda:formRef="invitation-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:serviceTask id="ValidateInvitationForm" name="Проверить дату, длительность и текст приглашения" camunda:type="external" camunda:topic="form-validation" />
+    <bpmn:callActivity id="NotifyInvitation" name="Подпроцесс: уведомить кандидата о приглашении" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
         <camunda:in sourceExpression="${'INVITATION'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
@@ -115,27 +115,27 @@
         <camunda:out source="notificationKind" target="lastNotificationKind" />
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:userTask id="CandidateInvitationResponseTask" name="Ответить на приглашение" camunda:formRef="invitation-response-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
-    <bpmn:exclusiveGateway id="CandidateResponseGateway" name="Ответ кандидата" />
-    <bpmn:serviceTask id="ValidateCandidateResponseForm" name="Проверить ответ кандидата" camunda:type="external" camunda:topic="form-validation" />
-    <bpmn:serviceTask id="PrepareCandidateResponseTransition" name="SYSTEM: подготовить DMN currentStatus + RESPOND_INVITATION" camunda:type="external" camunda:topic="status-transition" />
-    <bpmn:businessRuleTask id="EvaluateCandidateResponseTransition" name="DMN: статус отклика + ответ кандидата -&gt; allowed/nextStatus" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" camunda:decisionRefBinding="latest" />
-    <bpmn:exclusiveGateway id="CandidateResponseTransitionGateway" name="Переход статуса после ответа кандидата разрешён?" />
-    <bpmn:endEvent id="CandidateResponseTransitionDenied" name="DMN запретила переход статуса ответа" />
-    <bpmn:transaction id="Transaction_Response" name="TX: сохранение ответа кандидата">
-      <bpmn:startEvent id="Transaction_Response_Start" name="Начать транзакционный блок" />
-      <bpmn:serviceTask id="CheckInvitationStillActive" name="Проверить активность приглашения" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:serviceTask id="SaveCandidateResponse" name="Сохранить ответ кандидата" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:serviceTask id="MarkCandidateResponseReceived" name="Обновить статус отклика" camunda:type="external" camunda:topic="application-persistence" />
+    <bpmn:userTask id="CandidateInvitationResponseTask" name="Кандидат отвечает на приглашение" camunda:formRef="invitation-response-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
+    <bpmn:exclusiveGateway id="CandidateResponseGateway" name="Как ответил кандидат?" />
+    <bpmn:serviceTask id="ValidateCandidateResponseForm" name="Проверить форму ответа кандидата" camunda:type="external" camunda:topic="form-validation" />
+    <bpmn:serviceTask id="PrepareCandidateResponseTransition" name="Система: подготовить статус и ответ кандидата для таблицы решений" camunda:type="external" camunda:topic="status-transition" />
+    <bpmn:businessRuleTask id="EvaluateCandidateResponseTransition" name="Таблица решений: разрешить новый статус после ответа кандидата" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" camunda:decisionRefBinding="latest" />
+    <bpmn:exclusiveGateway id="CandidateResponseTransitionGateway" name="Таблица решений разрешила новый статус после ответа кандидата?" />
+    <bpmn:endEvent id="CandidateResponseTransitionDenied" name="Таблица решений запретила статус после ответа кандидата" />
+    <bpmn:transaction id="Transaction_Response" name="Транзакция: сохранение ответа кандидата">
+      <bpmn:startEvent id="Transaction_Response_Start" name="Начать транзакцию бизнес-операции" />
+      <bpmn:serviceTask id="CheckInvitationStillActive" name="Проверить, что приглашение ещё активно" camunda:type="external" camunda:topic="application-persistence" />
+      <bpmn:serviceTask id="SaveCandidateResponse" name="Сохранить ответ кандидата в БД" camunda:type="external" camunda:topic="application-persistence" />
+      <bpmn:serviceTask id="MarkCandidateResponseReceived" name="Обновить статус отклика после ответа" camunda:type="external" camunda:topic="application-persistence" />
       <bpmn:serviceTask id="RecordCandidateResponseHistory" name="Записать историю ответа кандидата" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:endEvent id="Transaction_Response_End" name="Завершить транзакционный блок" />
+      <bpmn:endEvent id="Transaction_Response_End" name="Завершить транзакцию бизнес-операции" />
       <bpmn:sequenceFlow id="Transaction_Response_SF_Start" sourceRef="Transaction_Response_Start" targetRef="CheckInvitationStillActive" />
       <bpmn:sequenceFlow id="C1" sourceRef="CheckInvitationStillActive" targetRef="SaveCandidateResponse" />
       <bpmn:sequenceFlow id="C2" sourceRef="SaveCandidateResponse" targetRef="MarkCandidateResponseReceived" />
       <bpmn:sequenceFlow id="C3" sourceRef="MarkCandidateResponseReceived" targetRef="RecordCandidateResponseHistory" />
       <bpmn:sequenceFlow id="Transaction_Response_SF_End" sourceRef="RecordCandidateResponseHistory" targetRef="Transaction_Response_End" />
     </bpmn:transaction>
-    <bpmn:callActivity id="NotifyCandidateResponse" name="Call: уведомить рекрутера об ответе кандидата" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+    <bpmn:callActivity id="NotifyCandidateResponse" name="Подпроцесс: уведомить рекрутера об ответе кандидата" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
         <camunda:in sourceExpression="${'CANDIDATE_RESPONSE'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
@@ -144,33 +144,33 @@
       </bpmn:extensionElements>
     </bpmn:callActivity>
     <bpmn:endEvent id="ResponseEnd" name="Ответ кандидата обработан" />
-    <bpmn:serviceTask id="CloseByTimeout" name="Закрыть отклик по таймауту приглашения" camunda:type="external" camunda:topic="timeout-close-expired" />
-    <bpmn:endEvent id="TimeoutEnd" name="Отклик закрыт по таймауту" />
-    <bpmn:intermediateThrowEvent id="ThrowCompensationApplicationRollback" name="Явно запустить BPMN compensation handlers">
+    <bpmn:serviceTask id="CloseByTimeout" name="Закрыть отклик: кандидат не ответил вовремя" camunda:type="external" camunda:topic="timeout-close-expired" />
+    <bpmn:endEvent id="TimeoutEnd" name="Отклик закрыт по таймауту приглашения" />
+    <bpmn:intermediateThrowEvent id="ThrowCompensationApplicationRollback" name="Запустить компенсацию отката после ошибки">
       <bpmn:compensateEventDefinition waitForCompletion="true" />
     </bpmn:intermediateThrowEvent>
-    <bpmn:serviceTask id="RollbackApplicationTransaction" name="Выполнить recovery отклика" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:endEvent id="ApplicationRollbackEnd" name="Процесс завершён после recovery" />
-    <bpmn:serviceTask id="HandleVacancyClosedMessage" name="Закрыть отклик по сообщению о закрытии вакансии" camunda:type="external" camunda:topic="application-message" />
-    <bpmn:userTask id="ScreeningResultTask" name="Показать результат скрининга" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE" />
-    <bpmn:endEvent id="ClosedByVacancyEnd" name="Отклик закрыт из-за закрытия вакансии" />
-    <bpmn:businessRuleTask id="EvaluateRecruiterDecisionPermission" name="DMN: RECRUITER + REVIEW_APPLICATION + ownership" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
-    <bpmn:exclusiveGateway id="RecruiterDecisionPermissionGateway" name="Доступ REVIEW_APPLICATION разрешён?" />
-    <bpmn:endEvent id="RecruiterDecisionPermissionDenied" name="Доступ к рассмотрению отклика запрещён" />
-    <bpmn:serviceTask id="ResolveCandidateResponsePermission" name="SYSTEM: подготовить DMN-контекст RESPOND_INVITATION" camunda:type="external" camunda:topic="permission-check" />
-    <bpmn:businessRuleTask id="EvaluateCandidateResponsePermission" name="DMN: CANDIDATE + RESPOND_INVITATION + ownership" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
-    <bpmn:exclusiveGateway id="CandidateResponsePermissionGateway" name="Доступ RESPOND_INVITATION разрешён?" />
-    <bpmn:endEvent id="CandidateResponsePermissionDenied" name="Доступ к ответу на приглашение запрещён" />
-    <bpmn:serviceTask id="Compensate_Transaction_Rejection" name="Компенсация: отказ рекрутера" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:serviceTask id="Compensate_Transaction_Invitation" name="Компенсация: оформление приглашения" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:serviceTask id="Compensate_Transaction_Response" name="Компенсация: ответ кандидата" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:transaction id="Transaction_Invitation" name="TX: оформление приглашения">
-      <bpmn:startEvent id="Transaction_Invitation_Start" name="Начать транзакционный блок" />
-      <bpmn:serviceTask id="PersistInvitationToDb" name="Сохранить текст приглашения" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:serviceTask id="CreateInvitationInterview" name="Создать интервью" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:serviceTask id="ReserveInvitationSlot" name="Зарезервировать слот рекрутера" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:serviceTask id="RecordInvitationHistory" name="Записать историю приглашения" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:endEvent id="Transaction_Invitation_End" name="Завершить транзакционный блок" />
+    <bpmn:serviceTask id="RollbackApplicationTransaction" name="Восстановить данные отклика после ошибки" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:endEvent id="ApplicationRollbackEnd" name="Процесс завершён после восстановления" />
+    <bpmn:serviceTask id="HandleVacancyClosedMessage" name="Закрыть отклик после закрытия вакансии" camunda:type="external" camunda:topic="application-message" />
+    <bpmn:userTask id="ScreeningResultTask" name="Показать результат скрининга" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
+    <bpmn:endEvent id="ClosedByVacancyEnd" name="Отклик закрыт, потому что вакансия закрыта" />
+    <bpmn:businessRuleTask id="EvaluateRecruiterDecisionPermission" name="Таблица решений: проверить право рекрутера на рассмотрение отклика" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
+    <bpmn:exclusiveGateway id="RecruiterDecisionPermissionGateway" name="Рекрутер имеет право рассмотреть этот отклик?" />
+    <bpmn:endEvent id="RecruiterDecisionPermissionDenied" name="Рекрутеру запрещено рассматривать этот отклик" />
+    <bpmn:serviceTask id="ResolveCandidateResponsePermission" name="Система: собрать данные для проверки права ответить на приглашение" camunda:type="external" camunda:topic="permission-check" />
+    <bpmn:businessRuleTask id="EvaluateCandidateResponsePermission" name="Таблица решений: проверить право кандидата ответить на приглашение" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
+    <bpmn:exclusiveGateway id="CandidateResponsePermissionGateway" name="Кандидат имеет право ответить на это приглашение?" />
+    <bpmn:endEvent id="CandidateResponsePermissionDenied" name="Кандидату запрещено отвечать на это приглашение" />
+    <bpmn:serviceTask id="Compensate_Transaction_Rejection" name="Компенсация: откатить отказ рекрутера" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:serviceTask id="Compensate_Transaction_Invitation" name="Компенсация: отменить созданное приглашение" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:serviceTask id="Compensate_Transaction_Response" name="Компенсация: откатить сохранённый ответ кандидата" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:transaction id="Transaction_Invitation" name="Транзакция: оформление приглашения">
+      <bpmn:startEvent id="Transaction_Invitation_Start" name="Начать транзакцию бизнес-операции" />
+      <bpmn:serviceTask id="PersistInvitationToDb" name="Сохранить приглашение в БД" camunda:type="external" camunda:topic="application-persistence" />
+      <bpmn:serviceTask id="CreateInvitationInterview" name="Создать интервью по приглашению" camunda:type="external" camunda:topic="application-persistence" />
+      <bpmn:serviceTask id="ReserveInvitationSlot" name="Зарезервировать слот в расписании рекрутера" camunda:type="external" camunda:topic="application-persistence" />
+      <bpmn:serviceTask id="RecordInvitationHistory" name="Записать историю отправки приглашения" camunda:type="external" camunda:topic="application-persistence" />
+      <bpmn:endEvent id="Transaction_Invitation_End" name="Завершить транзакцию бизнес-операции" />
       <bpmn:sequenceFlow id="Transaction_Invitation_SF_Start" sourceRef="Transaction_Invitation_Start" targetRef="PersistInvitationToDb" />
       <bpmn:sequenceFlow id="I1" sourceRef="PersistInvitationToDb" targetRef="CreateInvitationInterview" />
       <bpmn:sequenceFlow id="I2" sourceRef="CreateInvitationInterview" targetRef="ReserveInvitationSlot" />
@@ -180,10 +180,10 @@
     <bpmn:boundaryEvent id="PersistInvitationErrorBoundary" attachedToRef="Transaction_Invitation">
       <bpmn:errorEventDefinition errorRef="Error_ApplicationTxFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="Cancel_Transaction_Invitation" name="Cancel boundary: оформление приглашения" attachedToRef="Transaction_Invitation">
+    <bpmn:boundaryEvent id="Cancel_Transaction_Invitation" name="Ошибка транзакции: оформление приглашения" attachedToRef="Transaction_Invitation">
       <bpmn:cancelEventDefinition />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="Compensate_Transaction_Invitation_Boundary" name="Compensation boundary: оформление приглашения" attachedToRef="Transaction_Invitation">
+    <bpmn:boundaryEvent id="Compensate_Transaction_Invitation_Boundary" name="Компенсация: откат оформления приглашения" attachedToRef="Transaction_Invitation">
       <bpmn:compensateEventDefinition />
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="RecruiterDecisionFormError" attachedToRef="ValidateRecruiterDecisionForm">
@@ -197,7 +197,7 @@
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="InvitationTimeoutBoundary" attachedToRef="CandidateInvitationResponseTask">
       <bpmn:timerEventDefinition>
-        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">${invitationTimeoutDuration}</bpmn:timeDuration>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">${invitationTimeoutDuration != null ? invitationTimeoutDuration : "PT24H"}</bpmn:timeDuration>
       </bpmn:timerEventDefinition>
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="CandidateResponseFormError" attachedToRef="ValidateCandidateResponseForm">
@@ -215,19 +215,19 @@
     <bpmn:boundaryEvent id="VacancyClosedAtCandidateResponse" attachedToRef="CandidateInvitationResponseTask">
       <bpmn:messageEventDefinition messageRef="Message_VacancyClosed" />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="InterviewCancelledAtCandidateResponse" name="MSG_INTERVIEW_CANCELLED" attachedToRef="CandidateInvitationResponseTask">
+    <bpmn:boundaryEvent id="InterviewCancelledAtCandidateResponse" name="Событие: интервью отменено рекрутером" attachedToRef="CandidateInvitationResponseTask">
       <bpmn:messageEventDefinition messageRef="Message_InterviewCancelled" />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="AdminResetDoneAtCandidateResponse" name="MSG_ADMIN_RESET_DONE" attachedToRef="CandidateInvitationResponseTask">
+    <bpmn:boundaryEvent id="AdminResetDoneAtCandidateResponse" name="Событие: администратор сбросил интервью" attachedToRef="CandidateInvitationResponseTask">
       <bpmn:messageEventDefinition messageRef="Message_AdminResetDone" />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="InvitationExpiredAtCandidateResponse" name="MSG_INVITATION_EXPIRED" attachedToRef="CandidateInvitationResponseTask">
+    <bpmn:boundaryEvent id="InvitationExpiredAtCandidateResponse" name="Событие: приглашение просрочено" attachedToRef="CandidateInvitationResponseTask">
       <bpmn:messageEventDefinition messageRef="Message_InvitationExpired" />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="Cancel_Transaction_Response" name="Cancel boundary: ответ кандидата" attachedToRef="Transaction_Response">
+    <bpmn:boundaryEvent id="Cancel_Transaction_Response" name="Ошибка транзакции: ответ кандидата" attachedToRef="Transaction_Response">
       <bpmn:cancelEventDefinition />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="Compensate_Transaction_Response_Boundary" name="Compensation boundary: ответ кандидата" attachedToRef="Transaction_Response">
+    <bpmn:boundaryEvent id="Compensate_Transaction_Response_Boundary" name="Компенсация: откат ответа кандидата" attachedToRef="Transaction_Response">
       <bpmn:compensateEventDefinition />
     </bpmn:boundaryEvent>
     <bpmn:sequenceFlow id="F1" sourceRef="ApplicationStart" targetRef="ApplicationSubmissionModeGateway" />
@@ -239,8 +239,8 @@
     <bpmn:sequenceFlow id="F2" sourceRef="ApplyToVacancyTask" targetRef="ValidateApplyToVacancyForm" />
     <bpmn:sequenceFlow id="F3" sourceRef="ValidateApplyToVacancyForm" targetRef="CreateApplicationFromForm" />
     <bpmn:sequenceFlow id="F3_CreateApplication" sourceRef="CreateApplicationFromForm" targetRef="AutoScreenApplication" />
-    <bpmn:sequenceFlow id="F4" name="score/threshold подготовлены" sourceRef="AutoScreenApplication" targetRef="EvaluateAutoScreeningDecision" />
-    <bpmn:sequenceFlow id="F4_DMN" name="DMN вернула screeningPassed" sourceRef="EvaluateAutoScreeningDecision" targetRef="SaveAutoScreenDecision" />
+    <bpmn:sequenceFlow id="F4" name="балл и порог подготовлены" sourceRef="AutoScreenApplication" targetRef="EvaluateAutoScreeningDecision" />
+    <bpmn:sequenceFlow id="F4_DMN" name="таблица решений вернула результат скрининга" sourceRef="EvaluateAutoScreeningDecision" targetRef="SaveAutoScreenDecision" />
     <bpmn:sequenceFlow id="F4_SAVE" name="результат сохранён" sourceRef="SaveAutoScreenDecision" targetRef="ScreeningGateway" />
     <bpmn:sequenceFlow id="F5" sourceRef="ScreeningGateway" targetRef="NotifyRecruiter">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${screeningPassed == true}</bpmn:conditionExpression>
@@ -251,16 +251,16 @@
     <bpmn:sequenceFlow id="F7" sourceRef="NotifyScreeningFailed" targetRef="ScreeningResultTask" />
     <bpmn:sequenceFlow id="F7b" sourceRef="ScreeningResultTask" targetRef="ScreeningFailedEnd" />
     <bpmn:sequenceFlow id="F9e" sourceRef="RecruiterDecisionFormError" targetRef="RecruiterDecisionTask" />
-    <bpmn:sequenceFlow id="F8_DMN_Allowed" name="разрешено DMN" sourceRef="RecruiterDecisionPermissionGateway" targetRef="RecruiterDecisionTask">
+    <bpmn:sequenceFlow id="F8_DMN_Allowed" name="таблица решений разрешила доступ" sourceRef="RecruiterDecisionPermissionGateway" targetRef="RecruiterDecisionTask">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${permissionAllowed == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F9" sourceRef="RecruiterDecisionTask" targetRef="ValidateRecruiterDecisionForm" />
-    <bpmn:sequenceFlow id="F10_DMN_PREPARED" name="currentStatus/action подготовлены" sourceRef="PrepareRecruiterDecisionTransition" targetRef="EvaluateRecruiterDecisionTransition" />
-    <bpmn:sequenceFlow id="F10_DMN_EVALUATED" name="DMN вернула allowed/nextStatus" sourceRef="EvaluateRecruiterDecisionTransition" targetRef="RecruiterDecisionTransitionGateway" />
-    <bpmn:sequenceFlow id="F10_DMN_ALLOWED" name="переход разрешён DMN" sourceRef="RecruiterDecisionTransitionGateway" targetRef="RecruiterDecisionGateway">
+    <bpmn:sequenceFlow id="F10_DMN_PREPARED" name="статус и действие подготовлены" sourceRef="PrepareRecruiterDecisionTransition" targetRef="EvaluateRecruiterDecisionTransition" />
+    <bpmn:sequenceFlow id="F10_DMN_EVALUATED" name="таблица решений вернула разрешение и следующий статус" sourceRef="EvaluateRecruiterDecisionTransition" targetRef="RecruiterDecisionTransitionGateway" />
+    <bpmn:sequenceFlow id="F10_DMN_ALLOWED" name="таблица решений разрешила переход" sourceRef="RecruiterDecisionTransitionGateway" targetRef="RecruiterDecisionGateway">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="F10_DMN_DENIED" name="переход запрещён DMN" sourceRef="RecruiterDecisionTransitionGateway" targetRef="RecruiterDecisionTransitionDenied">
+    <bpmn:sequenceFlow id="F10_DMN_DENIED" name="таблица решений запретила переход" sourceRef="RecruiterDecisionTransitionGateway" targetRef="RecruiterDecisionTransitionDenied">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed != true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F11" sourceRef="RecruiterDecisionGateway" targetRef="Transaction_Rejection">
@@ -292,13 +292,13 @@
     <bpmn:sequenceFlow id="F17" sourceRef="Transaction_Invitation" targetRef="NotifyInvitation" />
     <bpmn:sequenceFlow id="F18" sourceRef="NotifyInvitation" targetRef="ResolveCandidateResponsePermission" />
     <bpmn:sequenceFlow id="F22e" sourceRef="CandidateResponseFormError" targetRef="CandidateInvitationResponseTask" />
-    <bpmn:sequenceFlow id="F18_DMN_Allowed" name="разрешено DMN" sourceRef="CandidateResponsePermissionGateway" targetRef="CandidateInvitationResponseTask">
+    <bpmn:sequenceFlow id="F18_DMN_Allowed" name="таблица решений разрешила доступ" sourceRef="CandidateResponsePermissionGateway" targetRef="CandidateInvitationResponseTask">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${permissionAllowed == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F19" sourceRef="CandidateInvitationResponseTask" targetRef="CandidateResponseGateway" />
-    <bpmn:sequenceFlow id="F_MSG_InterviewCancelled" name="responseType=RECRUITER_CANCEL" sourceRef="InterviewCancelledAtCandidateResponse" targetRef="CandidateResponseGateway" />
-    <bpmn:sequenceFlow id="F_MSG_AdminResetDone" name="responseType=ADMIN_RESET" sourceRef="AdminResetDoneAtCandidateResponse" targetRef="CandidateResponseGateway" />
-    <bpmn:sequenceFlow id="F_MSG_InvitationExpired" name="responseType=TIMEOUT" sourceRef="InvitationExpiredAtCandidateResponse" targetRef="CandidateResponseGateway" />
+    <bpmn:sequenceFlow id="F_MSG_InterviewCancelled" name="тип ответа: интервью отменил рекрутер" sourceRef="InterviewCancelledAtCandidateResponse" targetRef="CandidateResponseGateway" />
+    <bpmn:sequenceFlow id="F_MSG_AdminResetDone" name="тип ответа: интервью сбросил администратор" sourceRef="AdminResetDoneAtCandidateResponse" targetRef="CandidateResponseGateway" />
+    <bpmn:sequenceFlow id="F_MSG_InvitationExpired" name="тип ответа: приглашение просрочено" sourceRef="InvitationExpiredAtCandidateResponse" targetRef="CandidateResponseGateway" />
     <bpmn:sequenceFlow id="F20" sourceRef="CandidateResponseGateway" targetRef="CloseByTimeout">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType == 'TIMEOUT'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -309,38 +309,38 @@
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType != 'TIMEOUT' &amp;&amp; responseType != 'RECRUITER_REJECT' &amp;&amp; responseType != 'RECRUITER_CANCEL' &amp;&amp; responseType != 'ADMIN_RESET'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F23" sourceRef="ValidateCandidateResponseForm" targetRef="PrepareCandidateResponseTransition" />
-    <bpmn:sequenceFlow id="F23_DMN_PREPARED" name="currentStatus/action подготовлены" sourceRef="PrepareCandidateResponseTransition" targetRef="EvaluateCandidateResponseTransition" />
-    <bpmn:sequenceFlow id="F23_DMN_EVALUATED" name="DMN вернула allowed/nextStatus" sourceRef="EvaluateCandidateResponseTransition" targetRef="CandidateResponseTransitionGateway" />
-    <bpmn:sequenceFlow id="F23_DMN_ALLOWED" name="переход разрешён DMN" sourceRef="CandidateResponseTransitionGateway" targetRef="Transaction_Response">
+    <bpmn:sequenceFlow id="F23_DMN_PREPARED" name="статус и действие подготовлены" sourceRef="PrepareCandidateResponseTransition" targetRef="EvaluateCandidateResponseTransition" />
+    <bpmn:sequenceFlow id="F23_DMN_EVALUATED" name="таблица решений вернула разрешение и следующий статус" sourceRef="EvaluateCandidateResponseTransition" targetRef="CandidateResponseTransitionGateway" />
+    <bpmn:sequenceFlow id="F23_DMN_ALLOWED" name="таблица решений разрешила переход" sourceRef="CandidateResponseTransitionGateway" targetRef="Transaction_Response">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="F23_DMN_DENIED" name="переход запрещён DMN" sourceRef="CandidateResponseTransitionGateway" targetRef="CandidateResponseTransitionDenied">
+    <bpmn:sequenceFlow id="F23_DMN_DENIED" name="таблица решений запретила переход" sourceRef="CandidateResponseTransitionGateway" targetRef="CandidateResponseTransitionDenied">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed != true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F24" sourceRef="Transaction_Response" targetRef="NotifyCandidateResponse" />
     <bpmn:sequenceFlow id="F26" sourceRef="InvitationTimeoutBoundary" targetRef="CloseByTimeout" />
-    <bpmn:sequenceFlow id="F_ERR_REJECTION_COMPENSATE" name="ошибка TX -&gt; compensate" sourceRef="RejectionTxError" targetRef="ThrowCompensationApplicationRollback" />
-    <bpmn:sequenceFlow id="F_ERR_INVITATION_COMPENSATE" name="ошибка TX -&gt; compensate" sourceRef="PersistInvitationErrorBoundary" targetRef="ThrowCompensationApplicationRollback" />
-    <bpmn:sequenceFlow id="F_ERR_RESPONSE_COMPENSATE" name="ошибка TX -&gt; compensate" sourceRef="PersistCandidateResponseErrorBoundary" targetRef="ThrowCompensationApplicationRollback" />
-    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_Rejection_Recovery" name="cancel -&gt; recovery" sourceRef="Cancel_Transaction_Rejection" targetRef="ThrowCompensationApplicationRollback" />
-    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_Invitation_Recovery" name="cancel -&gt; recovery" sourceRef="Cancel_Transaction_Invitation" targetRef="ThrowCompensationApplicationRollback" />
-    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_Response_Recovery" name="cancel -&gt; recovery" sourceRef="Cancel_Transaction_Response" targetRef="ThrowCompensationApplicationRollback" />
-    <bpmn:sequenceFlow id="F30_COMPENSATE" name="compensation выполнена" sourceRef="ThrowCompensationApplicationRollback" targetRef="RollbackApplicationTransaction" />
+    <bpmn:sequenceFlow id="F_ERR_REJECTION_COMPENSATE" name="ошибка отказа: запустить компенсацию" sourceRef="RejectionTxError" targetRef="ThrowCompensationApplicationRollback" />
+    <bpmn:sequenceFlow id="F_ERR_INVITATION_COMPENSATE" name="ошибка приглашения: запустить компенсацию" sourceRef="PersistInvitationErrorBoundary" targetRef="ThrowCompensationApplicationRollback" />
+    <bpmn:sequenceFlow id="F_ERR_RESPONSE_COMPENSATE" name="ошибка ответа кандидата: запустить компенсацию" sourceRef="PersistCandidateResponseErrorBoundary" targetRef="ThrowCompensationApplicationRollback" />
+    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_Rejection_Recovery" name="отмена транзакции отказа: восстановить данные" sourceRef="Cancel_Transaction_Rejection" targetRef="ThrowCompensationApplicationRollback" />
+    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_Invitation_Recovery" name="отмена транзакции приглашения: восстановить данные" sourceRef="Cancel_Transaction_Invitation" targetRef="ThrowCompensationApplicationRollback" />
+    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_Response_Recovery" name="отмена транзакции ответа: восстановить данные" sourceRef="Cancel_Transaction_Response" targetRef="ThrowCompensationApplicationRollback" />
+    <bpmn:sequenceFlow id="F30_COMPENSATE" name="компенсация выполнена" sourceRef="ThrowCompensationApplicationRollback" targetRef="RollbackApplicationTransaction" />
     <bpmn:sequenceFlow id="F31" sourceRef="RollbackApplicationTransaction" targetRef="ApplicationRollbackEnd" />
     <bpmn:sequenceFlow id="F_MSG_VacancyClosedAtRecruiterDecision" sourceRef="VacancyClosedAtRecruiterDecision" targetRef="HandleVacancyClosedMessage" />
     <bpmn:sequenceFlow id="F_MSG_VacancyClosedAtInvitation" sourceRef="VacancyClosedAtInvitation" targetRef="HandleVacancyClosedMessage" />
     <bpmn:sequenceFlow id="F_MSG_VacancyClosedAtCandidateResponse" sourceRef="VacancyClosedAtCandidateResponse" targetRef="HandleVacancyClosedMessage" />
-    <bpmn:sequenceFlow id="F8_DMN_Resolve" name="контекст прав подготовлен" sourceRef="ResolveRecruiterDecisionPermission" targetRef="EvaluateRecruiterDecisionPermission" />
-    <bpmn:sequenceFlow id="F8_DMN_Evaluate" name="решение DMN получено" sourceRef="EvaluateRecruiterDecisionPermission" targetRef="RecruiterDecisionPermissionGateway" />
-    <bpmn:sequenceFlow id="F8_DMN_Denied" name="запрещено DMN" sourceRef="RecruiterDecisionPermissionGateway" targetRef="RecruiterDecisionPermissionDenied">
+    <bpmn:sequenceFlow id="F8_DMN_Resolve" name="данные для проверки прав подготовлены" sourceRef="ResolveRecruiterDecisionPermission" targetRef="EvaluateRecruiterDecisionPermission" />
+    <bpmn:sequenceFlow id="F8_DMN_Evaluate" name="решение таблицы получено" sourceRef="EvaluateRecruiterDecisionPermission" targetRef="RecruiterDecisionPermissionGateway" />
+    <bpmn:sequenceFlow id="F8_DMN_Denied" name="таблица решений запретила доступ" sourceRef="RecruiterDecisionPermissionGateway" targetRef="RecruiterDecisionPermissionDenied">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${permissionAllowed != true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="F18_DMN_Resolve" name="контекст прав подготовлен" sourceRef="ResolveCandidateResponsePermission" targetRef="EvaluateCandidateResponsePermission" />
-    <bpmn:sequenceFlow id="F18_DMN_Evaluate" name="решение DMN получено" sourceRef="EvaluateCandidateResponsePermission" targetRef="CandidateResponsePermissionGateway" />
-    <bpmn:sequenceFlow id="F18_DMN_Denied" name="запрещено DMN" sourceRef="CandidateResponsePermissionGateway" targetRef="CandidateResponsePermissionDenied">
+    <bpmn:sequenceFlow id="F18_DMN_Resolve" name="данные для проверки прав подготовлены" sourceRef="ResolveCandidateResponsePermission" targetRef="EvaluateCandidateResponsePermission" />
+    <bpmn:sequenceFlow id="F18_DMN_Evaluate" name="решение таблицы получено" sourceRef="EvaluateCandidateResponsePermission" targetRef="CandidateResponsePermissionGateway" />
+    <bpmn:sequenceFlow id="F18_DMN_Denied" name="таблица решений запретила доступ" sourceRef="CandidateResponsePermissionGateway" targetRef="CandidateResponsePermissionDenied">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${permissionAllowed != true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:callActivity id="NotifyRecruiter" name="Call: уведомить рекрутера о новом отклике" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+    <bpmn:callActivity id="NotifyRecruiter" name="Подпроцесс: уведомить рекрутера о новом отклике" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
         <camunda:in sourceExpression="${'NEW_APPLICATION'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
@@ -348,7 +348,7 @@
         <camunda:out source="notificationKind" target="lastNotificationKind" />
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:callActivity id="NotifyScreeningFailed" name="Call: уведомить кандидата об отказе по скринингу" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+    <bpmn:callActivity id="NotifyScreeningFailed" name="Подпроцесс: уведомить кандидата об отказе по скринингу" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
         <camunda:in sourceExpression="${'SCREENING_FAILED'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
@@ -356,13 +356,13 @@
         <camunda:out source="notificationKind" target="lastNotificationKind" />
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:transaction id="Transaction_Rejection" name="TX: отказ рекрутера">
-      <bpmn:startEvent id="Transaction_Rejection_Start" name="Начать транзакционный блок" />
-      <bpmn:serviceTask id="ValidateRejectionAllowed" name="Проверить возможность отказа" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:serviceTask id="CancelRejectionInterviewIfAny" name="Отменить активное интервью при отказе" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:serviceTask id="MarkApplicationRejected" name="Перевести отклик в статус отказа" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:serviceTask id="RecordRejectionHistory" name="Записать историю отказа" camunda:type="external" camunda:topic="application-persistence" />
-      <bpmn:endEvent id="Transaction_Rejection_End" name="Завершить транзакционный блок" />
+    <bpmn:transaction id="Transaction_Rejection" name="Транзакция: отказ рекрутера">
+      <bpmn:startEvent id="Transaction_Rejection_Start" name="Начать транзакцию бизнес-операции" />
+      <bpmn:serviceTask id="ValidateRejectionAllowed" name="Проверить, что рекрутер может отказать кандидату" camunda:type="external" camunda:topic="application-persistence" />
+      <bpmn:serviceTask id="CancelRejectionInterviewIfAny" name="Отменить активное интервью перед отказом" camunda:type="external" camunda:topic="application-persistence" />
+      <bpmn:serviceTask id="MarkApplicationRejected" name="Сохранить отказ рекрутера по отклику" camunda:type="external" camunda:topic="application-persistence" />
+      <bpmn:serviceTask id="RecordRejectionHistory" name="Записать историю отказа рекрутера" camunda:type="external" camunda:topic="application-persistence" />
+      <bpmn:endEvent id="Transaction_Rejection_End" name="Завершить транзакцию бизнес-операции" />
       <bpmn:sequenceFlow id="Transaction_Rejection_SF_Start" sourceRef="Transaction_Rejection_Start" targetRef="ValidateRejectionAllowed" />
       <bpmn:sequenceFlow id="R1" sourceRef="ValidateRejectionAllowed" targetRef="CancelRejectionInterviewIfAny" />
       <bpmn:sequenceFlow id="R2" sourceRef="CancelRejectionInterviewIfAny" targetRef="MarkApplicationRejected" />
@@ -372,13 +372,13 @@
     <bpmn:boundaryEvent id="RejectionTxError" attachedToRef="Transaction_Rejection">
       <bpmn:errorEventDefinition errorRef="Error_ApplicationTxFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="Cancel_Transaction_Rejection" name="Cancel boundary: отказ рекрутера" attachedToRef="Transaction_Rejection">
+    <bpmn:boundaryEvent id="Cancel_Transaction_Rejection" name="Ошибка транзакции: отказ рекрутера" attachedToRef="Transaction_Rejection">
       <bpmn:cancelEventDefinition />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="Compensate_Transaction_Rejection_Boundary" name="Compensation boundary: отказ рекрутера" attachedToRef="Transaction_Rejection">
+    <bpmn:boundaryEvent id="Compensate_Transaction_Rejection_Boundary" name="Компенсация: откат отказа рекрутера" attachedToRef="Transaction_Rejection">
       <bpmn:compensateEventDefinition />
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="ResolveRecruiterDecisionPermission" name="SYSTEM: подготовить DMN-контекст REVIEW_APPLICATION" camunda:type="external" camunda:topic="permission-check" />
+    <bpmn:serviceTask id="ResolveRecruiterDecisionPermission" name="Система: собрать данные для проверки права рассматривать отклик" camunda:type="external" camunda:topic="permission-check" />
     <bpmn:association id="Association_Compensate_Transaction_Invitation" sourceRef="Compensate_Transaction_Invitation_Boundary" targetRef="Compensate_Transaction_Invitation" />
     <bpmn:association id="Association_Compensate_Transaction_Response" sourceRef="Compensate_Transaction_Response_Boundary" targetRef="Compensate_Transaction_Response" />
     <bpmn:association id="Association_Compensate_Transaction_Rejection" sourceRef="Compensate_Transaction_Rejection_Boundary" targetRef="Compensate_Transaction_Rejection" />

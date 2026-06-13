@@ -1,21 +1,21 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_recruiter_application_list" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
-  <bpmn:collaboration id="Collaboration_hhUiRecruiterApplicationList" name="Pool: HH UI recruiter application list">
-    <bpmn:participant id="Participant_hhUiRecruiterApplicationList" name="POOL: HH UI recruiter application list" processRef="hhUiRecruiterApplicationList" />
+  <bpmn:collaboration id="Collaboration_hhUiRecruiterApplicationList" name="Пул: экран откликов рекрутера">
+    <bpmn:participant id="Participant_hhUiRecruiterApplicationList" name="Пул: экран откликов рекрутера" processRef="hhUiRecruiterApplicationList" />
   </bpmn:collaboration>
-  <bpmn:process id="hhUiRecruiterApplicationList" name="HH UI recruiter application list" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhUiRecruiterApplicationList" name="Экран откликов рекрутера" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhUiRecruiterApplicationList">
-      <bpmn:lane id="Lane_hhUiRecruiterApplicationList_RoleSystem" name="RECRUITER / ADMIN / SYSTEM">
+      <bpmn:lane id="Lane_hhUiRecruiterApplicationList_RoleSystem" name="Рекрутер / администратор / система">
         <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>LoadRecruiterApplicationList</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>DisplayRecruiterApplicationList</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Запущен список откликов рекрутера" />
-    <bpmn:serviceTask id="LoadRecruiterApplicationList" name="Загрузить отклики рекрутера" camunda:type="external" camunda:topic="ui-query" />
-    <bpmn:userTask id="DisplayRecruiterApplicationList" name="Список откликов рекрутера" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
-    <bpmn:endEvent id="End" name="Список откликов рекрутера показан" />
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Рекрутер открыл список откликов" />
+    <bpmn:serviceTask id="LoadRecruiterApplicationList" name="Загрузить отклики по вакансиям текущего рекрутера" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:userTask id="DisplayRecruiterApplicationList" name="Показать рекрутеру отклики по его вакансиям" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:endEvent id="End" name="Список откликов показан рекрутеру" />
     <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadRecruiterApplicationList" />
     <bpmn:sequenceFlow id="F2" sourceRef="LoadRecruiterApplicationList" targetRef="DisplayRecruiterApplicationList" />
     <bpmn:sequenceFlow id="F3" sourceRef="DisplayRecruiterApplicationList" targetRef="End" />

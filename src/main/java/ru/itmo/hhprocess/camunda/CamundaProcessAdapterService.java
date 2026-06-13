@@ -828,6 +828,7 @@ public class CamundaProcessAdapterService {
                 "formErrorMessage", "",
                 "vacancyId", vacancy.getId(),
                 "candidateUserId", candidate.getId(),
+                "candidateCamundaUserId", CamundaIdentitySyncService.camundaUserId(candidate),
                 "recruiterUserId", vacancy.getRecruiterUser().getId(),
                 "vacancyTitle", vacancy.getTitle()
         );
@@ -890,6 +891,7 @@ public class CamundaProcessAdapterService {
                 "applicationId", application.getId(),
                 "vacancyId", vacancy.getId(),
                 "candidateUserId", candidate.getId(),
+                "candidateCamundaUserId", CamundaIdentitySyncService.camundaUserId(candidate),
                 "recruiterUserId", vacancy.getRecruiterUser().getId(),
                 "vacancyTitle", vacancy.getTitle(),
                 "status", application.getStatus().name(),

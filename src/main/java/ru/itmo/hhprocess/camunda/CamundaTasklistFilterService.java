@@ -31,9 +31,12 @@ public class CamundaTasklistFilterService {
     }
 
     private void createRoleFilter(String name, String groupId) {
+        Map<String, ?> query = GROUP_CANDIDATE.equals(groupId)
+                ? Map.of("active", true, "assigneeExpression", "${currentUser()}")
+                : Map.of("active", true, "candidateGroup", groupId);
         recreateFilter(
                 name,
-                Map.of("active", true, "candidateGroup", groupId),
+                query,
                 Map.of("description", "Активные задачи группы " + groupId, "priority", 10),
                 List.of(groupId)
         );
@@ -42,19 +45,26 @@ public class CamundaTasklistFilterService {
     private void createSharedFilter(String name) {
         recreateFilter(
                 name,
-                Map.of("active", true),
-                Map.of("description", "Все активные задачи, доступные пользователю по правам Camunda", "priority", 20),
+                Map.of("active", true, "assigneeExpression", "${currentUser()}"),
+                Map.of("description", "Активные задачи, назначенные текущему пользователю", "priority", 20),
                 List.of(GROUP_CANDIDATE, GROUP_RECRUITER, GROUP_ADMIN)
         );
     }
 
     private void recreateFilter(String name, Map<String, ?> query, Map<String, ?> filterProperties, List<String> groups) {
-        camundaRestClient.findFilterIdsByName(name).forEach(camundaRestClient::deleteFilter);
-        camundaRestClient.createTaskFilter(name, query, filterProperties).ifPresent(filterId -> {
+        List<String> existingIds = camundaRestClient.findFilterIdsByName(name);
+        String filterId = existingIds.isEmpty() ? "" : existingIds.get(0);
+        existingIds.stream().skip(1).forEach(camundaRestClient::deleteFilter);
+        if (filterId.isBlank()) {
+            filterId = camundaRestClient.createTaskFilter(name, query, filterProperties).orElse("");
+        } else {
+            camundaRestClient.updateTaskFilter(filterId, name, query, filterProperties);
+        }
+        if (!filterId.isBlank()) {
             for (String group : groups) {
                 camundaRestClient.ensureFilterReadAuthorization(group, filterId);
             }
             log.info("Configured Camunda Tasklist filter: name={}, id={}", name, filterId);
-        });
+        }
     }
 }

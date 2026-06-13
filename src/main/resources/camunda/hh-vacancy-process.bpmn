@@ -3,12 +3,12 @@
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
   <bpmn:error id="Error_VacancyTxFailed" name="VACANCY_TX_FAILED" errorCode="VACANCY_TX_FAILED" />
   <bpmn:message id="Message_VacancyClosed" name="MSG_VACANCY_CLOSED" />
-  <bpmn:collaboration id="Collaboration_hhVacancyProcess" name="Pool: HH vacancy process with roles">
-    <bpmn:participant id="Participant_hhVacancyProcess" name="POOL: HH vacancy process with roles" processRef="hhVacancyProcess" />
+  <bpmn:collaboration id="Collaboration_hhVacancyProcess" name="Пул: процесс вакансии">
+    <bpmn:participant id="Participant_hhVacancyProcess" name="Пул: процесс вакансии" processRef="hhVacancyProcess" />
   </bpmn:collaboration>
-  <bpmn:process id="hhVacancyProcess" name="HH vacancy process with roles" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhVacancyProcess" name="Процесс вакансии" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_Vacancy">
-      <bpmn:lane id="Lane_System_V" name="SYSTEM">
+      <bpmn:lane id="Lane_System_V" name="Система">
         <bpmn:flowNodeRef>ValidateCreateVacancyForm</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>CreateVacancyFromForm</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>CreateVacancyFormError</bpmn:flowNodeRef>
@@ -30,48 +30,48 @@
         <bpmn:flowNodeRef>Transaction_CloseVacancy</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>CloseActiveApplicationsErrorBoundary</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_Recruiter_V" name="RECRUITER">
+      <bpmn:lane id="Lane_Recruiter_V" name="Рекрутер">
         <bpmn:flowNodeRef>CreateVacancyTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>VacancyCreatedResultTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ManageVacancyTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>VacancyClosedResultTask</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="VacancyStart" name="Процесс вакансии запущен" camunda:initiator="starterUserId" />
-    <bpmn:userTask id="CreateVacancyTask" name="Заполнить форму вакансии" camunda:formRef="create-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER">
+    <bpmn:startEvent id="VacancyStart" name="Запущен процесс создания или управления вакансией" camunda:initiator="starterUserId" />
+    <bpmn:userTask id="CreateVacancyTask" name="Рекрутер заполняет форму вакансии" camunda:formRef="create-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER">
       <bpmn:incoming>VF2a</bpmn:incoming>
       <bpmn:outgoing>VF2</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:exclusiveGateway id="VacancyCreationModeGateway" name="Способ запуска вакансии" default="VF2a" />
-    <bpmn:serviceTask id="ValidateCreateVacancyForm" name="Проверить форму создания вакансии" camunda:type="external" camunda:topic="vacancy-create" />
+    <bpmn:serviceTask id="ValidateCreateVacancyForm" name="Проверить обязательные поля вакансии" camunda:type="external" camunda:topic="vacancy-create" />
     <bpmn:boundaryEvent id="CreateVacancyFormError" attachedToRef="ValidateCreateVacancyForm">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="CreateVacancyFromForm" name="Создать вакансию в БД" camunda:type="external" camunda:topic="vacancy-create" />
+    <bpmn:serviceTask id="CreateVacancyFromForm" name="Создать вакансию и связать её с рекрутером" camunda:type="external" camunda:topic="vacancy-create" />
     <bpmn:boundaryEvent id="CreateVacancyPersistError" attachedToRef="CreateVacancyFromForm">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:userTask id="VacancyCreatedResultTask" name="Показать результат создания вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
-    <bpmn:userTask id="ManageVacancyTask" name="Управлять вакансией" camunda:formRef="close-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER">
+    <bpmn:userTask id="VacancyCreatedResultTask" name="Показать рекрутеру результат создания вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:userTask id="ManageVacancyTask" name="Рекрутер выбирает действие по вакансии" camunda:formRef="close-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER">
       <bpmn:incoming>VF2g</bpmn:incoming>
       <bpmn:outgoing>VF3</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:serviceTask id="ValidateCloseVacancyForm" name="Проверить форму закрытия вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
+    <bpmn:serviceTask id="ValidateCloseVacancyForm" name="Проверить причину закрытия вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
     <bpmn:boundaryEvent id="CloseVacancyFormError" attachedToRef="ValidateCloseVacancyForm">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="PrepareCloseVacancyTransition" name="SYSTEM: подготовить DMN currentStatus + CLOSE_VACANCY" camunda:type="external" camunda:topic="status-transition" />
-    <bpmn:businessRuleTask id="EvaluateCloseVacancyTransition" name="DMN: currentStatus + CLOSE_VACANCY -&gt; allowed/nextStatus" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleResult" />
-    <bpmn:exclusiveGateway id="CloseVacancyTransitionGateway" name="DMN разрешила закрытие?" />
-    <bpmn:endEvent id="CloseVacancyTransitionDenied" name="Закрытие запрещено DMN" />
-    <bpmn:transaction id="Transaction_CloseVacancy" name="TX: закрытие вакансии">
-      <bpmn:startEvent id="Transaction_CloseVacancy_Start" name="Начать транзакционный блок" />
-      <bpmn:serviceTask id="MarkVacancyClosed" name="Закрыть вакансию" camunda:type="external" camunda:topic="vacancy-close-applications" />
-      <bpmn:serviceTask id="CancelActiveInterviewsForVacancy" name="Отменить активные интервью" camunda:type="external" camunda:topic="vacancy-close-applications" />
-      <bpmn:serviceTask id="ReleaseScheduleSlotsForClosedVacancy" name="Освободить слоты расписания" camunda:type="external" camunda:topic="vacancy-close-applications" />
-      <bpmn:serviceTask id="CloseActiveApplicationsForVacancy" name="Закрыть активные отклики" camunda:type="external" camunda:topic="vacancy-close-applications" />
-      <bpmn:serviceTask id="RecordVacancyClosedHistory" name="Зафиксировать историю закрытия" camunda:type="external" camunda:topic="vacancy-close-applications" />
-      <bpmn:endEvent id="Transaction_CloseVacancy_End" name="Завершить транзакционный блок" />
+    <bpmn:serviceTask id="PrepareCloseVacancyTransition" name="Система: подготовить текущий статус и закрытие вакансии для таблицы решений" camunda:type="external" camunda:topic="status-transition" />
+    <bpmn:businessRuleTask id="EvaluateCloseVacancyTransition" name="Таблица решений: разрешить или запретить закрытие вакансии" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleResult" />
+    <bpmn:exclusiveGateway id="CloseVacancyTransitionGateway" name="Таблица решений разрешила закрыть вакансию?" />
+    <bpmn:endEvent id="CloseVacancyTransitionDenied" name="Таблица решений запретила закрытие вакансии" />
+    <bpmn:transaction id="Transaction_CloseVacancy" name="Транзакция: закрытие вакансии">
+      <bpmn:startEvent id="Transaction_CloseVacancy_Start" name="Начать транзакцию бизнес-операции" />
+      <bpmn:serviceTask id="MarkVacancyClosed" name="Перевести вакансию в закрытый статус" camunda:type="external" camunda:topic="vacancy-close-applications" />
+      <bpmn:serviceTask id="CancelActiveInterviewsForVacancy" name="Отменить активные интервью по закрытой вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
+      <bpmn:serviceTask id="ReleaseScheduleSlotsForClosedVacancy" name="Освободить слоты отменённых интервью" camunda:type="external" camunda:topic="vacancy-close-applications" />
+      <bpmn:serviceTask id="CloseActiveApplicationsForVacancy" name="Закрыть активные отклики по вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
+      <bpmn:serviceTask id="RecordVacancyClosedHistory" name="Записать историю закрытия вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
+      <bpmn:endEvent id="Transaction_CloseVacancy_End" name="Завершить транзакцию бизнес-операции" />
       <bpmn:sequenceFlow id="Transaction_CloseVacancy_SF_Start" sourceRef="Transaction_CloseVacancy_Start" targetRef="MarkVacancyClosed" />
       <bpmn:sequenceFlow id="VTX1" sourceRef="MarkVacancyClosed" targetRef="CancelActiveInterviewsForVacancy" />
       <bpmn:sequenceFlow id="VTX2" sourceRef="CancelActiveInterviewsForVacancy" targetRef="ReleaseScheduleSlotsForClosedVacancy" />
@@ -82,17 +82,17 @@
     <bpmn:boundaryEvent id="CloseActiveApplicationsErrorBoundary" attachedToRef="Transaction_CloseVacancy">
       <bpmn:errorEventDefinition errorRef="Error_VacancyTxFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="NotifyVacancyClosedCandidates" name="Уведомить кандидатов о закрытии вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
-    <bpmn:intermediateThrowEvent id="ThrowCompensationVacancyRollback" name="BPMN compensation: откат бизнес-действий вакансии">
+    <bpmn:serviceTask id="NotifyVacancyClosedCandidates" name="Создать уведомления кандидатам о закрытии вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
+    <bpmn:intermediateThrowEvent id="ThrowCompensationVacancyRollback" name="Запустить компенсацию отката закрытия вакансии">
       <bpmn:compensateEventDefinition waitForCompletion="true" />
     </bpmn:intermediateThrowEvent>
-    <bpmn:serviceTask id="RollbackVacancyTransaction" name="Выполнить recovery закрытия вакансии" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:endEvent id="VacancyClosedEnd" name="Вакансия закрыта" />
-    <bpmn:endEvent id="VacancyRollbackEnd" name="Recovery вакансии завершён" />
-    <bpmn:serviceTask id="CorrelateVacancyClosedApplications" name="Отправить MSG_VACANCY_CLOSED процессам откликов" camunda:type="external" camunda:topic="vacancy-close-applications" />
+    <bpmn:serviceTask id="RollbackVacancyTransaction" name="Восстановить данные вакансии после ошибки" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:endEvent id="VacancyClosedEnd" name="Вакансия закрыта, интервью и отклики обработаны" />
+    <bpmn:endEvent id="VacancyRollbackEnd" name="Восстановление после закрытия вакансии завершено" />
+    <bpmn:serviceTask id="CorrelateVacancyClosedApplications" name="Сообщить активным откликам о закрытии вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
     <bpmn:userTask id="VacancyClosedResultTask" name="Показать результат закрытия вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
     <bpmn:sequenceFlow id="VF1" sourceRef="VacancyStart" targetRef="VacancyCreationModeGateway" />
-    <bpmn:sequenceFlow id="VF2a" name="старт из Tasklist" sourceRef="VacancyCreationModeGateway" targetRef="CreateVacancyTask" />
+    <bpmn:sequenceFlow id="VF2a" name="запуск из списка задач Camunda" sourceRef="VacancyCreationModeGateway" targetRef="CreateVacancyTask" />
     <bpmn:sequenceFlow id="VF2b" sourceRef="VacancyCreationModeGateway" targetRef="ValidateCreateVacancyForm">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${execution.hasVariable('restAutoSubmit') &amp;&amp; restAutoSubmit == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -104,19 +104,19 @@
     <bpmn:sequenceFlow id="VF2g" sourceRef="VacancyCreatedResultTask" targetRef="ManageVacancyTask" />
     <bpmn:sequenceFlow id="VF3" sourceRef="ManageVacancyTask" targetRef="ValidateCloseVacancyForm" />
     <bpmn:sequenceFlow id="VF3e" sourceRef="CloseVacancyFormError" targetRef="ManageVacancyTask" />
-    <bpmn:sequenceFlow id="VF4a" name="форма валидна" sourceRef="ValidateCloseVacancyForm" targetRef="PrepareCloseVacancyTransition" />
-    <bpmn:sequenceFlow id="VF4b" name="контекст статуса подготовлен" sourceRef="PrepareCloseVacancyTransition" targetRef="EvaluateCloseVacancyTransition" />
-    <bpmn:sequenceFlow id="VF4c" name="DMN вернула allowed/nextStatus" sourceRef="EvaluateCloseVacancyTransition" targetRef="CloseVacancyTransitionGateway" />
-    <bpmn:sequenceFlow id="VF4" name="переход разрешён DMN" sourceRef="CloseVacancyTransitionGateway" targetRef="Transaction_CloseVacancy">
+    <bpmn:sequenceFlow id="VF4a" name="форма прошла проверку" sourceRef="ValidateCloseVacancyForm" targetRef="PrepareCloseVacancyTransition" />
+    <bpmn:sequenceFlow id="VF4b" name="данные статуса подготовлены" sourceRef="PrepareCloseVacancyTransition" targetRef="EvaluateCloseVacancyTransition" />
+    <bpmn:sequenceFlow id="VF4c" name="таблица решений вернула разрешение и следующий статус" sourceRef="EvaluateCloseVacancyTransition" targetRef="CloseVacancyTransitionGateway" />
+    <bpmn:sequenceFlow id="VF4" name="таблица решений разрешила переход" sourceRef="CloseVacancyTransitionGateway" targetRef="Transaction_CloseVacancy">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="VF4_DENIED" name="переход запрещён DMN" sourceRef="CloseVacancyTransitionGateway" targetRef="CloseVacancyTransitionDenied">
+    <bpmn:sequenceFlow id="VF4_DENIED" name="таблица решений запретила переход" sourceRef="CloseVacancyTransitionGateway" targetRef="CloseVacancyTransitionDenied">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed != true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="VF5" sourceRef="Transaction_CloseVacancy" targetRef="NotifyVacancyClosedCandidates" />
     <bpmn:sequenceFlow id="VF6" sourceRef="NotifyVacancyClosedCandidates" targetRef="CorrelateVacancyClosedApplications" />
-    <bpmn:sequenceFlow id="VF7" name="ошибка TX -&gt; явная compensation" sourceRef="CloseActiveApplicationsErrorBoundary" targetRef="ThrowCompensationVacancyRollback" />
-    <bpmn:sequenceFlow id="VF7b" name="после compensation -&gt; recovery" sourceRef="ThrowCompensationVacancyRollback" targetRef="RollbackVacancyTransaction" />
+    <bpmn:sequenceFlow id="VF7" name="ошибка транзакции: запустить компенсацию" sourceRef="CloseActiveApplicationsErrorBoundary" targetRef="ThrowCompensationVacancyRollback" />
+    <bpmn:sequenceFlow id="VF7b" name="после компенсации восстановить данные" sourceRef="ThrowCompensationVacancyRollback" targetRef="RollbackVacancyTransaction" />
     <bpmn:sequenceFlow id="VF8" sourceRef="RollbackVacancyTransaction" targetRef="VacancyRollbackEnd" />
     <bpmn:sequenceFlow id="VF6b" sourceRef="CorrelateVacancyClosedApplications" targetRef="VacancyClosedResultTask" />
     <bpmn:sequenceFlow id="VF6c" sourceRef="VacancyClosedResultTask" targetRef="VacancyClosedEnd" />

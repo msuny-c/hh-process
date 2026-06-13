@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_recruiter_schedule" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
-  <bpmn:collaboration id="Collaboration_hhUiRecruiterSchedule" name="Pool: HH UI recruiter schedule">
-    <bpmn:participant id="Participant_hhUiRecruiterSchedule" name="POOL: HH UI recruiter schedule" processRef="hhUiRecruiterSchedule" />
+  <bpmn:collaboration id="Collaboration_hhUiRecruiterSchedule" name="Пул: экран расписания рекрутера">
+    <bpmn:participant id="Participant_hhUiRecruiterSchedule" name="Пул: экран расписания рекрутера" processRef="hhUiRecruiterSchedule" />
   </bpmn:collaboration>
-  <bpmn:process id="hhUiRecruiterSchedule" name="HH UI recruiter schedule" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhUiRecruiterSchedule" name="Экран расписания рекрутера" isExecutable="true" camunda:candidateStarterGroups="RECRUITER,ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhUiRecruiterSchedule">
-      <bpmn:lane id="Lane_hhUiRecruiterSchedule_RoleSystem" name="RECRUITER / ADMIN / SYSTEM">
+      <bpmn:lane id="Lane_hhUiRecruiterSchedule_RoleSystem" name="Рекрутер / администратор / система">
         <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>EnterScheduleWeek</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>LoadRecruiterSchedule</bpmn:flowNodeRef>
@@ -15,11 +15,11 @@
         <bpmn:flowNodeRef>RecruiterScheduleValidationError</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" name="Запущен просмотр расписания" camunda:initiator="starterUserId" />
-    <bpmn:userTask id="EnterScheduleWeek" name="Выбрать неделю расписания" camunda:formRef="schedule-week-input-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
-    <bpmn:serviceTask id="LoadRecruiterSchedule" name="Загрузить расписание" camunda:type="external" camunda:topic="ui-query" />
-    <bpmn:userTask id="DisplayRecruiterSchedule" name="Расписание рекрутера" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
-    <bpmn:endEvent id="End" name="Расписание рекрутера показано" />
+    <bpmn:startEvent id="Start" name="Рекрутер открыл расписание интервью" camunda:initiator="starterUserId" />
+    <bpmn:userTask id="EnterScheduleWeek" name="Выбрать неделю для просмотра расписания" camunda:formRef="schedule-week-input-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:serviceTask id="LoadRecruiterSchedule" name="Загрузить интервью рекрутера за выбранную неделю" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:userTask id="DisplayRecruiterSchedule" name="Показать расписание интервью рекрутера" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:endEvent id="End" name="Расписание показано рекрутеру" />
     <bpmn:boundaryEvent id="RecruiterScheduleValidationError" attachedToRef="LoadRecruiterSchedule">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>

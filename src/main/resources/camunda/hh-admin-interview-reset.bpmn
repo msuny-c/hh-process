@@ -2,12 +2,12 @@
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_hh_v3" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
   <bpmn:error id="Error_AdminResetFailed" name="ADMIN_RESET_FAILED" errorCode="ADMIN_RESET_FAILED" />
-  <bpmn:collaboration id="Collaboration_hhAdminInterviewResetProcess" name="Pool: HH admin interview reset with roles">
-    <bpmn:participant id="Participant_hhAdminInterviewResetProcess" name="POOL: HH admin interview reset with roles" processRef="hhAdminInterviewResetProcess" />
+  <bpmn:collaboration id="Collaboration_hhAdminInterviewResetProcess" name="Пул: админский сброс интервью">
+    <bpmn:participant id="Participant_hhAdminInterviewResetProcess" name="Пул: админский сброс интервью" processRef="hhAdminInterviewResetProcess" />
   </bpmn:collaboration>
-  <bpmn:process id="hhAdminInterviewResetProcess" name="HH admin interview reset with roles" isExecutable="true" camunda:candidateStarterGroups="ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhAdminInterviewResetProcess" name="Админский сброс интервью" isExecutable="true" camunda:candidateStarterGroups="ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_AdminReset">
-      <bpmn:lane id="Lane_System_A" name="SYSTEM">
+      <bpmn:lane id="Lane_System_A" name="Система">
         <bpmn:flowNodeRef>ValidateAdminResetForm</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>NotifyAdminResetParticipants</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>RollbackAdminReset</bpmn:flowNodeRef>
@@ -18,7 +18,7 @@
         <bpmn:flowNodeRef>Compensate_Transaction_AdminInterviewReset_Boundary</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Cancel_Transaction_AdminInterviewReset</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_Admin_A" name="ADMIN">
+      <bpmn:lane id="Lane_Admin_A" name="Администратор">
         <bpmn:flowNodeRef>AdminResetStart</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ResolveAdminResetPermission</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>AdminResetApprovalTask</bpmn:flowNodeRef>
@@ -29,18 +29,18 @@
         <bpmn:flowNodeRef>AdminResetFormError</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="AdminResetStart" name="Админ запросил сброс интервью" />
-    <bpmn:serviceTask id="ValidateAdminResetForm" name="Проверить форму админского сброса" camunda:type="external" camunda:topic="admin-interview-reset" />
-    <bpmn:serviceTask id="ResolveAdminResetPermission" name="SYSTEM: подготовить DMN-контекст ADMIN_RESET" camunda:type="external" camunda:topic="permission-check" />
+    <bpmn:startEvent id="AdminResetStart" name="Администратор начал сброс интервью" />
+    <bpmn:serviceTask id="ValidateAdminResetForm" name="Проверить причину и идентификатор интервью для сброса" camunda:type="external" camunda:topic="admin-interview-reset" />
+    <bpmn:serviceTask id="ResolveAdminResetPermission" name="Система: собрать данные для проверки права на сброс интервью" camunda:type="external" camunda:topic="permission-check" />
     <bpmn:userTask id="AdminResetApprovalTask" name="Подтвердить сброс интервью" camunda:formRef="reset-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
-    <bpmn:transaction id="Transaction_AdminInterviewReset" name="TX: административный сброс интервью">
-      <bpmn:startEvent id="Transaction_AdminInterviewReset_Start" name="Начать транзакционный блок" />
-      <bpmn:serviceTask id="ValidateInterviewCanBeReset" name="Проверить возможность сброса интервью" camunda:type="external" camunda:topic="admin-interview-reset" />
-      <bpmn:serviceTask id="CancelInterviewByAdmin" name="Отменить интервью" camunda:type="external" camunda:topic="admin-interview-reset" />
-      <bpmn:serviceTask id="ReleaseAdminResetSlot" name="Освободить слот интервью" camunda:type="external" camunda:topic="admin-interview-reset" />
-      <bpmn:serviceTask id="ReturnApplicationToReview" name="Вернуть отклик на рассмотрение" camunda:type="external" camunda:topic="admin-interview-reset" />
+    <bpmn:transaction id="Transaction_AdminInterviewReset" name="Транзакция: административный сброс интервью">
+      <bpmn:startEvent id="Transaction_AdminInterviewReset_Start" name="Начать транзакцию бизнес-операции" />
+      <bpmn:serviceTask id="ValidateInterviewCanBeReset" name="Проверить, что интервью можно сбросить" camunda:type="external" camunda:topic="admin-interview-reset" />
+      <bpmn:serviceTask id="CancelInterviewByAdmin" name="Отменить интервью в БД" camunda:type="external" camunda:topic="admin-interview-reset" />
+      <bpmn:serviceTask id="ReleaseAdminResetSlot" name="Освободить слот сбрасываемого интервью" camunda:type="external" camunda:topic="admin-interview-reset" />
+      <bpmn:serviceTask id="ReturnApplicationToReview" name="Вернуть отклик рекрутеру на повторное рассмотрение" camunda:type="external" camunda:topic="admin-interview-reset" />
       <bpmn:serviceTask id="RecordAdminResetHistory" name="Записать историю админского сброса" camunda:type="external" camunda:topic="admin-interview-reset" />
-      <bpmn:endEvent id="Transaction_AdminInterviewReset_End" name="Завершить транзакционный блок" />
+      <bpmn:endEvent id="Transaction_AdminInterviewReset_End" name="Завершить транзакцию бизнес-операции" />
       <bpmn:sequenceFlow id="Transaction_AdminInterviewReset_SF_Start" sourceRef="Transaction_AdminInterviewReset_Start" targetRef="ValidateInterviewCanBeReset" />
       <bpmn:sequenceFlow id="ATX1" sourceRef="ValidateInterviewCanBeReset" targetRef="CancelInterviewByAdmin" />
       <bpmn:sequenceFlow id="ATX2" sourceRef="CancelInterviewByAdmin" targetRef="ReleaseAdminResetSlot" />
@@ -48,7 +48,7 @@
       <bpmn:sequenceFlow id="ATX4" sourceRef="ReturnApplicationToReview" targetRef="RecordAdminResetHistory" />
       <bpmn:sequenceFlow id="Transaction_AdminInterviewReset_SF_End" sourceRef="RecordAdminResetHistory" targetRef="Transaction_AdminInterviewReset_End" />
     </bpmn:transaction>
-    <bpmn:callActivity id="NotifyAdminResetParticipants" name="Call: уведомить участников о сбросе интервью" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
+    <bpmn:callActivity id="NotifyAdminResetParticipants" name="Подпроцесс: уведомить участников о сбросе интервью" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
         <camunda:in sourceExpression="${'ADMIN_RESET'}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
@@ -57,21 +57,21 @@
         <camunda:out source="notificationKind" target="lastNotificationKind" />
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:intermediateThrowEvent id="ThrowCompensationAdminResetRollback" name="Явно запустить BPMN compensation handlers">
+    <bpmn:intermediateThrowEvent id="ThrowCompensationAdminResetRollback" name="Запустить компенсацию отката после ошибки">
       <bpmn:compensateEventDefinition waitForCompletion="true" />
     </bpmn:intermediateThrowEvent>
-    <bpmn:serviceTask id="RollbackAdminReset" name="Выполнить recovery админского сброса" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:endEvent id="AdminResetEnd" name="Админский сброс выполнен" />
-    <bpmn:endEvent id="AdminResetRollbackEnd" name="Recovery сброса завершён" />
+    <bpmn:serviceTask id="RollbackAdminReset" name="Восстановить данные после ошибки сброса" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:endEvent id="AdminResetEnd" name="Интервью сброшено администратором" />
+    <bpmn:endEvent id="AdminResetRollbackEnd" name="Восстановление после сброса завершено" />
     <bpmn:userTask id="AdminResetResultTask" name="Показать результат сброса интервью" camunda:formRef="admin-reset-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
-    <bpmn:businessRuleTask id="EvaluateAdminResetPermission" name="DMN: ADMIN + ADMIN_RESET + ownership" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleEntry" />
-    <bpmn:exclusiveGateway id="AdminResetPermissionGateway" name="Доступ ADMIN_RESET разрешён?" />
-    <bpmn:endEvent id="AdminResetPermissionDenied" name="Доступ к административному сбросу запрещён" />
-    <bpmn:serviceTask id="Compensate_Transaction_AdminInterviewReset" name="Компенсация: административный сброс интервью" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:boundaryEvent id="Compensate_Transaction_AdminInterviewReset_Boundary" name="Compensation boundary: административный сброс интервью" attachedToRef="Transaction_AdminInterviewReset">
+    <bpmn:businessRuleTask id="EvaluateAdminResetPermission" name="Таблица решений: проверить право администратора на сброс интервью" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleEntry" />
+    <bpmn:exclusiveGateway id="AdminResetPermissionGateway" name="Администратор имеет право сбросить это интервью?" />
+    <bpmn:endEvent id="AdminResetPermissionDenied" name="Администратору запрещён сброс этого интервью" />
+    <bpmn:serviceTask id="Compensate_Transaction_AdminInterviewReset" name="Компенсация: вернуть состояние до админского сброса" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:boundaryEvent id="Compensate_Transaction_AdminInterviewReset_Boundary" name="Компенсация: откат админского сброса" attachedToRef="Transaction_AdminInterviewReset">
       <bpmn:compensateEventDefinition />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="Cancel_Transaction_AdminInterviewReset" name="Cancel boundary: административный сброс интервью" attachedToRef="Transaction_AdminInterviewReset">
+    <bpmn:boundaryEvent id="Cancel_Transaction_AdminInterviewReset" name="Ошибка транзакции: админский сброс интервью" attachedToRef="Transaction_AdminInterviewReset">
       <bpmn:cancelEventDefinition />
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="AdminResetErrorBoundary" attachedToRef="Transaction_AdminInterviewReset">
@@ -83,20 +83,20 @@
     <bpmn:sequenceFlow id="AF1" sourceRef="AdminResetStart" targetRef="ResolveAdminResetPermission" />
     <bpmn:sequenceFlow id="AF2" sourceRef="AdminResetApprovalTask" targetRef="ValidateAdminResetForm" />
     <bpmn:sequenceFlow id="AF3" sourceRef="ValidateAdminResetForm" targetRef="Transaction_AdminInterviewReset" />
-    <bpmn:sequenceFlow id="AF1_DMN_Resolve" name="контекст прав подготовлен" sourceRef="ResolveAdminResetPermission" targetRef="EvaluateAdminResetPermission" />
+    <bpmn:sequenceFlow id="AF1_DMN_Resolve" name="данные для проверки прав подготовлены" sourceRef="ResolveAdminResetPermission" targetRef="EvaluateAdminResetPermission" />
     <bpmn:sequenceFlow id="AF2e" sourceRef="AdminResetFormError" targetRef="AdminResetApprovalTask" />
-    <bpmn:sequenceFlow id="AF1_DMN_Allowed" name="разрешено DMN" sourceRef="AdminResetPermissionGateway" targetRef="AdminResetApprovalTask">
+    <bpmn:sequenceFlow id="AF1_DMN_Allowed" name="таблица решений разрешила доступ" sourceRef="AdminResetPermissionGateway" targetRef="AdminResetApprovalTask">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${permissionAllowed == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="AF4" sourceRef="Transaction_AdminInterviewReset" targetRef="NotifyAdminResetParticipants" />
     <bpmn:sequenceFlow id="AF5" sourceRef="NotifyAdminResetParticipants" targetRef="AdminResetResultTask" />
-    <bpmn:sequenceFlow id="AF6" name="ошибка TX -&gt; compensate" sourceRef="AdminResetErrorBoundary" targetRef="ThrowCompensationAdminResetRollback" />
-    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_AdminInterviewReset_Recovery" name="cancel -&gt; recovery" sourceRef="Cancel_Transaction_AdminInterviewReset" targetRef="ThrowCompensationAdminResetRollback" />
-    <bpmn:sequenceFlow id="AF6_COMPENSATED" name="compensation выполнена" sourceRef="ThrowCompensationAdminResetRollback" targetRef="RollbackAdminReset" />
+    <bpmn:sequenceFlow id="AF6" name="ошибка транзакции: запустить компенсацию" sourceRef="AdminResetErrorBoundary" targetRef="ThrowCompensationAdminResetRollback" />
+    <bpmn:sequenceFlow id="Flow_Cancel_Transaction_AdminInterviewReset_Recovery" name="отмена транзакции: восстановить данные" sourceRef="Cancel_Transaction_AdminInterviewReset" targetRef="ThrowCompensationAdminResetRollback" />
+    <bpmn:sequenceFlow id="AF6_COMPENSATED" name="компенсация выполнена" sourceRef="ThrowCompensationAdminResetRollback" targetRef="RollbackAdminReset" />
     <bpmn:sequenceFlow id="AF7" sourceRef="RollbackAdminReset" targetRef="AdminResetRollbackEnd" />
     <bpmn:sequenceFlow id="AF_Result_End" sourceRef="AdminResetResultTask" targetRef="AdminResetEnd" />
-    <bpmn:sequenceFlow id="AF1_DMN_Evaluate" name="решение DMN получено" sourceRef="EvaluateAdminResetPermission" targetRef="AdminResetPermissionGateway" />
-    <bpmn:sequenceFlow id="AF1_DMN_Denied" name="запрещено DMN" sourceRef="AdminResetPermissionGateway" targetRef="AdminResetPermissionDenied">
+    <bpmn:sequenceFlow id="AF1_DMN_Evaluate" name="решение таблицы получено" sourceRef="EvaluateAdminResetPermission" targetRef="AdminResetPermissionGateway" />
+    <bpmn:sequenceFlow id="AF1_DMN_Denied" name="таблица решений запретила доступ" sourceRef="AdminResetPermissionGateway" targetRef="AdminResetPermissionDenied">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${permissionAllowed != true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:association id="Association_Compensate_Transaction_AdminInterviewReset" sourceRef="Compensate_Transaction_AdminInterviewReset_Boundary" targetRef="Compensate_Transaction_AdminInterviewReset" />

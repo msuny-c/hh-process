@@ -2,6 +2,7 @@ package ru.itmo.hhprocess.service;
 
 import java.util.List;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -23,6 +24,7 @@ import ru.itmo.hhprocess.security.XmlCredentialStore;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -49,7 +51,7 @@ public class AuthService {
                 .passwordHash(passwordHash)
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
-                .enabled(false)
+                .enabled(true)
                 .build();
         user.getRoles().add(candidateRole);
         user = userRepository.save(user);
@@ -62,8 +64,7 @@ public class AuthService {
                     xmlCredentialStore.create(email, passwordHash);
                     candidateRegistrationFinalizer.enableUser(userId, request.getPassword());
                 } catch (RuntimeException ex) {
-                    candidateRegistrationFinalizer.deleteUser(userId);
-                    throw ex;
+                    log.warn("Candidate post-commit provisioning failed for userId={}: {}", userId, ex.getMessage());
                 }
             }
         });

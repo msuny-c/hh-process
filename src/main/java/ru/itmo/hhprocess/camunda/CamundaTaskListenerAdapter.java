@@ -47,12 +47,6 @@ public class CamundaTaskListenerAdapter {
         if (owner == null) {
             return;
         }
-        if (!camundaRestClient.taskHasCandidateGroup(taskId, owner.expectedGroup())) {
-            log.debug("Skip Camunda task listener assignment: taskId={}, taskDefinitionKey={}, expectedGroup={} is absent",
-                    taskId, taskDefinitionKey, owner.expectedGroup());
-            return;
-        }
-
         String camundaUserId = CamundaIdentitySyncService.camundaUserId(owner.user());
         if (existingAssignee.isBlank() || !existingAssignee.equals(camundaUserId)) {
             camundaRestClient.setTaskAssignee(taskId, camundaUserId);

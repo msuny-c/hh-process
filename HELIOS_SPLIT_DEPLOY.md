@@ -162,6 +162,7 @@ Manual commands:
 ~/apps/camunda/camundactl.sh status
 ~/apps/camunda/camundactl.sh restart
 ~/apps/camunda/camundactl.sh log
+~/apps/camunda/helios-bootstrap-camunda.sh
 ```
 
 Healthcheck from Camunda Helios:
@@ -201,15 +202,19 @@ Camunda webapps through SSH tunnel to the Camunda host:
 ssh -L 18082:127.0.0.1:18082 -p <WORKER_SSH_PORT> <WORKER_SSH_USER>@<WORKER_SSH_HOST>
 open http://127.0.0.1:18082/camunda/app/tasklist/default/
 open http://127.0.0.1:18082/camunda/app/cockpit/default/
+open http://127.0.0.1:18082/camunda/app/admin/default/
 ```
 
-Default Camunda credentials are usually:
+Demo credentials after bootstrap:
 
 ```text
-demo / demo
+admin / admin
+adminexamplecom / camunda
+recruiterexamplecom / camunda
+candidatedemoexamplecom / password123
 ```
 
-The application also synchronizes app users/groups into Camunda during startup.
+The workflow uploads and runs `scripts/helios-bootstrap-camunda.sh`; the application also synchronizes app users/groups into Camunda during startup.
 
 ## Important notes
 

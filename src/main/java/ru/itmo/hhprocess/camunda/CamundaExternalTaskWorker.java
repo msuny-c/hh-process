@@ -517,7 +517,11 @@ public class CamundaExternalTaskWorker {
         if (value == null || String.valueOf(value).isBlank()) {
             return null;
         }
-        return UUID.fromString(String.valueOf(value));
+        try {
+            return UUID.fromString(String.valueOf(value).trim());
+        } catch (IllegalArgumentException e) {
+            throw new CamundaFormValidationException(name, "Некорректный ID: " + name);
+        }
     }
 
     @SuppressWarnings("unchecked")

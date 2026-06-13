@@ -1,12 +1,12 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_candidate_application_view" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
-  <bpmn:collaboration id="Collaboration_hhUiCandidateApplicationView" name="Pool: HH UI candidate application view">
-    <bpmn:participant id="Participant_hhUiCandidateApplicationView" name="POOL: HH UI candidate application view" processRef="hhUiCandidateApplicationView" />
+  <bpmn:collaboration id="Collaboration_hhUiCandidateApplicationView" name="Пул: экран одного отклика кандидата">
+    <bpmn:participant id="Participant_hhUiCandidateApplicationView" name="Пул: экран одного отклика кандидата" processRef="hhUiCandidateApplicationView" />
   </bpmn:collaboration>
-  <bpmn:process id="hhUiCandidateApplicationView" name="HH UI candidate application view" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
+  <bpmn:process id="hhUiCandidateApplicationView" name="Экран одного отклика кандидата" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE,ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhUiCandidateApplicationView">
-      <bpmn:lane id="Lane_hhUiCandidateApplicationView_RoleSystem" name="CANDIDATE / ADMIN / SYSTEM">
+      <bpmn:lane id="Lane_hhUiCandidateApplicationView_RoleSystem" name="Кандидат / администратор / система">
         <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>EnterCandidateApplicationId</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>LoadCandidateApplicationView</bpmn:flowNodeRef>
@@ -15,17 +15,17 @@
         <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Запущен просмотр отклика кандидата" />
-    <bpmn:userTask id="EnterCandidateApplicationId" name="Выбрать отклик" camunda:formRef="application-id-input-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE,ADMIN" />
-    <bpmn:serviceTask id="LoadCandidateApplicationView" name="Загрузить отклик кандидата" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Кандидат открыл карточку своего отклика" />
+    <bpmn:userTask id="EnterCandidateApplicationId" name="Ввести или выбрать идентификатор отклика" camunda:formRef="application-id-input-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
+    <bpmn:serviceTask id="LoadCandidateApplicationView" name="Загрузить отклик с проверкой владельца-кандидата" camunda:type="external" camunda:topic="ui-query" />
     <bpmn:boundaryEvent id="CandidateApplicationViewValidationError" attachedToRef="LoadCandidateApplicationView">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:userTask id="DisplayCandidateApplicationView" name="Просмотр отклика кандидата" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="CANDIDATE,ADMIN" />
-    <bpmn:endEvent id="End" name="Отклик кандидата показан" />
+    <bpmn:userTask id="DisplayCandidateApplicationView" name="Показать кандидату детали его отклика" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
+    <bpmn:endEvent id="End" name="Карточка отклика показана кандидату" />
     <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="EnterCandidateApplicationId" />
     <bpmn:sequenceFlow id="F2" sourceRef="EnterCandidateApplicationId" targetRef="LoadCandidateApplicationView" />
-    <bpmn:sequenceFlow id="F2e" name="ошибка формы -> повторить ввод" sourceRef="CandidateApplicationViewValidationError" targetRef="EnterCandidateApplicationId" />
+    <bpmn:sequenceFlow id="F2e" name="ошибка формы: повторить ввод" sourceRef="CandidateApplicationViewValidationError" targetRef="EnterCandidateApplicationId" />
     <bpmn:sequenceFlow id="F3" sourceRef="LoadCandidateApplicationView" targetRef="DisplayCandidateApplicationView" />
     <bpmn:sequenceFlow id="F4" sourceRef="DisplayCandidateApplicationView" targetRef="End" />
   </bpmn:process>
