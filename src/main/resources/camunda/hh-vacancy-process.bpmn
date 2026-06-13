@@ -8,62 +8,62 @@
   </bpmn:collaboration>
   <bpmn:process id="hhVacancyProcess" name="Процесс вакансии" isExecutable="true" camunda:candidateStarterGroups="RECRUITER" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_Vacancy">
-      <bpmn:lane id="Lane_System_V" name="Система">
-        <bpmn:flowNodeRef>ValidateCreateVacancyForm</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CreateVacancyFromForm</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CreateVacancyFormError</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CreateVacancyPersistError</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>VacancyStart</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>VacancyClosedEnd</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>VacancyCreationModeGateway</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>ValidateCloseVacancyForm</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CloseVacancyFormError</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>ThrowCompensationVacancyRollback</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>PrepareCloseVacancyTransition</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>EvaluateCloseVacancyTransition</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CloseVacancyTransitionDenied</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CloseVacancyTransitionGateway</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>VacancyRollbackEnd</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>RollbackVacancyTransaction</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>NotifyVacancyClosedCandidates</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CorrelateVacancyClosedApplications</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Transaction_CloseVacancy</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CloseActiveApplicationsErrorBoundary</bpmn:flowNodeRef>
-      </bpmn:lane>
       <bpmn:lane id="Lane_Recruiter_V" name="Рекрутер">
-        <bpmn:flowNodeRef>CreateVacancyTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>VacancyCreatedResultTask</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CreateVacancyTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ManageVacancyTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>VacancyClosedResultTask</bpmn:flowNodeRef>
       </bpmn:lane>
+      <bpmn:lane id="Lane_System_V" name="Система">
+        <bpmn:flowNodeRef>VacancyStart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>VacancyCreationModeGateway</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ValidateCreateVacancyForm</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ValidateCloseVacancyForm</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EvaluateCloseVacancyTransition</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CloseVacancyTransitionGateway</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CloseVacancyTransitionDenied</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CreateVacancyFromForm</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>PrepareCloseVacancyTransition</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ThrowCompensationVacancyRollback</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>RollbackVacancyTransaction</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>VacancyRollbackEnd</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>VacancyClosedEnd</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CorrelateVacancyClosedApplications</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>NotifyVacancyClosedCandidates</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Transaction_CloseVacancy</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CloseVacancyFormError</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CreateVacancyFormError</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CreateVacancyPersistError</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CloseActiveApplicationsErrorBoundary</bpmn:flowNodeRef>
+      </bpmn:lane>
     </bpmn:laneSet>
     <bpmn:startEvent id="VacancyStart" name="Запущен процесс создания или управления вакансией" camunda:initiator="starterUserId" />
+    <bpmn:exclusiveGateway id="VacancyCreationModeGateway" name="Способ запуска вакансии" default="VF2a" />
+    <bpmn:serviceTask id="ValidateCreateVacancyForm" name="Проверить обязательные поля вакансии" camunda:type="external" camunda:topic="vacancy-create" />
+    <bpmn:userTask id="VacancyCreatedResultTask" name="Показать рекрутеру результат создания вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:serviceTask id="ValidateCloseVacancyForm" name="Проверить причину закрытия вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
+    <bpmn:businessRuleTask id="EvaluateCloseVacancyTransition" name="Таблица решений: разрешить или запретить закрытие вакансии" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" camunda:decisionRefBinding="latest" />
+    <bpmn:exclusiveGateway id="CloseVacancyTransitionGateway" name="Таблица решений разрешила закрыть вакансию?" />
+    <bpmn:endEvent id="CloseVacancyTransitionDenied" name="Таблица решений запретила закрытие вакансии" />
     <bpmn:userTask id="CreateVacancyTask" name="Рекрутер заполняет форму вакансии" camunda:formRef="create-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER">
       <bpmn:incoming>VF2a</bpmn:incoming>
       <bpmn:outgoing>VF2</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:exclusiveGateway id="VacancyCreationModeGateway" name="Способ запуска вакансии" default="VF2a" />
-    <bpmn:serviceTask id="ValidateCreateVacancyForm" name="Проверить обязательные поля вакансии" camunda:type="external" camunda:topic="vacancy-create" />
-    <bpmn:boundaryEvent id="CreateVacancyFormError" attachedToRef="ValidateCreateVacancyForm">
-      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
-    </bpmn:boundaryEvent>
     <bpmn:serviceTask id="CreateVacancyFromForm" name="Создать вакансию и связать её с рекрутером" camunda:type="external" camunda:topic="vacancy-create" />
-    <bpmn:boundaryEvent id="CreateVacancyPersistError" attachedToRef="CreateVacancyFromForm">
-      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
-    </bpmn:boundaryEvent>
-    <bpmn:userTask id="VacancyCreatedResultTask" name="Показать рекрутеру результат создания вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
     <bpmn:userTask id="ManageVacancyTask" name="Рекрутер выбирает действие по вакансии" camunda:formRef="close-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER">
       <bpmn:incoming>VF2g</bpmn:incoming>
       <bpmn:outgoing>VF3</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:serviceTask id="ValidateCloseVacancyForm" name="Проверить причину закрытия вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
-    <bpmn:boundaryEvent id="CloseVacancyFormError" attachedToRef="ValidateCloseVacancyForm">
-      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
-    </bpmn:boundaryEvent>
     <bpmn:serviceTask id="PrepareCloseVacancyTransition" name="Система: подготовить текущий статус и закрытие вакансии для таблицы решений" camunda:type="external" camunda:topic="status-transition" />
-    <bpmn:businessRuleTask id="EvaluateCloseVacancyTransition" name="Таблица решений: разрешить или запретить закрытие вакансии" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleResult" />
-    <bpmn:exclusiveGateway id="CloseVacancyTransitionGateway" name="Таблица решений разрешила закрыть вакансию?" />
-    <bpmn:endEvent id="CloseVacancyTransitionDenied" name="Таблица решений запретила закрытие вакансии" />
+    <bpmn:intermediateThrowEvent id="ThrowCompensationVacancyRollback" name="Запустить компенсацию отката закрытия вакансии">
+      <bpmn:compensateEventDefinition waitForCompletion="true" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:serviceTask id="RollbackVacancyTransaction" name="Восстановить данные вакансии после ошибки" camunda:type="external" camunda:topic="transaction-rollback" />
+    <bpmn:endEvent id="VacancyRollbackEnd" name="Восстановление после закрытия вакансии завершено" />
+    <bpmn:userTask id="VacancyClosedResultTask" name="Показать результат закрытия вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:endEvent id="VacancyClosedEnd" name="Вакансия закрыта, интервью и отклики обработаны" />
+    <bpmn:serviceTask id="CorrelateVacancyClosedApplications" name="Сообщить активным откликам о закрытии вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
+    <bpmn:serviceTask id="NotifyVacancyClosedCandidates" name="Создать уведомления кандидатам о закрытии вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
     <bpmn:transaction id="Transaction_CloseVacancy" name="Транзакция: закрытие вакансии">
       <bpmn:startEvent id="Transaction_CloseVacancy_Start" name="Начать транзакцию бизнес-операции" />
       <bpmn:serviceTask id="MarkVacancyClosed" name="Перевести вакансию в закрытый статус" camunda:type="external" camunda:topic="vacancy-close-applications" />
@@ -79,31 +79,28 @@
       <bpmn:sequenceFlow id="VTX4" sourceRef="CloseActiveApplicationsForVacancy" targetRef="RecordVacancyClosedHistory" />
       <bpmn:sequenceFlow id="Transaction_CloseVacancy_SF_End" sourceRef="RecordVacancyClosedHistory" targetRef="Transaction_CloseVacancy_End" />
     </bpmn:transaction>
+    <bpmn:boundaryEvent id="CloseVacancyFormError" attachedToRef="ValidateCloseVacancyForm">
+      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="CreateVacancyFormError" attachedToRef="ValidateCreateVacancyForm">
+      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="CreateVacancyPersistError" attachedToRef="CreateVacancyFromForm">
+      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
+    </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="CloseActiveApplicationsErrorBoundary" attachedToRef="Transaction_CloseVacancy">
       <bpmn:errorEventDefinition errorRef="Error_VacancyTxFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:serviceTask id="NotifyVacancyClosedCandidates" name="Создать уведомления кандидатам о закрытии вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
-    <bpmn:intermediateThrowEvent id="ThrowCompensationVacancyRollback" name="Запустить компенсацию отката закрытия вакансии">
-      <bpmn:compensateEventDefinition waitForCompletion="true" />
-    </bpmn:intermediateThrowEvent>
-    <bpmn:serviceTask id="RollbackVacancyTransaction" name="Восстановить данные вакансии после ошибки" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:endEvent id="VacancyClosedEnd" name="Вакансия закрыта, интервью и отклики обработаны" />
-    <bpmn:endEvent id="VacancyRollbackEnd" name="Восстановление после закрытия вакансии завершено" />
-    <bpmn:serviceTask id="CorrelateVacancyClosedApplications" name="Сообщить активным откликам о закрытии вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
-    <bpmn:userTask id="VacancyClosedResultTask" name="Показать результат закрытия вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
     <bpmn:sequenceFlow id="VF1" sourceRef="VacancyStart" targetRef="VacancyCreationModeGateway" />
     <bpmn:sequenceFlow id="VF2a" name="запуск из списка задач Camunda" sourceRef="VacancyCreationModeGateway" targetRef="CreateVacancyTask" />
     <bpmn:sequenceFlow id="VF2b" sourceRef="VacancyCreationModeGateway" targetRef="ValidateCreateVacancyForm">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${execution.hasVariable('restAutoSubmit') &amp;&amp; restAutoSubmit == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="VF2" sourceRef="CreateVacancyTask" targetRef="ValidateCreateVacancyForm" />
-    <bpmn:sequenceFlow id="VF2c" sourceRef="CreateVacancyFormError" targetRef="CreateVacancyTask" />
     <bpmn:sequenceFlow id="VF2d" sourceRef="ValidateCreateVacancyForm" targetRef="CreateVacancyFromForm" />
-    <bpmn:sequenceFlow id="VF2e" sourceRef="CreateVacancyPersistError" targetRef="CreateVacancyTask" />
     <bpmn:sequenceFlow id="VF2f" sourceRef="CreateVacancyFromForm" targetRef="VacancyCreatedResultTask" />
     <bpmn:sequenceFlow id="VF2g" sourceRef="VacancyCreatedResultTask" targetRef="ManageVacancyTask" />
     <bpmn:sequenceFlow id="VF3" sourceRef="ManageVacancyTask" targetRef="ValidateCloseVacancyForm" />
-    <bpmn:sequenceFlow id="VF3e" sourceRef="CloseVacancyFormError" targetRef="ManageVacancyTask" />
     <bpmn:sequenceFlow id="VF4a" name="форма прошла проверку" sourceRef="ValidateCloseVacancyForm" targetRef="PrepareCloseVacancyTransition" />
     <bpmn:sequenceFlow id="VF4b" name="данные статуса подготовлены" sourceRef="PrepareCloseVacancyTransition" targetRef="EvaluateCloseVacancyTransition" />
     <bpmn:sequenceFlow id="VF4c" name="таблица решений вернула разрешение и следующий статус" sourceRef="EvaluateCloseVacancyTransition" targetRef="CloseVacancyTransitionGateway" />
@@ -113,231 +110,309 @@
     <bpmn:sequenceFlow id="VF4_DENIED" name="таблица решений запретила переход" sourceRef="CloseVacancyTransitionGateway" targetRef="CloseVacancyTransitionDenied">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${statusTransition.allowed != true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="VF5" sourceRef="Transaction_CloseVacancy" targetRef="NotifyVacancyClosedCandidates" />
-    <bpmn:sequenceFlow id="VF6" sourceRef="NotifyVacancyClosedCandidates" targetRef="CorrelateVacancyClosedApplications" />
+    <bpmn:sequenceFlow id="VF2c" sourceRef="CreateVacancyFormError" targetRef="CreateVacancyTask" />
+    <bpmn:sequenceFlow id="VF2e" sourceRef="CreateVacancyPersistError" targetRef="CreateVacancyTask" />
+    <bpmn:sequenceFlow id="VF3e" sourceRef="CloseVacancyFormError" targetRef="ManageVacancyTask" />
     <bpmn:sequenceFlow id="VF7" name="ошибка транзакции: запустить компенсацию" sourceRef="CloseActiveApplicationsErrorBoundary" targetRef="ThrowCompensationVacancyRollback" />
     <bpmn:sequenceFlow id="VF7b" name="после компенсации восстановить данные" sourceRef="ThrowCompensationVacancyRollback" targetRef="RollbackVacancyTransaction" />
     <bpmn:sequenceFlow id="VF8" sourceRef="RollbackVacancyTransaction" targetRef="VacancyRollbackEnd" />
     <bpmn:sequenceFlow id="VF6b" sourceRef="CorrelateVacancyClosedApplications" targetRef="VacancyClosedResultTask" />
     <bpmn:sequenceFlow id="VF6c" sourceRef="VacancyClosedResultTask" targetRef="VacancyClosedEnd" />
+    <bpmn:sequenceFlow id="VF6" sourceRef="NotifyVacancyClosedCandidates" targetRef="CorrelateVacancyClosedApplications" />
+    <bpmn:sequenceFlow id="VF5" sourceRef="Transaction_CloseVacancy" targetRef="NotifyVacancyClosedCandidates" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_hhVacancyProcess">
     <bpmndi:BPMNPlane id="BPMNPlane_hhVacancyProcess" bpmnElement="Collaboration_hhVacancyProcess">
       <bpmndi:BPMNShape id="BPMNShape_Participant_hhVacancyProcess" bpmnElement="Participant_hhVacancyProcess" isHorizontal="true">
-        <dc:Bounds x="100" y="20" width="3560" height="640" />
+        <dc:Bounds x="160" y="80" width="3560" height="640" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_Recruiter_V" bpmnElement="Lane_Recruiter_V" isHorizontal="true">
-        <dc:Bounds x="200" y="40" width="3440" height="160" />
+        <dc:Bounds x="260" y="100" width="3440" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_System_V" bpmnElement="Lane_System_V" isHorizontal="true">
-        <dc:Bounds x="200" y="210" width="3440" height="430" />
+        <dc:Bounds x="260" y="270" width="3440" height="430" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_VacancyStart" bpmnElement="VacancyStart">
-        <dc:Bounds x="260" y="360" width="36" height="36" />
+        <dc:Bounds x="320" y="420" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="255" y="396" width="47" height="40" />
+          <dc:Bounds x="294" y="456" width="90" height="53" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_CreateVacancyTask" bpmnElement="CreateVacancyTask">
-        <dc:Bounds x="450" y="70" width="170" height="80" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_VacancyCreationModeGateway" bpmnElement="VacancyCreationModeGateway" isMarkerVisible="true">
-        <dc:Bounds x="425" y="390" width="50" height="50" />
+        <dc:Bounds x="485" y="450" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="410" y="440" width="81" height="27" />
+          <dc:Bounds x="470" y="500" width="81" height="27" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_ValidateCreateVacancyForm" bpmnElement="ValidateCreateVacancyForm">
-        <dc:Bounds x="690" y="375" width="170" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_CreateVacancyFromForm" bpmnElement="CreateVacancyFromForm">
-        <dc:Bounds x="940" y="400" width="170" height="80" />
+        <dc:Bounds x="750" y="435" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_VacancyCreatedResultTask" bpmnElement="VacancyCreatedResultTask">
-        <dc:Bounds x="1190" y="110" width="170" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_ManageVacancyTask" bpmnElement="ManageVacancyTask">
-        <dc:Bounds x="1415" y="40" width="170" height="80" />
+        <dc:Bounds x="1250" y="170" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_ValidateCloseVacancyForm" bpmnElement="ValidateCloseVacancyForm">
-        <dc:Bounds x="1405" y="355" width="170" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_VacancyClosedEnd" bpmnElement="VacancyClosedEnd">
-        <dc:Bounds x="3110" y="342" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="3104" y="378" width="49" height="27" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_VacancyClosedResultTask" bpmnElement="VacancyClosedResultTask">
-        <dc:Bounds x="2830" y="79" width="170" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_ThrowCompensationVacancyRollback" bpmnElement="ThrowCompensationVacancyRollback">
-        <dc:Bounds x="2522" y="542" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="2504" y="578" width="72" height="66" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_PrepareCloseVacancyTransition" bpmnElement="PrepareCloseVacancyTransition">
-        <dc:Bounds x="1609" y="520" width="220" height="80" />
+        <dc:Bounds x="1465" y="415" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_EvaluateCloseVacancyTransition" bpmnElement="EvaluateCloseVacancyTransition">
-        <dc:Bounds x="1851" y="520" width="230" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_CloseVacancyTransitionDenied" bpmnElement="CloseVacancyTransitionDenied">
-        <dc:Bounds x="2382" y="542" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="2358" y="578" width="85" height="27" />
-        </bpmndi:BPMNLabel>
+        <dc:Bounds x="1911" y="580" width="230" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_CloseVacancyTransitionGateway" bpmnElement="CloseVacancyTransitionGateway" isMarkerVisible="true">
-        <dc:Bounds x="2205" y="535" width="50" height="50" />
+        <dc:Bounds x="2265" y="595" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="2187" y="585" width="86" height="27" />
+          <dc:Bounds x="2262" y="645" width="57" height="66" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_VacancyRollbackEnd" bpmnElement="VacancyRollbackEnd">
-        <dc:Bounds x="3172" y="542" width="36" height="36" />
+      <bpmndi:BPMNShape id="BPMNShape_CloseVacancyTransitionDenied" bpmnElement="CloseVacancyTransitionDenied">
+        <dc:Bounds x="2442" y="602" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="3165" y="578" width="51" height="40" />
+          <dc:Bounds x="2434" y="638" width="53" height="66" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_CreateVacancyTask" bpmnElement="CreateVacancyTask">
+        <dc:Bounds x="745" y="150" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_CreateVacancyFromForm" bpmnElement="CreateVacancyFromForm">
+        <dc:Bounds x="985" y="450" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ManageVacancyTask" bpmnElement="ManageVacancyTask">
+        <dc:Bounds x="1465" y="139" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_PrepareCloseVacancyTransition" bpmnElement="PrepareCloseVacancyTransition">
+        <dc:Bounds x="1480" y="580" width="220" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ThrowCompensationVacancyRollback" bpmnElement="ThrowCompensationVacancyRollback">
+        <dc:Bounds x="2582" y="602" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2558" y="638" width="84" height="53" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_RollbackVacancyTransaction" bpmnElement="RollbackVacancyTransaction">
-        <dc:Bounds x="2935" y="520" width="170" height="80" />
+        <dc:Bounds x="2995" y="580" width="170" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_NotifyVacancyClosedCandidates" bpmnElement="NotifyVacancyClosedCandidates">
-        <dc:Bounds x="2591" y="300" width="170" height="80" />
+      <bpmndi:BPMNShape id="BPMNShape_VacancyRollbackEnd" bpmnElement="VacancyRollbackEnd">
+        <dc:Bounds x="3232" y="602" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3208" y="638" width="85" height="53" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_VacancyClosedResultTask" bpmnElement="VacancyClosedResultTask">
+        <dc:Bounds x="2890" y="139" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_VacancyClosedEnd" bpmnElement="VacancyClosedEnd">
+        <dc:Bounds x="3412" y="365" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3400" y="401" width="62" height="66" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_CorrelateVacancyClosedApplications" bpmnElement="CorrelateVacancyClosedApplications">
-        <dc:Bounds x="2831" y="300" width="170" height="80" />
+        <dc:Bounds x="3015" y="360" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_NotifyVacancyClosedCandidates" bpmnElement="NotifyVacancyClosedCandidates">
+        <dc:Bounds x="2755" y="360" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Transaction_CloseVacancy" bpmnElement="Transaction_CloseVacancy" isHorizontal="true" isExpanded="true">
-        <dc:Bounds x="1640" y="310" width="860" height="170" />
+        <dc:Bounds x="1750" y="365" width="910" height="170" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Transaction_CloseVacancy_Start" bpmnElement="Transaction_CloseVacancy_Start">
-        <dc:Bounds x="1670" y="377" width="36" height="36" />
+        <dc:Bounds x="1780" y="432" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1646" y="413" width="85" height="40" />
+          <dc:Bounds x="1755" y="468" width="88" height="40" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_MarkVacancyClosed" bpmnElement="MarkVacancyClosed">
-        <dc:Bounds x="1736" y="365" width="130" height="60" />
+        <dc:Bounds x="1846" y="420" width="130" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_CancelActiveInterviewsForVacancy" bpmnElement="CancelActiveInterviewsForVacancy">
-        <dc:Bounds x="1891" y="365" width="130" height="60" />
+        <dc:Bounds x="2001" y="420" width="130" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_ReleaseScheduleSlotsForClosedVacancy" bpmnElement="ReleaseScheduleSlotsForClosedVacancy">
-        <dc:Bounds x="2046" y="365" width="130" height="60" />
+        <dc:Bounds x="2156" y="420" width="130" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_CloseActiveApplicationsForVacancy" bpmnElement="CloseActiveApplicationsForVacancy">
-        <dc:Bounds x="2201" y="365" width="130" height="60" />
+        <dc:Bounds x="2311" y="420" width="130" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_RecordVacancyClosedHistory" bpmnElement="RecordVacancyClosedHistory">
-        <dc:Bounds x="2354" y="365" width="130" height="60" />
+        <dc:Bounds x="2464" y="420" width="130" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Transaction_CloseVacancy_End" bpmnElement="Transaction_CloseVacancy_End">
-        <dc:Bounds x="2440" y="377" width="36" height="36" />
+        <dc:Bounds x="2602" y="432" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="2416" y="413" width="85" height="40" />
+          <dc:Bounds x="2577" y="468" width="88" height="40" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_Transaction_CloseVacancy_SF_Start" bpmnElement="Transaction_CloseVacancy_SF_Start">
-        <di:waypoint x="1706" y="395.0" /><di:waypoint x="1736" y="395.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="1816" y="450" />
+        <di:waypoint x="1846" y="450" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VTX1" bpmnElement="VTX1">
-        <di:waypoint x="1866" y="395.0" /><di:waypoint x="1891" y="395.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="1976" y="450" />
+        <di:waypoint x="2001" y="450" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VTX2" bpmnElement="VTX2">
-        <di:waypoint x="2021" y="395.0" /><di:waypoint x="2046" y="395.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="2131" y="450" />
+        <di:waypoint x="2156" y="450" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VTX3" bpmnElement="VTX3">
-        <di:waypoint x="2176" y="395.0" /><di:waypoint x="2201" y="395.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="2286" y="450" />
+        <di:waypoint x="2311" y="450" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VTX4" bpmnElement="VTX4">
-        <di:waypoint x="2331" y="395.0" /><di:waypoint x="2354" y="395.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="2441" y="450" />
+        <di:waypoint x="2464" y="450" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_Transaction_CloseVacancy_SF_End" bpmnElement="Transaction_CloseVacancy_SF_End">
-        <di:waypoint x="2484" y="395.0" /><di:waypoint x="2440" y="395.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="2529" y="420" />
+        <di:waypoint x="2529" y="400" />
+        <di:waypoint x="2620" y="400" />
+        <di:waypoint x="2620" y="432" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="BPMNShape_CloseVacancyFormError" bpmnElement="CloseVacancyFormError">
-        <dc:Bounds x="1545" y="337" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_CreateVacancyPersistError" bpmnElement="CreateVacancyPersistError">
-        <dc:Bounds x="1080" y="382" width="36" height="36" />
+        <dc:Bounds x="1605" y="397" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_CreateVacancyFormError" bpmnElement="CreateVacancyFormError">
-        <dc:Bounds x="830" y="357" width="36" height="36" />
+        <dc:Bounds x="862" y="417" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_CreateVacancyPersistError" bpmnElement="CreateVacancyPersistError">
+        <dc:Bounds x="1125" y="432" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_CloseActiveApplicationsErrorBoundary" bpmnElement="CloseActiveApplicationsErrorBoundary">
-        <dc:Bounds x="2482" y="345" width="36" height="36" />
+        <dc:Bounds x="2642" y="400" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_VF1" bpmnElement="VF1">
-        <di:waypoint x="296" y="381.9" /><di:waypoint x="425" y="409.6" /></bpmndi:BPMNEdge>
+        <di:waypoint x="356" y="441.9" />
+        <di:waypoint x="485" y="469.6" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF2a" bpmnElement="VF2a">
-        <di:waypoint x="457" y="390.0" /><di:waypoint x="523.9" y="150.0" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VF2b" bpmnElement="VF2b">
-        <di:waypoint x="475" y="415.0" /><di:waypoint x="690" y="415.0" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VF2" bpmnElement="VF2">
-        <di:waypoint x="566.5" y="150.0" /><di:waypoint x="743.5" y="375.0" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VF2c" bpmnElement="VF2c">
-        <di:waypoint x="830" y="359.8" /><di:waypoint x="582.2" y="150.0" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VF2d" bpmnElement="VF2d">
-        <di:waypoint x="860" y="423.5" /><di:waypoint x="940" y="431.5" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VF2e" bpmnElement="VF2e">
-        <di:waypoint x="1080" y="390.7" /><di:waypoint x="612.7" y="150.0" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VF2f" bpmnElement="VF2f">
-        <di:waypoint x="1059.5" y="400.0" /><di:waypoint x="1240.5" y="190.0" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VF2g" bpmnElement="VF2g">
-        <di:waypoint x="1360" y="123.6" /><di:waypoint x="1415" y="106.4" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VF3" bpmnElement="VF3">
-        <di:waypoint x="1498.7" y="120.0" /><di:waypoint x="1491.3" y="355.0" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VF3e" bpmnElement="VF3e">
-        <di:waypoint x="1558.9" y="337.0" /><di:waypoint x="1509.2" y="120.0" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VF4a" bpmnElement="VF4a">
-      <di:waypoint x="1545.5" y="435.0" /><di:waypoint x="1663.5" y="520.0" />
+        <di:waypoint x="510" y="450" />
+        <di:waypoint x="510" y="190" />
+        <di:waypoint x="745" y="190" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1566" y="468" width="82" height="14" />
+          <dc:Bounds x="595" y="174" width="85" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VF2b" bpmnElement="VF2b">
+        <di:waypoint x="535" y="475" />
+        <di:waypoint x="750" y="475" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VF2" bpmnElement="VF2">
+        <di:waypoint x="790" y="230" />
+        <di:waypoint x="790" y="435" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VF2c" bpmnElement="VF2c">
+        <di:waypoint x="880" y="417" />
+        <di:waypoint x="880" y="230" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VF2d" bpmnElement="VF2d">
+        <di:waypoint x="920" y="475" />
+        <di:waypoint x="953" y="475" />
+        <di:waypoint x="953" y="490" />
+        <di:waypoint x="985" y="490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VF2e" bpmnElement="VF2e">
+        <di:waypoint x="1143" y="432" />
+        <di:waypoint x="1143" y="190" />
+        <di:waypoint x="915" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VF2f" bpmnElement="VF2f">
+        <di:waypoint x="1155" y="490" />
+        <di:waypoint x="1203" y="490" />
+        <di:waypoint x="1203" y="210" />
+        <di:waypoint x="1250" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VF2g" bpmnElement="VF2g">
+        <di:waypoint x="1420" y="210" />
+        <di:waypoint x="1443" y="210" />
+        <di:waypoint x="1443" y="179" />
+        <di:waypoint x="1465" y="179" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VF3" bpmnElement="VF3">
+        <di:waypoint x="1550" y="219" />
+        <di:waypoint x="1550" y="415" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VF3e" bpmnElement="VF3e">
+        <di:waypoint x="1623" y="397" />
+        <di:waypoint x="1623" y="308" />
+        <di:waypoint x="1610" y="308" />
+        <di:waypoint x="1610" y="219" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VF4a" bpmnElement="VF4a">
+        <di:waypoint x="1550" y="495" />
+        <di:waypoint x="1550" y="538" />
+        <di:waypoint x="1590" y="538" />
+        <di:waypoint x="1590" y="580" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1549" y="546" width="78" height="27" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF4b" bpmnElement="VF4b">
-      <di:waypoint x="1829" y="560.0" /><di:waypoint x="1851" y="560.0" />
+        <di:waypoint x="1700" y="620" />
+        <di:waypoint x="1911" y="620" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1798" y="535" width="86" height="27" />
+          <dc:Bounds x="1784" y="595" width="81" height="27" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF4c" bpmnElement="VF4c">
-      <di:waypoint x="2081" y="560.0" /><di:waypoint x="2205" y="560.0" />
+        <di:waypoint x="2141" y="620" />
+        <di:waypoint x="2265" y="620" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="2100" y="535" width="87" height="40" />
+          <dc:Bounds x="2168" y="595" width="72" height="80" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF4" bpmnElement="VF4">
-      <di:waypoint x="2205.8" y="535.0" /><di:waypoint x="2152.4" y="480.0" />
+        <di:waypoint x="2290" y="595" />
+        <di:waypoint x="2290" y="535" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="2206" y="495" width="79" height="27" />
+          <dc:Bounds x="2295.2" y="555" width="57" height="53" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF4_DENIED" bpmnElement="VF4_DENIED">
-      <di:waypoint x="2255" y="560.0" /><di:waypoint x="2382" y="560.0" />
+        <di:waypoint x="2315" y="620" />
+        <di:waypoint x="2442" y="620" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="2280" y="535" width="79" height="27" />
+          <dc:Bounds x="2353" y="595" width="53" height="53" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF5" bpmnElement="VF5">
-        <di:waypoint x="2500" y="356.0" /><di:waypoint x="2591" y="347.7" /></bpmndi:BPMNEdge>
+        <di:waypoint x="2660" y="400" />
+        <di:waypoint x="2755" y="400" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF6" bpmnElement="VF6">
-        <di:waypoint x="2761" y="340.0" /><di:waypoint x="2831" y="340.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="2925" y="400" />
+        <di:waypoint x="3015" y="400" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF7" bpmnElement="VF7">
-      <di:waypoint x="2503.7" y="381.0" /><di:waypoint x="2536.3" y="542.0" />
+        <di:waypoint x="2678" y="418" />
+        <di:waypoint x="2700" y="418" />
+        <di:waypoint x="2700" y="570" />
+        <di:waypoint x="2600" y="570" />
+        <di:waypoint x="2600" y="602" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="2531" y="384" width="86" height="40" />
+          <dc:Bounds x="2649" y="328" width="70" height="53" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF7b" bpmnElement="VF7b">
-      <di:waypoint x="2558" y="560.0" /><di:waypoint x="2935" y="560.0" />
+        <di:waypoint x="2618" y="620" />
+        <di:waypoint x="2995" y="620" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="2715" y="535" width="69" height="40" />
+          <dc:Bounds x="2775" y="595" width="69" height="53" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF8" bpmnElement="VF8">
-        <di:waypoint x="3105" y="560.0" /><di:waypoint x="3172" y="560.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="3165" y="620" />
+        <di:waypoint x="3232" y="620" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF6b" bpmnElement="VF6b">
-        <di:waypoint x="2915.8" y="300.0" /><di:waypoint x="2915.2" y="159.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="3100" y="360" />
+        <di:waypoint x="3100" y="290" />
+        <di:waypoint x="2975" y="290" />
+        <di:waypoint x="2975" y="219" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VF6c" bpmnElement="VF6c">
-        <di:waypoint x="2950.4" y="159.0" /><di:waypoint x="3112.1" y="342.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="3060" y="179" />
+        <di:waypoint x="3236" y="179" />
+        <di:waypoint x="3236" y="383" />
+        <di:waypoint x="3412" y="383" />
+      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

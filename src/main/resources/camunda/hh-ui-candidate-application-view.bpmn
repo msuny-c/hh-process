@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_candidate_application_view" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
   <bpmn:collaboration id="Collaboration_hhUiCandidateApplicationView" name="Пул: экран одного отклика кандидата">
@@ -7,64 +7,84 @@
   <bpmn:process id="hhUiCandidateApplicationView" name="Экран одного отклика кандидата" isExecutable="true" camunda:candidateStarterGroups="CANDIDATE" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhUiCandidateApplicationView">
       <bpmn:lane id="Lane_hhUiCandidateApplicationView_RoleSystem" name="Кандидат / администратор / система">
-        <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>EnterCandidateApplicationId</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>LoadCandidateApplicationView</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CandidateApplicationViewValidationError</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>DisplayCandidateApplicationView</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>DisplayCandidateApplicationView</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>LoadCandidateApplicationView</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>CandidateApplicationViewValidationError</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Кандидат открыл карточку своего отклика" />
     <bpmn:userTask id="EnterCandidateApplicationId" name="Ввести или выбрать идентификатор отклика" camunda:formRef="application-id-input-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
+    <bpmn:endEvent id="End" name="Карточка отклика показана кандидату" />
+    <bpmn:userTask id="DisplayCandidateApplicationView" name="Показать кандидату детали его отклика" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
     <bpmn:serviceTask id="LoadCandidateApplicationView" name="Загрузить отклик с проверкой владельца-кандидата" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:startEvent id="Start" name="Кандидат открыл карточку своего отклика" camunda:initiator="starterUserId" />
     <bpmn:boundaryEvent id="CandidateApplicationViewValidationError" attachedToRef="LoadCandidateApplicationView">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:userTask id="DisplayCandidateApplicationView" name="Показать кандидату детали его отклика" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
-    <bpmn:endEvent id="End" name="Карточка отклика показана кандидату" />
     <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="EnterCandidateApplicationId" />
-    <bpmn:sequenceFlow id="F2" sourceRef="EnterCandidateApplicationId" targetRef="LoadCandidateApplicationView" />
     <bpmn:sequenceFlow id="F2e" name="ошибка формы: повторить ввод" sourceRef="CandidateApplicationViewValidationError" targetRef="EnterCandidateApplicationId" />
-    <bpmn:sequenceFlow id="F3" sourceRef="LoadCandidateApplicationView" targetRef="DisplayCandidateApplicationView" />
+    <bpmn:sequenceFlow id="F2" sourceRef="EnterCandidateApplicationId" targetRef="LoadCandidateApplicationView" />
     <bpmn:sequenceFlow id="F4" sourceRef="DisplayCandidateApplicationView" targetRef="End" />
+    <bpmn:sequenceFlow id="F3" sourceRef="LoadCandidateApplicationView" targetRef="DisplayCandidateApplicationView" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_hhUiCandidateApplicationView">
     <bpmndi:BPMNPlane id="BPMNPlane_hhUiCandidateApplicationView" bpmnElement="Collaboration_hhUiCandidateApplicationView">
       <bpmndi:BPMNShape id="BPMNShape_Participant_hhUiCandidateApplicationView" bpmnElement="Participant_hhUiCandidateApplicationView" isHorizontal="true">
-        <dc:Bounds x="60" y="20" width="1556" height="200" />
+        <dc:Bounds x="160" y="80" width="1556" height="200" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_hhUiCandidateApplicationView_RoleSystem" bpmnElement="Lane_hhUiCandidateApplicationView_RoleSystem" isHorizontal="true">
-        <dc:Bounds x="160" y="40" width="1436" height="160" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_Start" bpmnElement="Start">
-        <dc:Bounds x="200" y="102" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_End" bpmnElement="End">
-        <dc:Bounds x="1160" y="102" width="36" height="36" />
+        <dc:Bounds x="260" y="100" width="1436" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_EnterCandidateApplicationId" bpmnElement="EnterCandidateApplicationId">
-        <dc:Bounds x="440" y="80" width="170" height="80" />
+        <dc:Bounds x="540" y="140" width="170" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_LoadCandidateApplicationView" bpmnElement="LoadCandidateApplicationView">
-        <dc:Bounds x="680" y="80" width="170" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_CandidateApplicationViewValidationError" bpmnElement="CandidateApplicationViewValidationError">
-        <dc:Bounds x="832" y="142" width="36" height="36" />
+      <bpmndi:BPMNShape id="BPMNShape_End" bpmnElement="End">
+        <dc:Bounds x="1512" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1486" y="198" width="89" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_DisplayCandidateApplicationView" bpmnElement="DisplayCandidateApplicationView">
-        <dc:Bounds x="920" y="80" width="170" height="80" />
+        <dc:Bounds x="1135" y="140" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_LoadCandidateApplicationView" bpmnElement="LoadCandidateApplicationView">
+        <dc:Bounds x="885" y="140" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Start" bpmnElement="Start">
+        <dc:Bounds x="342" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="316" y="198" width="88" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_CandidateApplicationViewValidationError" bpmnElement="CandidateApplicationViewValidationError">
+        <dc:Bounds x="992" y="202" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_F1" bpmnElement="F1">
-        <di:waypoint x="236" y="120.0" /><di:waypoint x="440" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="378" y="180" />
+        <di:waypoint x="540" y="180" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F2" bpmnElement="F2">
-        <di:waypoint x="610" y="120.0" /><di:waypoint x="680" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="710" y="180" />
+        <di:waypoint x="885" y="180" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F2e" bpmnElement="F2e">
-        <di:waypoint x="832" y="160.0" /><di:waypoint x="610" y="160.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="1010" y="240" />
+        <di:waypoint x="625" y="240" />
+        <di:waypoint x="625" y="220" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="775" y="215" width="82" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F3" bpmnElement="F3">
-        <di:waypoint x="850" y="120.0" /><di:waypoint x="920" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="1055" y="180" />
+        <di:waypoint x="1135" y="180" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F4" bpmnElement="F4">
-        <di:waypoint x="1090" y="120.0" /><di:waypoint x="1160" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="1305" y="180" />
+        <di:waypoint x="1512" y="180" />
+      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

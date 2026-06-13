@@ -33,7 +33,7 @@
     </bpmn:laneSet>
     <bpmn:startEvent id="AdminResetStart" name="Администратор начал сброс интервью" />
     <bpmn:exclusiveGateway id="AdminResetPermissionGateway" name="Администратор имеет право сбросить это интервью?" />
-    <bpmn:businessRuleTask id="EvaluateAdminResetPermission" name="Таблица решений: проверить право администратора на сброс интервью" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:mapDecisionResult="singleEntry" />
+    <bpmn:businessRuleTask id="EvaluateAdminResetPermission" name="Таблица решений: проверить право администратора на сброс интервью" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleEntry" />
     <bpmn:serviceTask id="ResolveAdminResetPermission" name="Система: собрать данные для проверки права на сброс интервью" camunda:type="external" camunda:topic="permission-check" />
     <bpmn:endEvent id="AdminResetPermissionDenied" name="Администратору запрещён сброс этого интервью" />
     <bpmn:userTask id="AdminResetApprovalTask" name="Подтвердить сброс интервью" camunda:formRef="reset-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
@@ -41,7 +41,7 @@
     <bpmn:endEvent id="AdminResetEnd" name="Интервью сброшено администратором" />
     <bpmn:serviceTask id="ValidateAdminResetForm" name="Проверить причину и идентификатор интервью для сброса" camunda:type="external" camunda:topic="admin-interview-reset" />
     <bpmn:serviceTask id="RollbackAdminReset" name="Восстановить данные после ошибки сброса" camunda:type="external" camunda:topic="transaction-rollback" />
-    <bpmn:callActivity id="NotifyAdminResetParticipants" name="Подпроцесс: уведомить участников о сбросе интервью" calledElement="hhNotificationProcess">
+    <bpmn:callActivity id="NotifyAdminResetParticipants" name="Подпроцесс: уведомить участников о сбросе интервью" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
         <camunda:in sourceExpression="${&#39;ADMIN_RESET&#39;}" target="notificationKind" />
         <camunda:in source="applicationId" target="applicationId" />
@@ -56,7 +56,7 @@
       <bpmn:incoming>Flow_07qyffw</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:intermediateThrowEvent id="ThrowCompensationAdminResetRollback" name="Запустить компенсацию отката после ошибки">
-      <bpmn:compensateEventDefinition />
+      <bpmn:compensateEventDefinition waitForCompletion="true" />
     </bpmn:intermediateThrowEvent>
     <bpmn:serviceTask id="Compensate_Transaction_AdminInterviewReset" name="Компенсация: вернуть состояние до админского сброса" isForCompensation="true" camunda:type="external" camunda:topic="transaction-rollback" />
     <bpmn:transaction id="Transaction_AdminInterviewReset" name="Транзакция: административный сброс интервью">
@@ -71,6 +71,7 @@
       <bpmn:sequenceFlow id="ATX2" sourceRef="CancelInterviewByAdmin" targetRef="ReleaseAdminResetSlot" />
       <bpmn:sequenceFlow id="ATX3" sourceRef="ReleaseAdminResetSlot" targetRef="ReturnApplicationToReview" />
       <bpmn:sequenceFlow id="ATX4" sourceRef="ReturnApplicationToReview" targetRef="RecordAdminResetHistory" />
+      <bpmn:sequenceFlow id="Transaction_AdminInterviewReset_SF_End" sourceRef="RecordAdminResetHistory" targetRef="Transaction_AdminInterviewReset_End" />
       <bpmn:endEvent id="Transaction_AdminInterviewReset_End" name="Завершить транзакцию бизнес-операции" />
     </bpmn:transaction>
     <bpmn:boundaryEvent id="Cancel_Transaction_AdminInterviewReset" name="Ошибка транзакции: админский сброс интервью" attachedToRef="Transaction_AdminInterviewReset">
@@ -219,6 +220,10 @@
       <bpmndi:BPMNEdge id="BPMNEdge_ATX4" bpmnElement="ATX4">
         <di:waypoint x="2021" y="510" />
         <di:waypoint x="2046" y="510" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Transaction_AdminInterviewReset_SF_End" bpmnElement="Transaction_AdminInterviewReset_SF_End">
+        <di:waypoint x="2186" y="510" />
+        <di:waypoint x="2222" y="500" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_Transaction_AdminInterviewReset_SF_Start" bpmnElement="Transaction_AdminInterviewReset_SF_Start">
         <di:waypoint x="1278" y="490" />

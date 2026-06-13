@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_hh_vacancy_status_update" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
   <bpmn:collaboration id="Collaboration_hhVacancyStatusUpdateProcess" name="Пул: изменение статуса вакансии">
@@ -14,20 +14,19 @@
         <bpmn:flowNodeRef>ApplyVacancyStatusUpdate</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>VacancyStatusResultTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>VacancyStatusUpdateEnd</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>VacancyStatusTransitionDenied</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>UpdateVacancyStatusTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ValidateVacancyStatusUpdate</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>VacancyStatusValidationError</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>VacancyStatusTransitionDenied</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
     <bpmn:startEvent id="VacancyStatusUpdateStart" name="Рекрутер запросил изменение статуса вакансии" camunda:initiator="starterUserId" />
     <bpmn:serviceTask id="PrepareVacancyStatusTransition" name="Система: подготовить текущий и новый статус вакансии для таблицы решений" camunda:type="external" camunda:topic="status-transition" />
-    <bpmn:businessRuleTask id="EvaluateVacancyStatusTransition" name="Таблица решений: разрешить или запретить новый статус вакансии" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleResult" />
+    <bpmn:businessRuleTask id="EvaluateVacancyStatusTransition" name="Таблица решений: разрешить или запретить новый статус вакансии" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" camunda:decisionRefBinding="latest" />
     <bpmn:exclusiveGateway id="VacancyStatusTransitionGateway" name="Таблица решений разрешила новый статус вакансии?" />
     <bpmn:serviceTask id="ApplyVacancyStatusUpdate" name="Сохранить новый статус вакансии" camunda:type="external" camunda:topic="vacancy-status-update" />
     <bpmn:userTask id="VacancyStatusResultTask" name="Показать результат изменения статуса вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
     <bpmn:endEvent id="VacancyStatusUpdateEnd" name="Статус вакансии обновлён" />
-    <bpmn:endEvent id="VacancyStatusTransitionDenied" name="Таблица решений запретила новый статус вакансии" />
     <bpmn:userTask id="UpdateVacancyStatusTask" name="Рекрутер выбирает новый статус вакансии" camunda:formRef="vacancy-status-update-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
     <bpmn:serviceTask id="ValidateVacancyStatusUpdate" name="Проверить форму и что вакансия принадлежит рекрутеру" camunda:type="external" camunda:topic="vacancy-status-update" />
     <bpmn:boundaryEvent id="VacancyStatusValidationError" attachedToRef="ValidateVacancyStatusUpdate">
@@ -47,6 +46,7 @@
     <bpmn:sequenceFlow id="VS9" sourceRef="VacancyStatusResultTask" targetRef="VacancyStatusUpdateEnd" />
     <bpmn:sequenceFlow id="VS2e" sourceRef="VacancyStatusValidationError" targetRef="UpdateVacancyStatusTask" />
     <bpmn:sequenceFlow id="VS2" sourceRef="UpdateVacancyStatusTask" targetRef="ValidateVacancyStatusUpdate" />
+    <bpmn:endEvent id="VacancyStatusTransitionDenied" name="Таблица решений запретила новый статус вакансии" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_hhVacancyStatusUpdateProcess">
     <bpmndi:BPMNPlane id="BPMNPlane_hhVacancyStatusUpdateProcess" bpmnElement="Collaboration_hhVacancyStatusUpdateProcess">
@@ -86,17 +86,17 @@
           <dc:Bounds x="2167" y="238" width="87" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_VacancyStatusTransitionDenied" bpmnElement="VacancyStatusTransitionDenied">
-        <dc:Bounds x="1667" y="360" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="1643" y="396" width="84" height="27" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_UpdateVacancyStatusTask" bpmnElement="UpdateVacancyStatusTask">
         <dc:Bounds x="405" y="210" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_ValidateVacancyStatusUpdate" bpmnElement="ValidateVacancyStatusUpdate">
         <dc:Bounds x="700" y="210" width="190" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_VacancyStatusTransitionDenied" bpmnElement="VacancyStatusTransitionDenied">
+        <dc:Bounds x="1722" y="332" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1696" y="368" width="88" height="53" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_VacancyStatusValidationError" bpmnElement="VacancyStatusValidationError">
         <dc:Bounds x="850" y="272" width="36" height="36" />
@@ -104,16 +104,6 @@
       <bpmndi:BPMNEdge id="BPMNEdge_VS1" bpmnElement="VS1">
         <di:waypoint x="336" y="250" />
         <di:waypoint x="405" y="250" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VS2" bpmnElement="VS2">
-        <di:waypoint x="575" y="250" />
-        <di:waypoint x="700" y="250" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_VS2e" bpmnElement="VS2e">
-        <di:waypoint x="868" y="308" />
-        <di:waypoint x="868" y="350" />
-        <di:waypoint x="490" y="350" />
-        <di:waypoint x="490" y="290" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VS3" bpmnElement="VS3">
         <di:waypoint x="890" y="250" />
@@ -143,10 +133,10 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VS7" bpmnElement="VS7">
-        <di:waypoint x="1455" y="352.7" />
-        <di:waypoint x="1667" y="376" />
+        <di:waypoint x="1455" y="350" />
+        <di:waypoint x="1722" y="350" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1444" y="410" width="85" height="14" />
+          <dc:Bounds x="1593" y="368" width="53" height="53" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_VS8" bpmnElement="VS8">
@@ -156,6 +146,16 @@
       <bpmndi:BPMNEdge id="BPMNEdge_VS9" bpmnElement="VS9">
         <di:waypoint x="2110" y="220" />
         <di:waypoint x="2192" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS2e" bpmnElement="VS2e">
+        <di:waypoint x="868" y="308" />
+        <di:waypoint x="868" y="350" />
+        <di:waypoint x="490" y="350" />
+        <di:waypoint x="490" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_VS2" bpmnElement="VS2">
+        <di:waypoint x="575" y="250" />
+        <di:waypoint x="700" y="250" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

@@ -6,54 +6,76 @@
   <bpmn:process id="hhNotificationProcess" name="Подпроцесс уведомления" isExecutable="true" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_Notification">
       <bpmn:lane id="Lane_Notification_System" name="Система / уведомления">
-        <bpmn:flowNodeRef>NotificationStart</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>PrepareNotificationTemplateDecision</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>EvaluateNotificationTemplate</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>DispatchNotification</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>NotificationEnd</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>DispatchNotification</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EvaluateNotificationTemplate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>NotificationStart</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="NotificationStart" name="Получен запрос уведомления" />
     <bpmn:serviceTask id="PrepareNotificationTemplateDecision" name="Система: подготовить тип события, статус и роль получателя" camunda:type="external" camunda:topic="notification-decision" />
-    <bpmn:businessRuleTask id="EvaluateNotificationTemplate" name="Таблица решений: выбрать тип и шаблон уведомления" camunda:decisionRef="hhNotificationTemplates" camunda:decisionRefBinding="latest" camunda:mapDecisionResult="singleEntry" camunda:resultVariable="notificationTemplateCode" />
-    <bpmn:serviceTask id="DispatchNotification" name="Система: создать уведомление по выбранному шаблону" camunda:type="external" camunda:topic="notification-dispatch" />
     <bpmn:endEvent id="NotificationEnd" name="Уведомление обработано" />
+    <bpmn:serviceTask id="DispatchNotification" name="Система: создать уведомление по выбранному шаблону" camunda:type="external" camunda:topic="notification-dispatch" />
+    <bpmn:businessRuleTask id="EvaluateNotificationTemplate" name="Таблица решений: выбрать тип и шаблон уведомления" camunda:resultVariable="notificationTemplateCode" camunda:decisionRef="hhNotificationTemplates" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
+    <bpmn:startEvent id="NotificationStart" name="Получен запрос уведомления" />
     <bpmn:sequenceFlow id="NF1" sourceRef="NotificationStart" targetRef="PrepareNotificationTemplateDecision" />
-    <bpmn:sequenceFlow id="NF2" sourceRef="PrepareNotificationTemplateDecision" targetRef="EvaluateNotificationTemplate" name="данные уведомления подготовлены" />
-    <bpmn:sequenceFlow id="NF3" sourceRef="EvaluateNotificationTemplate" targetRef="DispatchNotification" name="таблица решений выбрала шаблон уведомления" />
+    <bpmn:sequenceFlow id="NF2" name="данные уведомления подготовлены" sourceRef="PrepareNotificationTemplateDecision" targetRef="EvaluateNotificationTemplate" />
     <bpmn:sequenceFlow id="NF4" sourceRef="DispatchNotification" targetRef="NotificationEnd" />
+    <bpmn:sequenceFlow id="NF3" name="таблица решений выбрала шаблон уведомления" sourceRef="EvaluateNotificationTemplate" targetRef="DispatchNotification" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_hhNotificationProcess">
     <bpmndi:BPMNPlane id="BPMNPlane_hhNotificationProcess" bpmnElement="Collaboration_hhNotificationProcess">
       <bpmndi:BPMNShape id="BPMNShape_Participant_hhNotificationProcess" bpmnElement="Participant_hhNotificationProcess" isHorizontal="true">
-        <dc:Bounds x="0" y="20" width="1560" height="220" />
+        <dc:Bounds x="160" y="80" width="1560" height="220" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_Notification_System" bpmnElement="Lane_Notification_System" isHorizontal="true">
-        <dc:Bounds x="100" y="40" width="1440" height="180" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_NotificationStart" bpmnElement="NotificationStart">
-        <dc:Bounds x="130" y="112" width="36" height="36" />
+        <dc:Bounds x="260" y="100" width="1440" height="180" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_PrepareNotificationTemplateDecision" bpmnElement="PrepareNotificationTemplateDecision">
-        <dc:Bounds x="260" y="90" width="220" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_EvaluateNotificationTemplate" bpmnElement="EvaluateNotificationTemplate">
-        <dc:Bounds x="550" y="90" width="220" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_DispatchNotification" bpmnElement="DispatchNotification">
-        <dc:Bounds x="840" y="90" width="220" height="80" />
+        <dc:Bounds x="420" y="150" width="220" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_NotificationEnd" bpmnElement="NotificationEnd">
-        <dc:Bounds x="1120" y="112" width="36" height="36" />
+        <dc:Bounds x="1592" y="172" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1576" y="208" width="69" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_DispatchNotification" bpmnElement="DispatchNotification">
+        <dc:Bounds x="1260" y="150" width="220" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_EvaluateNotificationTemplate" bpmnElement="EvaluateNotificationTemplate">
+        <dc:Bounds x="810" y="150" width="220" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_NotificationStart" bpmnElement="NotificationStart">
+        <dc:Bounds x="312" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="289" y="188" width="82" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_NF1" bpmnElement="NF1">
-        <di:waypoint x="166" y="130.0" /><di:waypoint x="260" y="130.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="348" y="170" />
+        <di:waypoint x="384" y="170" />
+        <di:waypoint x="384" y="190" />
+        <di:waypoint x="420" y="190" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_NF2" bpmnElement="NF2">
-        <di:waypoint x="480" y="130.0" /><di:waypoint x="550" y="130.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="640" y="190" />
+        <di:waypoint x="810" y="190" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="689" y="165" width="72" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_NF3" bpmnElement="NF3">
-        <di:waypoint x="770" y="130.0" /><di:waypoint x="840" y="130.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="1030" y="190" />
+        <di:waypoint x="1260" y="190" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1101" y="165" width="88" height="53" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_NF4" bpmnElement="NF4">
-        <di:waypoint x="1060" y="130.0" /><di:waypoint x="1120" y="130.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="1480" y="190" />
+        <di:waypoint x="1592" y="190" />
+      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

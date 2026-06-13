@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_admin_timeout_review" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
   <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
   <bpmn:collaboration id="Collaboration_hhUiAdminTimeoutReview" name="Пул: экран админской проверки таймаутов">
@@ -7,64 +7,87 @@
   <bpmn:process id="hhUiAdminTimeoutReview" name="Экран админской проверки таймаутов" isExecutable="true" camunda:candidateStarterGroups="ADMIN" camunda:historyTimeToLive="30">
     <bpmn:laneSet id="LaneSet_hhUiAdminTimeoutReview">
       <bpmn:lane id="Lane_hhUiAdminTimeoutReview_RoleSystem" name="Администратор / система">
-        <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>DisplayTimeoutReview</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ConfirmTimeoutReview</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>RunTimeoutReview</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>TimeoutReviewValidationError</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>DisplayTimeoutReview</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Администратор открыл проверку таймаутов" />
+    <bpmn:endEvent id="End" name="Результат проверки таймаутов показан" />
+    <bpmn:userTask id="DisplayTimeoutReview" name="Показать результат проверки таймаутов" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
     <bpmn:userTask id="ConfirmTimeoutReview" name="Администратор запускает закрытие просроченных приглашений" camunda:formRef="admin-timeout-run-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
+    <bpmn:startEvent id="Start" name="Администратор открыл проверку таймаутов" camunda:initiator="starterUserId" />
     <bpmn:serviceTask id="RunTimeoutReview" name="Закрыть все найденные просроченные приглашения" camunda:type="external" camunda:topic="ui-query" />
     <bpmn:boundaryEvent id="TimeoutReviewValidationError" attachedToRef="RunTimeoutReview">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:userTask id="DisplayTimeoutReview" name="Показать результат проверки таймаутов" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
-    <bpmn:endEvent id="End" name="Результат проверки таймаутов показан" />
-    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="ConfirmTimeoutReview" />
-    <bpmn:sequenceFlow id="F2" sourceRef="ConfirmTimeoutReview" targetRef="RunTimeoutReview" />
-    <bpmn:sequenceFlow id="F2e" name="ошибка формы: повторить ввод" sourceRef="TimeoutReviewValidationError" targetRef="ConfirmTimeoutReview" />
-    <bpmn:sequenceFlow id="F3" sourceRef="RunTimeoutReview" targetRef="DisplayTimeoutReview" />
     <bpmn:sequenceFlow id="F4" sourceRef="DisplayTimeoutReview" targetRef="End" />
+    <bpmn:sequenceFlow id="F3" sourceRef="RunTimeoutReview" targetRef="DisplayTimeoutReview" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="ConfirmTimeoutReview" />
+    <bpmn:sequenceFlow id="F2e" name="ошибка формы: повторить ввод" sourceRef="TimeoutReviewValidationError" targetRef="ConfirmTimeoutReview" />
+    <bpmn:sequenceFlow id="F2" sourceRef="ConfirmTimeoutReview" targetRef="RunTimeoutReview" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_hhUiAdminTimeoutReview">
     <bpmndi:BPMNPlane id="BPMNPlane_hhUiAdminTimeoutReview" bpmnElement="Collaboration_hhUiAdminTimeoutReview">
       <bpmndi:BPMNShape id="BPMNShape_Participant_hhUiAdminTimeoutReview" bpmnElement="Participant_hhUiAdminTimeoutReview" isHorizontal="true">
-        <dc:Bounds x="52" y="20" width="1454" height="200" />
+        <dc:Bounds x="152" y="80" width="1454" height="260" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_hhUiAdminTimeoutReview_RoleSystem" bpmnElement="Lane_hhUiAdminTimeoutReview_RoleSystem" isHorizontal="true">
-        <dc:Bounds x="152" y="40" width="1334" height="160" />
+        <dc:Bounds x="252" y="100" width="1334" height="200" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_End" bpmnElement="End">
-        <dc:Bounds x="1050" y="102" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_ConfirmTimeoutReview" bpmnElement="ConfirmTimeoutReview">
-        <dc:Bounds x="330" y="80" width="170" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_RunTimeoutReview" bpmnElement="RunTimeoutReview">
-        <dc:Bounds x="570" y="80" width="170" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_TimeoutReviewValidationError" bpmnElement="TimeoutReviewValidationError">
-        <dc:Bounds x="722" y="142" width="36" height="36" />
+        <dc:Bounds x="1452" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1443" y="188" width="54" height="53" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_DisplayTimeoutReview" bpmnElement="DisplayTimeoutReview">
-        <dc:Bounds x="810" y="80" width="170" height="80" />
+        <dc:Bounds x="1115" y="130" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ConfirmTimeoutReview" bpmnElement="ConfirmTimeoutReview">
+        <dc:Bounds x="475" y="140" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Start" bpmnElement="Start">
-        <dc:Bounds x="192" y="102" width="36" height="36" />
+        <dc:Bounds x="342" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="317" y="198" width="86" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RunTimeoutReview" bpmnElement="RunTimeoutReview">
+        <dc:Bounds x="775" y="140" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_TimeoutReviewValidationError" bpmnElement="TimeoutReviewValidationError">
+        <dc:Bounds x="927" y="202" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_F1" bpmnElement="F1">
-        <di:waypoint x="228" y="120.0" /><di:waypoint x="330" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="378" y="180" />
+        <di:waypoint x="475" y="180" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F2" bpmnElement="F2">
-        <di:waypoint x="500" y="120.0" /><di:waypoint x="570" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="645" y="180" />
+        <di:waypoint x="775" y="180" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F2e" bpmnElement="F2e">
-        <di:waypoint x="722" y="160.0" /><di:waypoint x="500" y="160.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="945" y="238" />
+        <di:waypoint x="945" y="258" />
+        <di:waypoint x="560" y="258" />
+        <di:waypoint x="560" y="220" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="915" y="234" width="82" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F3" bpmnElement="F3">
-        <di:waypoint x="740" y="120.0" /><di:waypoint x="810" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="945" y="180" />
+        <di:waypoint x="1030" y="180" />
+        <di:waypoint x="1030" y="170" />
+        <di:waypoint x="1115" y="170" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F4" bpmnElement="F4">
-        <di:waypoint x="980" y="120.0" /><di:waypoint x="1050" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="1285" y="170" />
+        <di:waypoint x="1452" y="170" />
+      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>
