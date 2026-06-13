@@ -234,7 +234,10 @@ def invite_json(api: API, recruiter: SessionCtx, application_id: str, when: date
         if resp.status_code == 200:
             return resp.json()
         last_response = resp
-        if 'Application is not in ON_RECRUITER_REVIEW status' in resp.text:
+        if (
+            'Application is not in ON_RECRUITER_REVIEW status' in resp.text
+            or 'Camunda recruiter invitation task is not active' in resp.text
+        ):
             time.sleep(0.5)
             continue
         if 'SCHEDULE_SLOT_CONFLICT' in resp.text:
