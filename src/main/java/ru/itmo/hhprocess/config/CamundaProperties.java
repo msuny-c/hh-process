@@ -1,4 +1,4 @@
-package ru.itmo.hhprocess.camunda;
+package ru.itmo.hhprocess.config;
 
 import lombok.Getter;
 import lombok.Setter;

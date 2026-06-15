@@ -4,16 +4,20 @@ import lombok.RequiredArgsConstructor;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.ScreeningResultEntity;
 import ru.itmo.hhprocess.entity.VacancyEntity;
+import ru.itmo.hhprocess.enums.ApplicationStatus;
+import ru.itmo.hhprocess.repository.ApplicationRepository;
 import ru.itmo.hhprocess.repository.ScreeningResultRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -24,6 +28,15 @@ public class ScreeningService {
     private static final Pattern NON_WORD = Pattern.compile("[^\\p{L}\\p{N}]+");
 
     private final ScreeningResultRepository screeningResultRepository;
+    private final ApplicationRepository applicationRepository;
+    private final HistoryService historyService;
+
+    public record ScreeningProcessResult(ApplicationEntity application, ScreeningResultEntity screeningResult,
+                                         boolean passed) {
+    }
+
+    public record ScreeningDecisionResult(ApplicationEntity application, ScreeningResultEntity screeningResult) {
+    }
 
     @Transactional
     public ScreeningResultEntity performScreening(ApplicationEntity application) {
@@ -41,7 +54,53 @@ public class ScreeningService {
     }
 
     @Transactional
-    public ScreeningResultEntity saveScreeningDecision(ApplicationEntity application, ScreeningInput input, boolean passed) {
+    public ScreeningProcessResult applyScreeningFromProcess(UUID applicationId) {
+        ApplicationEntity application = getApplication(applicationId);
+        ApplicationStatus oldStatus = application.getStatus();
+        ScreeningResultEntity screeningResult = performScreening(application);
+
+        if (oldStatus == ApplicationStatus.SCREENING_IN_PROGRESS) {
+            if (screeningResult.isPassed()) {
+                application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
+                historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW, null);
+            } else {
+                application.setStatus(ApplicationStatus.SCREENING_FAILED);
+                application.setClosedAt(Instant.now());
+                historyService.record(application, oldStatus, ApplicationStatus.SCREENING_FAILED, null);
+            }
+            applicationRepository.save(application);
+        }
+
+        boolean passed = application.getStatus() != ApplicationStatus.SCREENING_FAILED;
+        return new ScreeningProcessResult(application, screeningResult, passed);
+    }
+
+    @Transactional
+    public ScreeningDecisionResult applyScreeningDecisionFromProcess(UUID applicationId, boolean screeningPassed,
+                                                                       int screeningScore) {
+        ApplicationEntity application = getApplication(applicationId);
+        ApplicationStatus oldStatus = application.getStatus();
+        ScreeningInput input = prepareScreeningInput(application);
+        ScreeningResultEntity screeningResult = saveScreeningDecision(application, input, screeningPassed);
+
+        if (oldStatus == ApplicationStatus.SCREENING_IN_PROGRESS) {
+            if (screeningPassed) {
+                application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
+                historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW, null);
+            } else {
+                application.setStatus(ApplicationStatus.SCREENING_FAILED);
+                application.setClosedAt(Instant.now());
+                historyService.record(application, oldStatus, ApplicationStatus.SCREENING_FAILED, null);
+            }
+            applicationRepository.save(application);
+        }
+
+        return new ScreeningDecisionResult(application, screeningResult);
+    }
+
+    @Transactional
+    public ScreeningResultEntity saveScreeningDecision(ApplicationEntity application, ScreeningInput input,
+                                                       boolean passed) {
         return screeningResultRepository.findByApplicationId(application.getId())
                 .orElseGet(() -> screeningResultRepository.save(ScreeningResultEntity.builder()
                         .application(application)
@@ -50,6 +109,11 @@ public class ScreeningService {
                         .matchedSkills(input.matchedSkills())
                         .detailsJson(screeningDetails(input, passed))
                         .build()));
+    }
+
+    private ApplicationEntity getApplication(UUID applicationId) {
+        return applicationRepository.findDetailedById(applicationId)
+                .orElseThrow(() -> new IllegalArgumentException("Application not found: " + applicationId));
     }
 
     private ScreeningResultEntity performNewScreening(ApplicationEntity application) {

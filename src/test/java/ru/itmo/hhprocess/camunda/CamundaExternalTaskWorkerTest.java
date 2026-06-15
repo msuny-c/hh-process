@@ -1,70 +1,54 @@
 package ru.itmo.hhprocess.camunda;
 
-import org.junit.jupiter.api.Test;
+import ru.itmo.hhprocess.exception.CamundaFormValidationException;
 
-import java.lang.reflect.Method;
-import java.util.Map;
+import org.camunda.bpm.client.task.ExternalTask;
+import org.camunda.bpm.client.task.ExternalTaskService;
+import org.camunda.bpm.engine.variable.VariableMap;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import ru.itmo.hhprocess.camunda.worker.subscription.AbstractExternalTaskWorker;
+
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class CamundaExternalTaskWorkerTest {
 
     @Test
-    void formValidationBpmnErrorCarriesMessageAndFieldNamesBackToUserTask() throws Exception {
-        CapturingCamundaRestClient camundaRestClient = new CapturingCamundaRestClient();
-        CamundaExternalTaskWorker worker = new CamundaExternalTaskWorker(camundaRestClient, null, null);
+    void formValidationBpmnErrorCarriesMessageAndFieldNamesBackToUserTask() {
+        ExternalTask externalTask = mock(ExternalTask.class);
+        ExternalTaskService externalTaskService = mock(ExternalTaskService.class);
         UUID applicationId = UUID.fromString("11111111-1111-1111-1111-111111111111");
-        Map<String, Object> task = Map.of(
-                "variables", Map.of("applicationId", CamundaVariable.variable(applicationId))
-        );
 
-        Method method = CamundaExternalTaskWorker.class.getDeclaredMethod(
-                "throwFormValidationBpmnError",
-                String.class,
-                Map.class,
-                CamundaFormValidationException.class);
-        method.setAccessible(true);
+        when(externalTask.getId()).thenReturn("external-task-1");
+        when(externalTask.getActivityId()).thenReturn("ValidateApplyToVacancyForm");
+        when(externalTask.getVariable("applicationId")).thenReturn(applicationId.toString());
 
-        boolean routed = (boolean) method.invoke(
-                worker,
-                "external-task-1",
-                task,
+        boolean routed = AbstractExternalTaskWorker.handleFormValidationError(
+                externalTask,
+                externalTaskService,
                 new CamundaFormValidationException("Resume text", "Resume text is required"));
 
         assertTrue(routed);
-        assertEquals("external-task-1", camundaRestClient.externalTaskId);
-        assertEquals("FORM_VALIDATION_FAILED", camundaRestClient.errorCode);
-        assertEquals("Resume text is required", camundaRestClient.message);
-        assertEquals(applicationId.toString(), camundaRestClient.variables.get("applicationId"));
-        assertEquals("Resume text is required", camundaRestClient.variables.get("formErrorMessage"));
-        assertEquals("Resume text", camundaRestClient.variables.get("formErrorField"));
-        assertEquals("Resume text", camundaRestClient.variables.get("formErrorFields"));
-        assertEquals("FORM_VALIDATION_FAILED", camundaRestClient.variables.get("formErrorCode"));
-    }
 
-    private static class CapturingCamundaRestClient extends CamundaRestClient {
-        private String externalTaskId;
-        private String errorCode;
-        private String message;
-        private Map<String, ?> variables;
+        ArgumentCaptor<VariableMap> variablesCaptor = ArgumentCaptor.forClass(VariableMap.class);
+        verify(externalTaskService).handleBpmnError(
+                eq(externalTask),
+                eq(AbstractExternalTaskWorker.FORM_VALIDATION_FAILED),
+                eq("Resume text is required"),
+                variablesCaptor.capture());
 
-        CapturingCamundaRestClient() {
-            super(null, new CamundaProperties());
-        }
-
-        @Override
-        public boolean throwBpmnErrorExternalTask(
-                String externalTaskId,
-                String errorCode,
-                String message,
-                Map<String, ?> variables) {
-            this.externalTaskId = externalTaskId;
-            this.errorCode = errorCode;
-            this.message = message;
-            this.variables = variables;
-            return true;
-        }
+        VariableMap variables = variablesCaptor.getValue();
+        assertEquals(applicationId.toString(), variables.get("applicationId"));
+        assertEquals("Resume text is required", variables.get("formErrorMessage"));
+        assertEquals("Resume text", variables.get("formErrorField"));
+        assertEquals("Resume text", variables.get("formErrorFields"));
+        assertEquals(AbstractExternalTaskWorker.FORM_VALIDATION_FAILED, variables.get("formErrorCode"));
     }
 }

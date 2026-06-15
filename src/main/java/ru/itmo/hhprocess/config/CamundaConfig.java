@@ -1,4 +1,4 @@
-package ru.itmo.hhprocess.camunda;
+package ru.itmo.hhprocess.config;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

@@ -6,6 +6,8 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.entity.RoleEntity;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.repository.UserRepository;
+import ru.itmo.hhprocess.config.CamundaProperties;
+import ru.itmo.hhprocess.utils.CamundaVariable;
 
 import java.lang.reflect.Proxy;
 import java.util.HashMap;
@@ -18,17 +20,17 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-class CamundaTaskListenerAdapterTest {
+class CamundaTaskAssignerTest {
 
     private FakeCamundaRestClient camundaRestClient;
     private Map<UUID, UserEntity> users;
-    private CamundaTaskListenerAdapter adapter;
+    private CamundaTaskAssigner assigner;
 
     @BeforeEach
     void setUp() {
         camundaRestClient = new FakeCamundaRestClient();
         users = new HashMap<>();
-        adapter = new CamundaTaskListenerAdapter(camundaRestClient, userRepository());
+        assigner = new CamundaTaskAssigner(camundaRestClient, userRepository());
     }
 
     @Test
@@ -36,9 +38,8 @@ class CamundaTaskListenerAdapterTest {
         UUID recruiterId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         users.put(recruiterId, user(recruiterId, "Recruiter@Example.COM", "RECRUITER"));
         camundaRestClient.taskVariables.put("task-1", Map.of("recruiterUserId", CamundaVariable.variable(recruiterId)));
-        camundaRestClient.candidateGroups.put("task-1", Set.of("RECRUITER"));
 
-        adapter.reconcileTask(Map.of(
+        assigner.reconcileTask(Map.of(
                 "id", "task-1",
                 "taskDefinitionKey", "RecruiterDecisionTask",
                 "assignee", ""));
@@ -52,9 +53,8 @@ class CamundaTaskListenerAdapterTest {
         UUID recruiterId = UUID.fromString("22222222-2222-2222-2222-222222222222");
         users.put(recruiterId, user(recruiterId, "recruiter@example.com", "RECRUITER"));
         camundaRestClient.taskVariables.put("task-2", Map.of("recruiterUserId", CamundaVariable.variable(recruiterId)));
-        camundaRestClient.candidateGroups.put("task-2", Set.of("CANDIDATE"));
 
-        adapter.reconcileTask(Map.of(
+        assigner.reconcileTask(Map.of(
                 "id", "task-2",
                 "taskDefinitionKey", "RecruiterDecisionTask",
                 "assignee", ""));
@@ -68,9 +68,8 @@ class CamundaTaskListenerAdapterTest {
         UUID candidateId = UUID.fromString("33333333-3333-3333-3333-333333333333");
         users.put(candidateId, user(candidateId, "candidate@example.com", "CANDIDATE"));
         camundaRestClient.taskVariables.put("task-3", Map.of("recruiterUserId", CamundaVariable.variable(candidateId)));
-        camundaRestClient.candidateGroups.put("task-3", Set.of("RECRUITER"));
 
-        adapter.reconcileTask(Map.of(
+        assigner.reconcileTask(Map.of(
                 "id", "task-3",
                 "taskDefinitionKey", "RecruiterDecisionTask",
                 "assignee", ""));
@@ -81,7 +80,7 @@ class CamundaTaskListenerAdapterTest {
 
     @Test
     void scheduledPassIsNotWrappedInOneLargeTransaction() throws NoSuchMethodException {
-        assertNull(CamundaTaskListenerAdapter.class
+        assertNull(CamundaTaskAssigner.class
                 .getMethod("reconcileActiveUserTasks")
                 .getAnnotation(Transactional.class));
     }
@@ -114,7 +113,6 @@ class CamundaTaskListenerAdapterTest {
 
     private static class FakeCamundaRestClient extends CamundaRestClient {
         private final Map<String, Map<String, Object>> taskVariables = new HashMap<>();
-        private final Map<String, Set<String>> candidateGroups = new HashMap<>();
         private final Map<String, String> assignees = new HashMap<>();
         private final Map<String, String> authorizedTasks = new HashMap<>();
 
@@ -125,11 +123,6 @@ class CamundaTaskListenerAdapterTest {
         @Override
         public Map<String, Object> getTaskVariables(String taskId) {
             return taskVariables.getOrDefault(taskId, Map.of());
-        }
-
-        @Override
-        public boolean taskHasCandidateGroup(String taskId, String expectedGroup) {
-            return candidateGroups.getOrDefault(taskId, Set.of()).contains(expectedGroup);
         }
 
         @Override

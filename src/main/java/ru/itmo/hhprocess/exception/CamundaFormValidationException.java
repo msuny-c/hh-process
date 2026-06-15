@@ -1,4 +1,4 @@
-package ru.itmo.hhprocess.camunda;
+package ru.itmo.hhprocess.exception;
 
 public class CamundaFormValidationException extends RuntimeException {
 

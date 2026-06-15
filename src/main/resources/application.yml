@@ -93,6 +93,20 @@ app:
       poll-interval-ms: ${CAMUNDA_TASK_LISTENER_POLL_INTERVAL_MS:5000}
       initial-delay-ms: ${CAMUNDA_TASK_LISTENER_INITIAL_DELAY_MS:12000}
 
+camunda.bpm.client:
+  base-url: ${app.camunda.base-url}
+  worker-id: ${app.camunda.worker.id}
+  max-tasks: ${app.camunda.worker.max-tasks}
+  async-response-timeout: ${app.camunda.worker.async-response-timeout-ms}
+  lock-duration: ${app.camunda.worker.lock-duration-ms}
+  disable-auto-fetching: false
+  basic-auth:
+    username: ${app.camunda.username:}
+    password: ${app.camunda.password:}
+
+camunda:
+  autodeployment:
+    enabled: false
 
 logging:
   level:

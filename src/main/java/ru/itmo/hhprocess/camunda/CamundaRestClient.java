@@ -2,6 +2,7 @@ package ru.itmo.hhprocess.camunda;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -15,12 +16,11 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.web.util.UriUtils;
+import ru.itmo.hhprocess.config.CamundaProperties;
+import ru.itmo.hhprocess.utils.CamundaVariable;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.Map;
 import java.util.Optional;
 
@@ -29,6 +29,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class CamundaRestClient {
 
+    private static final ParameterizedTypeReference<List<Map<String, Object>>> TASK_LIST =
+            new ParameterizedTypeReference<>() {};
+
     private final RestTemplate camundaRestTemplate;
     private final CamundaProperties properties;
 
@@ -36,84 +39,22 @@ public class CamundaRestClient {
         return properties.isEnabled();
     }
 
-    public boolean isAvailable() {
-        if (!properties.isEnabled()) {
-            return false;
-        }
-        try {
-            camundaRestTemplate.getForEntity(url("/version"), Map.class);
-            return true;
-        } catch (RuntimeException e) {
-            log.warn("Camunda REST API is not available at {}: {}", properties.getBaseUrl(), e.getMessage());
-            return false;
-        }
-    }
-
     public Optional<String> deploy(String deploymentName, Map<String, Resource> resources) {
-        if (!properties.isEnabled()) {
+        if (!enabled()) {
             return Optional.empty();
         }
-        try {
-            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-            body.add("deployment-name", deploymentName);
-            int index = 0;
-            for (Map.Entry<String, Resource> entry : resources.entrySet()) {
-                String partName = "resource-" + index++;
-                body.add(partName, namedResource(partName, entry.getKey(), entry.getValue()));
-            }
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-            ResponseEntity<Map> response = camundaRestTemplate.postForEntity(
-                    url("/deployment/create"), new HttpEntity<>(body, headers), Map.class);
-            Object id = response.getBody() == null ? null : response.getBody().get("id");
-            return Optional.ofNullable(id).map(String::valueOf);
-        } catch (RuntimeException e) {
-            handle("deploy BPMN/resources", e);
-            return Optional.empty();
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("deployment-name", deploymentName);
+        int index = 0;
+        for (Map.Entry<String, Resource> entry : resources.entrySet()) {
+            String partName = "resource-" + index++;
+            body.add(partName, namedResource(partName, entry.getKey(), entry.getValue()));
         }
-    }
-
-    public List<String> findDeploymentIdsByProcessDefinitionKey(String processDefinitionKey) {
-        if (!properties.isEnabled()) {
-            return List.of();
-        }
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/process-definition"))
-                    .queryParam("key", processDefinitionKey)
-                    .toUriString();
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw == null || raw.isEmpty()) {
-                return List.of();
-            }
-            Set<String> ids = new LinkedHashSet<>();
-            for (Object item : raw) {
-                if (item instanceof Map<?, ?> map && map.get("deploymentId") != null) {
-                    ids.add(String.valueOf(map.get("deploymentId")));
-                }
-            }
-            return new ArrayList<>(ids);
-        } catch (RuntimeException e) {
-            handle("find Camunda deployments by process key " + processDefinitionKey, e);
-            return List.of();
-        }
-    }
-
-    public void deleteDeploymentCascade(String deploymentId) {
-        if (!properties.isEnabled()) {
-            return;
-        }
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/deployment/" + encodePath(deploymentId)))
-                    .queryParam("cascade", true)
-                    .queryParam("skipCustomListeners", true)
-                    .queryParam("skipIoMappings", true)
-                    .toUriString();
-            camundaRestTemplate.delete(uri);
-        } catch (RuntimeException e) {
-            handle("delete Camunda deployment " + deploymentId, e);
-        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        return post("/deployment/create", new HttpEntity<>(body, headers), Map.class, "deploy BPMN/resources")
+                .map(response -> response.get("id"))
+                .map(String::valueOf);
     }
 
     public boolean ensureGroupExists(String groupId, String groupName) {
@@ -121,281 +62,97 @@ public class CamundaRestClient {
     }
 
     public boolean ensureGroupExists(String groupId, String groupName, String groupType) {
-        if (!properties.isEnabled()) {
+        if (!enabled()) {
             return false;
         }
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/group"))
-                    .queryParam("id", groupId)
-                    .toUriString();
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw != null && !raw.isEmpty()) {
-                return true;
-            }
-        } catch (RuntimeException e) {
-            handle("read Camunda group " + groupId, e);
-            return false;
-        }
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("id", groupId);
-        body.put("name", groupName);
-        body.put("type", groupType == null || groupType.isBlank() ? "WORKFLOW" : groupType);
-        try {
-            camundaRestTemplate.postForEntity(url("/group/create"), body, Void.class);
+        if (!getList("/group", Map.of("id", groupId), "read Camunda group " + groupId).isEmpty()) {
             return true;
-        } catch (RuntimeException e) {
-            handle("create Camunda group " + groupId, e);
-            return false;
         }
+        Map<String, Object> body = Map.of(
+                "id", groupId,
+                "name", groupName,
+                "type", groupType == null || groupType.isBlank() ? "WORKFLOW" : groupType);
+        return postVoid("/group/create", body, "create Camunda group " + groupId);
     }
 
     public boolean ensureProcessStartAuthorization(String groupId, String processDefinitionKey) {
-        if (!properties.isEnabled()) {
-            return false;
-        }
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/authorization"))
-                    .queryParam("type", 1)
-                    .queryParam("groupIdIn", groupId)
-                    .queryParam("resourceType", 6)
-                    .queryParam("resourceId", processDefinitionKey)
-                    .toUriString();
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw != null && !raw.isEmpty()) {
-                return true;
-            }
-        } catch (RuntimeException e) {
-            handle("check Camunda start authorization group=" + groupId + " process=" + processDefinitionKey, e);
-        }
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("type", 1);
-        body.put("groupId", groupId);
-        body.put("resourceType", 6);
-        body.put("resourceId", processDefinitionKey);
-        body.put("permissions", List.of("CREATE_INSTANCE", "READ"));
-        try {
-            camundaRestTemplate.postForEntity(url("/authorization/create"), body, Map.class);
-            return true;
-        } catch (RuntimeException e) {
-            handle("create Camunda start authorization group=" + groupId + " process=" + processDefinitionKey, e);
-            return false;
-        }
+        return ensureAuthorization(Map.of(
+                "type", 1,
+                "groupId", groupId,
+                "resourceType", 6,
+                "resourceId", processDefinitionKey,
+                "permissions", List.of("CREATE_INSTANCE", "READ")), 6, processDefinitionKey);
     }
 
     public boolean ensureFilterReadAuthorization(String groupId, String filterId) {
         return ensureGroupAuthorization(groupId, 5, filterId, List.of("READ"));
     }
 
+    public boolean ensureGroupAuthorization(String groupId, int resourceType, String resourceId, List<String> permissions) {
+        String targetResourceId = resourceId == null || resourceId.isBlank() ? "*" : resourceId;
+        List<String> targetPermissions = permissions == null || permissions.isEmpty() ? List.of("READ") : permissions;
+        Map<String, Object> body = Map.of(
+                "type", 1,
+                "groupId", groupId,
+                "resourceType", resourceType,
+                "resourceId", targetResourceId,
+                "permissions", targetPermissions);
+        return ensureAuthorization(body, resourceType, targetResourceId);
+    }
+
     public boolean deleteGroupAuthorization(String groupId, int resourceType, String resourceId) {
-        if (!properties.isEnabled()) {
+        if (!enabled()) {
             return false;
         }
         String targetResourceId = resourceId == null || resourceId.isBlank() ? "*" : resourceId;
         boolean deleted = false;
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/authorization"))
-                    .queryParam("type", 1)
-                    .queryParam("groupIdIn", groupId)
-                    .queryParam("resourceType", resourceType)
-                    .queryParam("resourceId", targetResourceId)
-                    .toUriString();
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw == null || raw.isEmpty()) {
-                return false;
-            }
-            for (Object item : raw) {
-                if (item instanceof Map<?, ?> map && map.get("id") != null) {
-                    camundaRestTemplate.delete(url("/authorization/" + encodePath(String.valueOf(map.get("id")))));
-                    deleted = true;
-                }
-            }
-            return deleted;
-        } catch (RuntimeException e) {
-            handle("delete Camunda authorization group=" + groupId
-                    + " resourceType=" + resourceType + " resourceId=" + targetResourceId, e);
-            return deleted;
-        }
-    }
-
-    public boolean ensureGroupAuthorization(String groupId, int resourceType, String resourceId, List<String> permissions) {
-        if (!properties.isEnabled()) {
-            return false;
-        }
-        String targetResourceId = resourceId == null || resourceId.isBlank() ? "*" : resourceId;
-        List<String> targetPermissions = permissions == null || permissions.isEmpty() ? List.of("READ") : permissions;
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("type", 1);
-        body.put("groupId", groupId);
-        body.put("resourceType", resourceType);
-        body.put("resourceId", targetResourceId);
-        body.put("permissions", targetPermissions);
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/authorization"))
-                    .queryParam("type", 1)
-                    .queryParam("groupIdIn", groupId)
-                    .queryParam("resourceType", resourceType)
-                    .queryParam("resourceId", targetResourceId)
-                    .toUriString();
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (authorizationHasPermissions(raw, targetPermissions)) {
-                return true;
-            }
-            Optional<String> existingAuthorizationId = firstAuthorizationId(raw);
-            if (existingAuthorizationId.isPresent()) {
-                camundaRestTemplate.put(url("/authorization/" + encodePath(existingAuthorizationId.get())), body);
-                return true;
-            }
-        } catch (RuntimeException e) {
-            handle("check Camunda authorization group=" + groupId + " resourceType=" + resourceType + " resourceId=" + targetResourceId, e);
-        }
-
-        try {
-            camundaRestTemplate.postForEntity(url("/authorization/create"), body, Map.class);
-            return true;
-        } catch (RuntimeException e) {
-            handle("create Camunda authorization group=" + groupId + " resourceType=" + resourceType + " resourceId=" + targetResourceId, e);
-            return false;
-        }
-    }
-
-    private boolean authorizationHasPermissions(List<?> authorizations, List<String> permissions) {
-        if (authorizations == null || authorizations.isEmpty()) {
-            return false;
-        }
-        Set<String> required = new LinkedHashSet<>(permissions);
-        for (Object item : authorizations) {
-            if (item instanceof Map<?, ?> map && map.get("permissions") instanceof List<?> rawPermissions) {
-                Set<String> existing = new LinkedHashSet<>();
-                for (Object permission : rawPermissions) {
-                    existing.add(String.valueOf(permission));
-                }
-                if (existing.containsAll(required)) {
-                    return true;
-                }
+        for (Map<String, Object> item : getList("/authorization", Map.of(
+                "type", 1,
+                "groupIdIn", groupId,
+                "resourceType", resourceType,
+                "resourceId", targetResourceId), "delete Camunda authorization")) {
+            Object id = item.get("id");
+            if (id != null) {
+                deleteVoid("/authorization/" + encodePath(String.valueOf(id)), "delete Camunda authorization " + id);
+                deleted = true;
             }
         }
-        return false;
-    }
-
-    private Optional<String> firstAuthorizationId(List<?> authorizations) {
-        if (authorizations == null || authorizations.isEmpty()) {
-            return Optional.empty();
-        }
-        for (Object item : authorizations) {
-            if (item instanceof Map<?, ?> map && map.get("id") != null) {
-                return Optional.of(String.valueOf(map.get("id")));
-            }
-        }
-        return Optional.empty();
+        return deleted;
     }
 
     public List<String> findFilterIdsByName(String name) {
-        if (!properties.isEnabled()) {
-            return List.of();
-        }
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/filter"))
-                    .queryParam("name", name)
-                    .toUriString();
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw == null || raw.isEmpty()) {
-                return List.of();
-            }
-            List<String> ids = new ArrayList<>();
-            for (Object item : raw) {
-                if (item instanceof Map<?, ?> map && map.get("id") != null) {
-                    ids.add(String.valueOf(map.get("id")));
-                }
-            }
-            return ids;
-        } catch (RuntimeException e) {
-            handle("find Camunda filters name=" + name, e);
-            return List.of();
-        }
-    }
-
-    public List<String> findFilterIdsByOwner(String owner) {
-        if (!properties.isEnabled()) {
-            return List.of();
-        }
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/filter"))
-                    .queryParam("owner", owner)
-                    .toUriString();
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw == null || raw.isEmpty()) {
-                return List.of();
-            }
-            List<String> ids = new ArrayList<>();
-            for (Object item : raw) {
-                if (item instanceof Map<?, ?> map && map.get("id") != null) {
-                    ids.add(String.valueOf(map.get("id")));
-                }
-            }
-            return ids;
-        } catch (RuntimeException e) {
-            handle("find Camunda filters owner=" + owner, e);
-            return List.of();
-        }
+        return getList("/filter", Map.of("name", name), "find Camunda filters name=" + name).stream()
+                .map(item -> item.get("id"))
+                .filter(id -> id != null)
+                .map(String::valueOf)
+                .toList();
     }
 
     public void deleteFilter(String filterId) {
-        if (!properties.isEnabled()) {
-            return;
-        }
-        try {
-            camundaRestTemplate.delete(url("/filter/" + encodePath(filterId)));
-        } catch (RuntimeException e) {
-            handle("delete Camunda filter " + filterId, e);
+        if (enabled()) {
+            deleteVoid("/filter/" + encodePath(filterId), "delete Camunda filter " + filterId);
         }
     }
 
     public Optional<String> createTaskFilter(String name, Map<String, ?> query, Map<String, ?> filterProperties) {
-        if (!properties.isEnabled()) {
-            return Optional.empty();
-        }
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("name", name);
-        body.put("resourceType", "Task");
-        body.put("query", query == null ? Map.of() : query);
-        body.put("properties", filterProperties == null ? Map.of() : filterProperties);
-        try {
-            ResponseEntity<Map> response = camundaRestTemplate.postForEntity(url("/filter/create"), body, Map.class);
-            Object id = response.getBody() == null ? null : response.getBody().get("id");
-            return Optional.ofNullable(id).map(String::valueOf);
-        } catch (RuntimeException e) {
-            handle("create Camunda task filter " + name, e);
-            return Optional.empty();
-        }
+        Map<String, Object> body = Map.of(
+                "name", name,
+                "resourceType", "Task",
+                "query", query == null ? Map.of() : query,
+                "properties", filterProperties == null ? Map.of() : filterProperties);
+        return post("/filter/create", body, Map.class, "create Camunda task filter " + name)
+                .map(response -> response.get("id"))
+                .map(String::valueOf);
     }
 
     public boolean updateTaskFilter(String filterId, String name, Map<String, ?> query, Map<String, ?> filterProperties) {
-        if (!properties.isEnabled()) {
-            return false;
-        }
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("name", name);
-        body.put("resourceType", "Task");
-        body.put("query", query == null ? Map.of() : query);
-        body.put("properties", filterProperties == null ? Map.of() : filterProperties);
-        try {
-            camundaRestTemplate.put(url("/filter/" + encodePath(filterId)), body);
-            return true;
-        } catch (RuntimeException e) {
-            handle("update Camunda task filter " + name + " id=" + filterId, e);
-            return false;
-        }
+        Map<String, Object> body = Map.of(
+                "name", name,
+                "resourceType", "Task",
+                "query", query == null ? Map.of() : query,
+                "properties", filterProperties == null ? Map.of() : filterProperties);
+        return putVoid("/filter/" + encodePath(filterId), body, "update Camunda task filter " + name);
     }
-
-
 
     public boolean ensureUserExists(String userId, String email, String firstName, String lastName, String initialPassword) {
         return ensureUserExists(userId, email, firstName, lastName, initialPassword, false);
@@ -403,169 +160,62 @@ public class CamundaRestClient {
 
     public boolean ensureUserExists(String userId, String email, String firstName, String lastName,
                                     String initialPassword, boolean updatePasswordWhenExists) {
-        if (!properties.isEnabled()) {
+        if (!enabled()) {
             return false;
         }
         String encodedUserId = encodePath(userId);
-        boolean exists = false;
-        try {
-            camundaRestTemplate.getForEntity(url("/user/" + encodedUserId + "/profile"), Map.class);
-            exists = true;
-        } catch (HttpStatusCodeException e) {
-            if (!e.getStatusCode().is4xxClientError()) {
-                handle("read Camunda user " + userId, e);
-                return false;
-            }
-        } catch (RuntimeException e) {
-            handle("read Camunda user " + userId, e);
-            return false;
-        }
-
-        Map<String, Object> profile = new LinkedHashMap<>();
-        profile.put("id", userId);
-        profile.put("firstName", firstName == null ? "" : firstName);
-        profile.put("lastName", lastName == null ? "" : lastName);
-        profile.put("email", email == null ? userId : email);
-
+        boolean exists = get("/user/" + encodedUserId + "/profile", Map.class, "read Camunda user " + userId).isPresent();
+        Map<String, Object> profile = Map.of(
+                "id", userId,
+                "firstName", firstName == null ? "" : firstName,
+                "lastName", lastName == null ? "" : lastName,
+                "email", email == null ? userId : email);
         if (!exists) {
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("profile", profile);
-            body.put("credentials", Map.of("password", initialPassword == null || initialPassword.isBlank()
-                    ? "camunda" : initialPassword));
-            try {
-                camundaRestTemplate.postForEntity(url("/user/create"), body, Void.class);
-                return true;
-            } catch (RuntimeException e) {
-                handle("create Camunda user " + userId, e);
-                return false;
-            }
+            Map<String, Object> body = Map.of(
+                    "profile", profile,
+                    "credentials", Map.of("password", blankToDefault(initialPassword, "camunda")));
+            return postVoid("/user/create", body, "create Camunda user " + userId);
         }
-
-        try {
-            camundaRestTemplate.put(url("/user/" + encodedUserId + "/profile"), profile);
-            if (updatePasswordWhenExists) {
-                updateUserPassword(userId, initialPassword);
-            }
-            return true;
-        } catch (RuntimeException e) {
-            handle("update Camunda user profile " + userId, e);
+        if (!putVoid("/user/" + encodedUserId + "/profile", profile, "update Camunda user profile " + userId)) {
             return false;
         }
-    }
-
-    public boolean updateUserPassword(String userId, String password) {
-        if (!properties.isEnabled()) {
-            return false;
+        if (updatePasswordWhenExists && initialPassword != null && !initialPassword.isBlank()) {
+            putVoid("/user/" + encodedUserId + "/credentials", Map.of("password", initialPassword),
+                    "update Camunda user credentials " + userId);
         }
-        if (password == null || password.isBlank()) {
-            return false;
-        }
-        Map<String, Object> body = Map.of("password", password);
-        try {
-            camundaRestTemplate.put(url("/user/" + encodePath(userId) + "/credentials"), body);
-            return true;
-        } catch (RuntimeException e) {
-            handle("update Camunda user credentials " + userId, e);
-            return false;
-        }
+        return true;
     }
 
     public boolean ensureMembershipExists(String userId, String groupId) {
-        if (!properties.isEnabled()) {
+        if (!enabled()) {
             return false;
         }
-        String encodedUserId = encodePath(userId);
-        String encodedGroupId = encodePath(groupId);
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/group"))
-                    .queryParam("member", userId)
-                    .queryParam("id", groupId)
-                    .toUriString();
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw != null && !raw.isEmpty()) {
-                return true;
-            }
-        } catch (RuntimeException e) {
-            handle("check Camunda group membership user=" + userId + " group=" + groupId, e);
-        }
-
-        try {
-            camundaRestTemplate.put(url("/group/" + encodedGroupId + "/members/" + encodedUserId), null);
+        if (!getList("/group", Map.of("member", userId, "id", groupId),
+                "check Camunda group membership user=" + userId + " group=" + groupId).isEmpty()) {
             return true;
-        } catch (RuntimeException e) {
-            handle("create Camunda group membership user=" + userId + " group=" + groupId, e);
-            return false;
         }
-    }
-
-
-
-    public Set<String> findMembershipGroupIds(String userId) {
-        if (!properties.isEnabled()) {
-            return Set.of();
-        }
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/group"))
-                    .queryParam("member", userId)
-                    .toUriString();
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw == null || raw.isEmpty()) {
-                return Set.of();
-            }
-            Set<String> result = new LinkedHashSet<>();
-            for (Object item : raw) {
-                if (item instanceof Map<?, ?> map && map.get("id") != null) {
-                    result.add(String.valueOf(map.get("id")));
-                }
-            }
-            return result;
-        } catch (RuntimeException e) {
-            handle("read Camunda memberships for user=" + userId, e);
-            return Set.of();
-        }
-    }
-
-    public boolean removeMembershipIfExists(String userId, String groupId) {
-        if (!properties.isEnabled()) {
-            return false;
-        }
-        try {
-            camundaRestTemplate.delete(url("/group/" + encodePath(groupId) + "/members/" + encodePath(userId)));
-            return true;
-        } catch (RuntimeException e) {
-            handle("remove Camunda group membership user=" + userId + " group=" + groupId, e);
-            return false;
-        }
+        return putVoid("/group/" + encodePath(groupId) + "/members/" + encodePath(userId), null,
+                "create Camunda group membership user=" + userId + " group=" + groupId);
     }
 
     public Optional<String> startProcessByKey(String processKey, String businessKey, Map<String, ?> variables) {
-        if (!properties.isEnabled()) {
-            return Optional.empty();
-        }
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("businessKey", businessKey);
-        body.put("variables", CamundaVariable.variables(variables));
-        try {
-            ResponseEntity<Map> response = camundaRestTemplate.postForEntity(
-                    url("/process-definition/key/" + processKey + "/start"), body, Map.class);
-            Object id = response.getBody() == null ? null : response.getBody().get("id");
-            return Optional.ofNullable(id).map(String::valueOf);
-        } catch (RuntimeException e) {
-            handle("start Camunda process " + processKey + " businessKey=" + businessKey, e);
-            return Optional.empty();
-        }
+        Map<String, Object> body = Map.of(
+                "businessKey", businessKey,
+                "variables", CamundaVariable.variables(variables));
+        return post("/process-definition/key/" + processKey + "/start", body, Map.class,
+                "start Camunda process " + processKey + " businessKey=" + businessKey)
+                .map(response -> response.get("id"))
+                .map(String::valueOf);
     }
 
     public boolean updateProcessInstanceBusinessKey(String processInstanceId, String businessKey) {
-        if (!properties.isEnabled() || processInstanceId == null || processInstanceId.isBlank()
+        if (!enabled() || processInstanceId == null || processInstanceId.isBlank()
                 || businessKey == null || businessKey.isBlank()) {
             return false;
         }
-        Map<String, Object> body = Map.of("businessKey", businessKey);
         try {
-            camundaRestTemplate.put(url("/process-instance/" + encodePath(processInstanceId) + "/business-key"), body);
+            camundaRestTemplate.put(url("/process-instance/" + encodePath(processInstanceId) + "/business-key"),
+                    Map.of("businessKey", businessKey));
             return true;
         } catch (RuntimeException e) {
             logSoftFailure("update Camunda process businessKey processInstanceId=" + processInstanceId, e);
@@ -574,38 +224,17 @@ public class CamundaRestClient {
     }
 
     public boolean hasActiveProcessInstance(String processKey, String businessKey) {
-        if (!properties.isEnabled()) {
-            return false;
-        }
-        String uri = UriComponentsBuilder.fromHttpUrl(url("/process-instance"))
-                .queryParam("processDefinitionKey", processKey)
-                .queryParam("businessKey", businessKey)
-                .queryParam("active", true)
-                .toUriString();
-        if (hasActiveProcessInstanceByUri(uri, "find active Camunda process " + processKey + " businessKey=" + businessKey)) {
-            return true;
-        }
-        ProcessVariableQuery fallbackQuery = processVariableQueryFromBusinessKey(businessKey);
-        if (fallbackQuery == null) {
-            return false;
-        }
-        String fallbackUri = UriComponentsBuilder.fromHttpUrl(url("/process-instance"))
-                .queryParam("processDefinitionKey", processKey)
-                .queryParam("variables", fallbackQuery.toCamundaQuery())
-                .queryParam("active", true)
-                .toUriString();
-        return hasActiveProcessInstanceByUri(fallbackUri,
-                "find active Camunda process " + processKey + " variable=" + fallbackQuery);
+        return !getList("/process-instance", Map.of(
+                "processDefinitionKey", processKey,
+                "businessKey", businessKey,
+                "active", true), "find active Camunda process " + processKey + " businessKey=" + businessKey).isEmpty();
     }
 
     public boolean correlateMessage(String messageName, String businessKey, Map<String, ?> variables) {
-        if (!properties.isEnabled()) {
-            return false;
-        }
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("messageName", messageName);
-        body.put("businessKey", businessKey);
-        body.put("processVariables", CamundaVariable.variables(variables));
+        Map<String, Object> body = Map.of(
+                "messageName", messageName,
+                "businessKey", businessKey,
+                "processVariables", CamundaVariable.variables(variables));
         try {
             camundaRestTemplate.postForEntity(url("/message"), body, Map.class);
             return true;
@@ -623,214 +252,46 @@ public class CamundaRestClient {
     }
 
     public List<Map<String, Object>> findActiveTasks(String businessKey, String taskDefinitionKey) {
-        if (!properties.isEnabled()) {
-            return List.of();
-        }
-        String uri = UriComponentsBuilder.fromHttpUrl(url("/task"))
-                .queryParam("processInstanceBusinessKey", businessKey)
-                .queryParam("taskDefinitionKey", taskDefinitionKey)
-                .queryParam("active", true)
-                .toUriString();
-        List<Map<String, Object>> byBusinessKey = findActiveTasksByUri(uri,
-                "find Camunda task " + taskDefinitionKey + " businessKey=" + businessKey);
-        if (!byBusinessKey.isEmpty()) {
-            return byBusinessKey;
-        }
-        ProcessVariableQuery fallbackQuery = processVariableQueryFromBusinessKey(businessKey);
-        if (fallbackQuery == null) {
-            return List.of();
-        }
-        String fallbackUri = UriComponentsBuilder.fromHttpUrl(url("/task"))
-                .queryParam("processVariables", fallbackQuery.toCamundaQuery())
-                .queryParam("taskDefinitionKey", taskDefinitionKey)
-                .queryParam("active", true)
-                .toUriString();
-        return findActiveTasksByUri(fallbackUri,
-                "find Camunda task " + taskDefinitionKey + " variable=" + fallbackQuery);
-    }
-
-    public List<Map<String, Object>> findActiveTasksByProcessInstanceId(String processInstanceId, String taskDefinitionKey) {
-        if (!properties.isEnabled()) {
-            return List.of();
-        }
-        String uri = UriComponentsBuilder.fromHttpUrl(url("/task"))
-                .queryParam("processInstanceId", processInstanceId)
-                .queryParam("taskDefinitionKey", taskDefinitionKey)
-                .queryParam("active", true)
-                .toUriString();
-        return findActiveTasksByUri(uri,
-                "find Camunda task " + taskDefinitionKey + " processInstanceId=" + processInstanceId);
+        return getTaskList("/task", Map.of(
+                "processInstanceBusinessKey", businessKey,
+                "taskDefinitionKey", taskDefinitionKey,
+                "active", true), "find Camunda task " + taskDefinitionKey + " businessKey=" + businessKey);
     }
 
     public List<Map<String, Object>> findActiveUserTasks(int maxResults) {
-        if (!properties.isEnabled()) {
-            return List.of();
-        }
-        String uri = UriComponentsBuilder.fromHttpUrl(url("/task"))
-                .queryParam("active", true)
-                .queryParam("sortBy", "created")
-                .queryParam("sortOrder", "desc")
-                .queryParam("maxResults", Math.max(1, maxResults))
-                .toUriString();
-        return findActiveTasksByUri(uri, "find active Camunda user tasks");
+        return getTaskList("/task", Map.of(
+                "active", true,
+                "sortBy", "created",
+                "sortOrder", "desc",
+                "maxResults", Math.max(1, maxResults)), "find active Camunda user tasks");
     }
 
     public Map<String, Object> getTaskVariables(String taskId) {
-        if (!properties.isEnabled()) {
-            return Map.of();
-        }
-        try {
-            ResponseEntity<Map> response = camundaRestTemplate.exchange(
-                    url("/task/" + encodePath(taskId) + "/variables"), HttpMethod.GET, null, Map.class);
-            Map<?, ?> raw = response.getBody();
-            if (raw == null || raw.isEmpty()) {
-                return Map.of();
-            }
-            Map<String, Object> result = new LinkedHashMap<>();
-            raw.forEach((key, value) -> result.put(String.valueOf(key), value));
-            return result;
-        } catch (RuntimeException e) {
-            handle("read Camunda task variables " + taskId, e);
-            return Map.of();
-        }
+        return get("/task/" + encodePath(taskId) + "/variables", Map.class, "read Camunda task variables " + taskId)
+                .map(raw -> {
+                    Map<String, Object> result = new LinkedHashMap<>();
+                    raw.forEach((key, value) -> result.put(String.valueOf(key), value));
+                    return result;
+                })
+                .orElse(Map.of());
     }
 
     public boolean setTaskAssignee(String taskId, String userId) {
-        if (!properties.isEnabled()) {
-            return false;
-        }
-        Map<String, Object> body = Map.of("userId", userId);
-        try {
-            camundaRestTemplate.postForEntity(url("/task/" + encodePath(taskId) + "/assignee"), body, Void.class);
-            return true;
-        } catch (RuntimeException e) {
-            handle("assign Camunda task " + taskId + " to " + userId, e);
-            return false;
-        }
+        return postVoid("/task/" + encodePath(taskId) + "/assignee", Map.of("userId", userId),
+                "assign Camunda task " + taskId + " to " + userId);
     }
 
     public boolean ensureTaskUserAuthorization(String userId, String taskId) {
-        if (!properties.isEnabled()) {
-            return false;
-        }
-        try {
-            String uri = UriComponentsBuilder.fromHttpUrl(url("/authorization"))
-                    .queryParam("type", 1)
-                    .queryParam("userIdIn", userId)
-                    .queryParam("resourceType", 7)
-                    .queryParam("resourceId", taskId)
-                    .toUriString();
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw != null && !raw.isEmpty()) {
-                return true;
-            }
-        } catch (RuntimeException e) {
-            handle("check Camunda task authorization user=" + userId + " task=" + taskId, e);
-        }
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("type", 1);
-        body.put("userId", userId);
-        body.put("resourceType", 7);
-        body.put("resourceId", taskId);
-        body.put("permissions", List.of("READ", "UPDATE", "TASK_WORK"));
-        try {
-            camundaRestTemplate.postForEntity(url("/authorization/create"), body, Map.class);
-            return true;
-        } catch (RuntimeException e) {
-            handle("create Camunda task authorization user=" + userId + " task=" + taskId, e);
-            return false;
-        }
-    }
-
-    private boolean hasActiveProcessInstanceByUri(String uri, String operation) {
-        try {
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            return raw != null && !raw.isEmpty();
-        } catch (RuntimeException e) {
-            handle(operation, e);
-            return false;
-        }
-    }
-
-    private List<Map<String, Object>> findActiveTasksByUri(String uri, String operation) {
-        try {
-            ResponseEntity<List> response = camundaRestTemplate.exchange(uri, HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw == null || raw.isEmpty()) {
-                return List.of();
-            }
-            List<Map<String, Object>> result = new ArrayList<>();
-            for (Object item : raw) {
-                if (item instanceof Map<?, ?> map) {
-                    @SuppressWarnings("unchecked") Map<String, Object> typed = (Map<String, Object>) map;
-                    result.add(typed);
-                }
-            }
-            return result;
-        } catch (RuntimeException e) {
-            handle(operation, e);
-            return List.of();
-        }
-    }
-
-    private ProcessVariableQuery processVariableQueryFromBusinessKey(String businessKey) {
-        if (businessKey == null || businessKey.isBlank()) {
-            return null;
-        }
-        if (businessKey.startsWith("application:")) {
-            return new ProcessVariableQuery("applicationId", businessKey.substring("application:".length()));
-        }
-        if (businessKey.startsWith("vacancy:")) {
-            return new ProcessVariableQuery("vacancyId", businessKey.substring("vacancy:".length()));
-        }
-        return null;
-    }
-
-    private record ProcessVariableQuery(String name, String value) {
-        String toCamundaQuery() {
-            return name + "_eq_" + value;
-        }
-    }
-
-    public boolean taskHasCandidateGroup(String taskId, String expectedGroup) {
-        if (!properties.isEnabled()) {
-            return false;
-        }
-        try {
-            ResponseEntity<List> response = camundaRestTemplate.exchange(
-                    url("/task/" + taskId + "/identity-links"), HttpMethod.GET, null, List.class);
-            List<?> raw = response.getBody();
-            if (raw == null || raw.isEmpty()) {
-                return false;
-            }
-            for (Object item : raw) {
-                if (item instanceof Map<?, ?> map
-                        && expectedGroup.equals(String.valueOf(map.get("groupId")))
-                        && "candidate".equals(String.valueOf(map.get("type")))) {
-                    return true;
-                }
-            }
-            return false;
-        } catch (HttpStatusCodeException e) {
-            if (isMissingTask(e)) {
-                logSoftFailure("read Camunda task identity links " + taskId, e);
-                return false;
-            }
-            handle("read Camunda task identity links " + taskId, e);
-            return false;
-        } catch (RuntimeException e) {
-            handle("read Camunda task identity links " + taskId, e);
-            return false;
-        }
+        Map<String, Object> body = Map.of(
+                "type", 1,
+                "userId", userId,
+                "resourceType", 7,
+                "resourceId", taskId,
+                "permissions", List.of("READ", "UPDATE", "TASK_WORK"));
+        return ensureAuthorization(body, 7, taskId);
     }
 
     public boolean completeTask(String taskId, Map<String, ?> variables) {
-        if (!properties.isEnabled()) {
-            return false;
-        }
         Map<String, Object> body = Map.of("variables", CamundaVariable.variables(variables));
         try {
             camundaRestTemplate.postForEntity(url("/task/" + taskId + "/complete"), body, Void.class);
@@ -848,140 +309,131 @@ public class CamundaRestClient {
         }
     }
 
-    public List<Map<String, Object>> fetchAndLockExternalTasks(List<String> topics) {
-        if (!properties.isEnabled() || topics.isEmpty()) {
+    public boolean completeFirstTask(String businessKey, String taskDefinitionKey, Map<String, ?> variables) {
+        List<Map<String, Object>> tasks = findActiveTasks(businessKey, taskDefinitionKey);
+        if (tasks.isEmpty() || tasks.get(0).get("id") == null) {
+            return false;
+        }
+        return completeTask(String.valueOf(tasks.get(0).get("id")), variables);
+    }
+
+    private boolean ensureAuthorization(Map<String, Object> body, int resourceType, String resourceId) {
+        if (!enabled()) {
+            return false;
+        }
+        String queryKey = body.containsKey("userId") ? "userIdIn" : "groupIdIn";
+        String queryValue = String.valueOf(body.getOrDefault("userId", body.get("groupId")));
+        List<Map<String, Object>> existing = getList("/authorization", Map.of(
+                "type", 1,
+                queryKey, queryValue,
+                "resourceType", resourceType,
+                "resourceId", resourceId), "check Camunda authorization");
+        if (!existing.isEmpty()) {
+            Object id = existing.get(0).get("id");
+            if (id != null) {
+                return putVoid("/authorization/" + encodePath(String.valueOf(id)), body, "update Camunda authorization");
+            }
+        }
+        return postVoid("/authorization/create", body, "create Camunda authorization");
+    }
+
+    private List<Map<String, Object>> getTaskList(String path, Map<String, ?> queryParams, String operation) {
+        return getList(path, queryParams, operation);
+    }
+
+    private List<Map<String, Object>> getList(String path, Map<String, ?> queryParams, String operation) {
+        if (!enabled()) {
             return List.of();
         }
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("workerId", properties.getWorker().getId());
-        body.put("maxTasks", properties.getWorker().getMaxTasks());
-        body.put("usePriority", true);
-        body.put("asyncResponseTimeout", properties.getWorker().getAsyncResponseTimeoutMs());
-        List<Map<String, Object>> topicBody = topics.stream()
-                .map(topic -> Map.<String, Object>of(
-                        "topicName", topic,
-                        "lockDuration", properties.getWorker().getLockDurationMs(),
-                        "variables", List.of(
-                                "applicationId",
-                                "expiredApplicationId",
-                                "interviewId",
-                                "scheduleSlotId",
-                                "oldApplicationStatus",
-                                "formErrorMessage",
-                                "formErrorField",
-                                "formErrorFields",
-                                "formErrorCode",
-                                "vacancyId",
-                                "candidateUserId",
-                                "candidateCamundaUserId",
-                                "recruiterUserId",
-                                "adminUserId",
-                                "vacancyTitle",
-                                "starterUserId",
-                                "title",
-                                "description",
-                                "requiredSkills",
-                                "screeningThreshold",
-                                "screeningScore",
-                                "screeningScoreDelta",
-                                "screeningMatchedCount",
-                                "screeningTotalSkills",
-                                "requestedStatus",
-                                "resumeText",
-                                "coverLetter",
-                                "screeningPassed",
-                                "status",
-                                "action",
-                                "decision",
-                                "recruiterComment",
-                                "invitationMessage",
-                                "scheduledAt",
-                                "durationMinutes",
-                                "responseType",
-                                "responseMessage",
-                                "closeReason",
-                                "cancelReason",
-                                "resetReason",
-                                "rollbackReason",
-                                "permissionRole",
-                                "permissionOperation",
-                                "permissionOwnership",
-                                "permissionAllowed",
-                                "permissionChecked",
-                                "currentStatus",
-                                "statusAction",
-                                "statusTransition",
-                                "notificationStatus",
-                                "recipientRole",
-                                "notificationTemplateCode",
-                                "notificationTemplate",
-                                "notificationType",
-                                "notificationKind",
-                                "notificationDispatched",
-                                "applicationIdText",
-                                "weekOffset",
-                                "uiTitle",
-                                "uiPayload")))
-                .toList();
-        body.put("topics", topicBody);
         try {
-            ResponseEntity<List> response = camundaRestTemplate.postForEntity(url("/external-task/fetchAndLock"), body, List.class);
-            List<?> raw = response.getBody();
-            if (raw == null || raw.isEmpty()) {
-                return List.of();
-            }
-            List<Map<String, Object>> result = new ArrayList<>();
-            for (Object item : raw) {
-                if (item instanceof Map<?, ?> map) {
-                    @SuppressWarnings("unchecked") Map<String, Object> typed = (Map<String, Object>) map;
-                    result.add(typed);
-                }
-            }
-            return result;
+            ResponseEntity<List<Map<String, Object>>> response = camundaRestTemplate.exchange(
+                    buildUri(path, queryParams), HttpMethod.GET, null, TASK_LIST);
+            return response.getBody() == null ? List.of() : response.getBody();
         } catch (RuntimeException e) {
-            handle("fetch Camunda external tasks", e);
+            handle(operation, e);
             return List.of();
         }
     }
 
-    public void completeExternalTask(String externalTaskId, Map<String, ?> variables) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("workerId", properties.getWorker().getId());
-        body.put("variables", CamundaVariable.variables(variables));
+    private <T> Optional<T> get(String path, Class<T> type, String operation) {
+        if (!enabled()) {
+            return Optional.empty();
+        }
         try {
-            camundaRestTemplate.postForEntity(url("/external-task/" + externalTaskId + "/complete"), body, Void.class);
+            return Optional.ofNullable(camundaRestTemplate.getForObject(url(path), type));
+        } catch (HttpStatusCodeException e) {
+            if (e.getStatusCode().is4xxClientError()) {
+                return Optional.empty();
+            }
+            handle(operation, e);
+            return Optional.empty();
         } catch (RuntimeException e) {
-            handle("complete Camunda external task " + externalTaskId, e);
+            handle(operation, e);
+            return Optional.empty();
         }
     }
 
-    public boolean throwBpmnErrorExternalTask(String externalTaskId, String errorCode, String message, Map<String, ?> variables) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("workerId", properties.getWorker().getId());
-        body.put("errorCode", errorCode);
-        body.put("errorMessage", message == null ? "External task transaction failed" : message);
-        body.put("variables", CamundaVariable.variables(variables));
+    private <T> Optional<T> post(String path, Object body, Class<T> type, String operation) {
+        if (!enabled()) {
+            return Optional.empty();
+        }
         try {
-            camundaRestTemplate.postForEntity(url("/external-task/" + externalTaskId + "/bpmnError"), body, Void.class);
+            return Optional.ofNullable(camundaRestTemplate.postForObject(url(path), body, type));
+        } catch (RuntimeException e) {
+            handle(operation, e);
+            return Optional.empty();
+        }
+    }
+
+    private boolean postVoid(String path, Object body, String operation) {
+        if (!enabled()) {
+            return false;
+        }
+        try {
+            camundaRestTemplate.postForEntity(url(path), body, Void.class);
             return true;
         } catch (RuntimeException e) {
-            handle("throw Camunda BPMN error for external task " + externalTaskId, e);
+            handle(operation, e);
             return false;
         }
     }
 
-    public void failExternalTask(String externalTaskId, String message, String details) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("workerId", properties.getWorker().getId());
-        body.put("errorMessage", message == null ? "External task failed" : message);
-        body.put("errorDetails", details == null ? "" : details);
-        body.put("retries", 3);
-        body.put("retryTimeout", 10000);
-        try {
-            camundaRestTemplate.postForEntity(url("/external-task/" + externalTaskId + "/failure"), body, Void.class);
-        } catch (RuntimeException e) {
-            handle("fail Camunda external task " + externalTaskId, e);
+    private boolean putVoid(String path, Object body, String operation) {
+        if (!enabled()) {
+            return false;
         }
+        try {
+            camundaRestTemplate.put(url(path), body);
+            return true;
+        } catch (RuntimeException e) {
+            handle(operation, e);
+            return false;
+        }
+    }
+
+    private void deleteVoid(String path, String operation) {
+        if (!enabled()) {
+            return;
+        }
+        try {
+            camundaRestTemplate.delete(url(path));
+        } catch (RuntimeException e) {
+            handle(operation, e);
+        }
+    }
+
+    private String buildUri(String path, Map<String, ?> queryParams) {
+        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(url(path));
+        queryParams.forEach(builder::queryParam);
+        return builder.toUriString();
+    }
+
+    private boolean enabled() {
+        return properties.isEnabled();
+    }
+
+    private String blankToDefault(String value, String defaultValue) {
+        return value == null || value.isBlank() ? defaultValue : value;
     }
 
     private String encodePath(String value) {
@@ -1015,7 +467,8 @@ public class CamundaRestClient {
 
     private void logSoftFailure(String action, RuntimeException e) {
         if (e instanceof HttpStatusCodeException statusCodeException) {
-            log.warn("Cannot {}: status={}, body={}", action, statusCodeException.getStatusCode(), statusCodeException.getResponseBodyAsString());
+            log.warn("Cannot {}: status={}, body={}", action, statusCodeException.getStatusCode(),
+                    statusCodeException.getResponseBodyAsString());
         } else {
             log.warn("Cannot {}: {}", action, e.getMessage());
         }
@@ -1024,21 +477,12 @@ public class CamundaRestClient {
     private boolean isMessageCorrelationMiss(HttpStatusCodeException e) {
         String body = e.getResponseBodyAsString();
         return e.getStatusCode().is4xxClientError()
-                && (body.contains("MismatchingMessageCorrelationException")
-                || body.contains("Cannot correlate message"));
+                && (body.contains("MismatchingMessageCorrelationException") || body.contains("Cannot correlate message"));
     }
 
     private boolean isConcurrentTaskUpdate(HttpStatusCodeException e) {
         String body = e.getResponseBodyAsString();
         return e.getStatusCode().is5xxServerError()
-                && (body.contains("updated by another transaction concurrently")
-                || body.contains("ENGINE-03005"));
-    }
-
-    private boolean isMissingTask(HttpStatusCodeException e) {
-        String body = e.getResponseBodyAsString();
-        return e.getStatusCode().is5xxServerError()
-                && body.contains("Cannot find task with id")
-                && body.contains("task is null");
+                && (body.contains("updated by another transaction concurrently") || body.contains("ENGINE-03005"));
     }
 }

@@ -23,6 +23,7 @@
         <lombok.version>1.18.42</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <narayana.version>3.4.3</narayana.version>
+        <camunda.version>7.23.0</camunda.version>
     </properties>
 
     <dependencies>
@@ -115,6 +116,12 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>2.8.4</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.camunda.bpm.springboot</groupId>
+            <artifactId>camunda-bpm-spring-boot-starter-external-task-client</artifactId>
+            <version>${camunda.version}</version>
         </dependency>
 
         <dependency>

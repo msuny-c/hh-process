@@ -1,7 +1,8 @@
-package ru.itmo.hhprocess.camunda;
+package ru.itmo.hhprocess.utils;
 
 import org.junit.jupiter.api.Test;
 import ru.itmo.hhprocess.enums.ResponseType;
+import ru.itmo.hhprocess.exception.CamundaFormValidationException;
 
 import java.time.Instant;
 import java.util.Set;

@@ -11,10 +11,12 @@ import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.InterviewEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.enums.NotificationType;
+import ru.itmo.hhprocess.camunda.CamundaRestClient;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -27,7 +29,7 @@ public class TimeoutBatchProcessor {
     private final NotificationService notificationService;
     private final InterviewService interviewService;
     private final ScheduleService scheduleService;
-    private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
+    private final CamundaRestClient camundaRestClient;
 
     @Value("${app.timeout.debug.disable-notifications:false}")
     private boolean disableNotifications;
@@ -114,7 +116,9 @@ public class TimeoutBatchProcessor {
     }
 
     public java.util.Map<String, Object> completeExpiredInvitationProcess(UUID applicationId) {
-        applicationRepository.findById(applicationId).ifPresent(camundaWorkflowFacade::invitationTimedOut);
+        applicationRepository.findById(applicationId).ifPresent(application ->
+                camundaRestClient.completeFirstTask("application:" + applicationId, "CandidateInvitationResponseTask",
+                        Map.of("responseType", "TIMEOUT", "timeoutAt", Instant.now(), "applicationId", applicationId)));
         return java.util.Map.of("expiredProcessCompleted", true, "expiredApplicationId", applicationId,
                 "expiredFound", true, "batchClosed", 1);
     }
@@ -184,7 +188,8 @@ public class TimeoutBatchProcessor {
             log.info("Created timeout notifications for application {}", application.getId());
         }
 
-        camundaWorkflowFacade.invitationTimedOut(application);
+        camundaRestClient.completeFirstTask("application:" + application.getId(), "CandidateInvitationResponseTask",
+                Map.of("responseType", "TIMEOUT", "timeoutAt", now, "applicationId", application.getId()));
 
         log.info("Expired invitation application {} marked as CLOSED_BY_TIMEOUT", application.getId());
         return 1;

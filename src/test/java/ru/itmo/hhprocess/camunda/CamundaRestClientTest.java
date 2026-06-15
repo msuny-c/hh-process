@@ -6,6 +6,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.test.web.client.MockRestServiceServer;
+import ru.itmo.hhprocess.config.CamundaProperties;
 
 import java.util.Map;
 
@@ -81,22 +82,6 @@ class CamundaRestClientTest {
         CamundaRestClient client = new CamundaRestClient(restTemplate, strictProperties());
 
         assertFalse(client.completeTask("task-1", Map.of()));
-        server.verify();
-    }
-
-    @Test
-    void missingTaskIdentityLinksReturnsFalseWhenFailOnErrorIsEnabled() {
-        RestTemplate restTemplate = new RestTemplate();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
-        server.expect(requestTo("http://camunda:8080/engine-rest/task/task-1/identity-links"))
-                .andExpect(method(HttpMethod.GET))
-                .andRespond(withServerError()
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"type\":\"NullValueException\",\"message\":\"Cannot find task with id task-1: task is null\",\"code\":0}"));
-
-        CamundaRestClient client = new CamundaRestClient(restTemplate, strictProperties());
-
-        assertFalse(client.taskHasCandidateGroup("task-1", "RECRUITER"));
         server.verify();
     }
 

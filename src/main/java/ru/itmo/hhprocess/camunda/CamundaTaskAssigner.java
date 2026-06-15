@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import ru.itmo.hhprocess.utils.CamundaVariable;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.repository.UserRepository;
 
@@ -16,7 +17,7 @@ import java.util.UUID;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "app.camunda.task-listener", name = "enabled", havingValue = "true", matchIfMissing = true)
-public class CamundaTaskListenerAdapter {
+public class CamundaTaskAssigner {
 
     private static final int MAX_TASKS_PER_PASS = 100;
 
@@ -26,9 +27,6 @@ public class CamundaTaskListenerAdapter {
     @Scheduled(fixedDelayString = "${app.camunda.task-listener.poll-interval-ms:5000}",
             initialDelayString = "${app.camunda.task-listener.initial-delay-ms:12000}")
     public void reconcileActiveUserTasks() {
-        if (!camundaRestClient.isEnabled()) {
-            return;
-        }
         for (Map<String, Object> task : camundaRestClient.findActiveUserTasks(MAX_TASKS_PER_PASS)) {
             reconcileTask(task);
         }
