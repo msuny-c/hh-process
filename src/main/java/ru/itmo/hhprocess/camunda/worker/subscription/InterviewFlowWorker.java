@@ -30,11 +30,7 @@ public abstract class InterviewFlowWorker extends AbstractExternalTaskWorker {
             case "ReturnApplicationToReview" -> interviewProcessService.returnApplicationToReview(
                     interviewId, adminUserId, resetReason);
             case "RecordAdminResetHistory" -> interviewProcessService.recordAdminResetHistory(interviewId, adminUserId);
-            case "ResetInterviewToDb" -> interviewProcessService.resetInterviewByAdminInDb(
-                    interviewId, adminUserId, resetReason);
-            case "NotifyAdminResetParticipants" -> interviewProcessService.notifyAdminInterviewReset(
-                    variables.readRequiredUuid("applicationId"), resetReason);
-            default -> interviewProcessService.resetInterviewByAdmin(interviewId, adminUserId, resetReason);
+            default -> Map.of("adminInterviewResetIgnored", true, "activityId", activityId);
         };
     }
 
@@ -52,8 +48,6 @@ public abstract class InterviewFlowWorker extends AbstractExternalTaskWorker {
                     interviewId, recruiterUserId, variables.stringValue("starterUserId"), cancelReason);
             case "RecordRecruiterCancelHistory" -> interviewProcessService.recordRecruiterCancelHistory(
                     interviewId, recruiterUserId, variables.stringValue("starterUserId"));
-            case "NotifyRecruiterCancelParticipants" -> interviewProcessService.notifyRecruiterCancelParticipants(
-                    variables.readRequiredUuid("applicationId"), cancelReason);
             default -> Map.of("interviewCancelIgnored", true, "activityId", activityId);
         };
     }

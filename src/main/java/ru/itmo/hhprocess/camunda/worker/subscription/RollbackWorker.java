@@ -14,11 +14,13 @@ import java.util.Map;
 @ConditionalOnProperty(prefix = "app.camunda.worker", name = "enabled", havingValue = "true", matchIfMissing = true)
 @CamundaWorkerSubscriptions.Rollback
 public class RollbackWorker extends AbstractExternalTaskWorker {
+
     private final ApplicationService applicationService;
     private final VacancyLifecycleService vacancyLifecycleService;
 
     public RollbackWorker(CamundaFormValidator formValidator,
-                          ApplicationService applicationService, VacancyLifecycleService vacancyLifecycleService) {
+                          ApplicationService applicationService,
+                          VacancyLifecycleService vacancyLifecycleService) {
         super(formValidator);
         this.applicationService = applicationService;
         this.vacancyLifecycleService = vacancyLifecycleService;
@@ -27,16 +29,20 @@ public class RollbackWorker extends AbstractExternalTaskWorker {
     @Override
     protected Map<String, Object> handle(String activityId, CamundaTaskVariables variables) {
         return switch (activityId) {
-            case "RollbackApplicationTransaction", "RollbackAdminReset", "RollbackRecruiterCancel" -> {
-                var result = applicationService.rollbackApplicationTransaction(
-                        variables.readRequiredUuid("applicationId"),
-                        variables.stringValue("rollbackReason"));
-                yield CamundaProcessVariables.rollbackCompleted(result.application(), result.oldStatus());
-            }
+            case "RollbackApplicationTransaction" -> rollbackApplication(
+                    variables.readRequiredUuid("applicationId"), variables.stringValue("rollbackReason"));
             case "RollbackVacancyTransaction" -> vacancyLifecycleService.rollbackVacancyTransaction(
-                    variables.readRequiredUuid("vacancyId"),
-                    variables.stringValue("rollbackReason"));
+                    variables.readRequiredUuid("vacancyId"), variables.stringValue("rollbackReason"));
+            case "RollbackAdminReset" -> rollbackApplication(
+                    variables.readRequiredUuid("applicationId"), variables.stringValue("rollbackReason"));
+            case "RollbackRecruiterCancel" -> rollbackApplication(
+                    variables.readRequiredUuid("applicationId"), variables.stringValue("rollbackReason"));
             default -> Map.of("rollbackIgnored", true, "activityId", activityId);
         };
+    }
+
+    private Map<String, Object> rollbackApplication(java.util.UUID applicationId, String rollbackReason) {
+        var result = applicationService.rollbackApplicationTransaction(applicationId, rollbackReason);
+        return CamundaProcessVariables.rollbackCompleted(result.application(), result.oldStatus());
     }
 }

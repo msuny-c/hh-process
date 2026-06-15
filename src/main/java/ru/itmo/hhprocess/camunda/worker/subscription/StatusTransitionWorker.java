@@ -4,6 +4,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import ru.itmo.hhprocess.utils.CamundaFormValidator;
 import ru.itmo.hhprocess.utils.CamundaTaskVariables;
+import ru.itmo.hhprocess.service.StatusTransitionService;
 
 import java.util.Map;
 
@@ -12,16 +13,33 @@ import java.util.Map;
 @CamundaWorkerSubscriptions.StatusTransition
 public class StatusTransitionWorker extends AbstractExternalTaskWorker {
 
-    public StatusTransitionWorker(CamundaFormValidator formValidator) {
+    private final StatusTransitionService statusTransitionService;
+
+    public StatusTransitionWorker(CamundaFormValidator formValidator,
+                                  StatusTransitionService statusTransitionService) {
         super(formValidator);
+        this.statusTransitionService = statusTransitionService;
     }
 
     @Override
     protected Map<String, Object> handle(String activityId, CamundaTaskVariables variables) {
-        return Map.of(
-                "currentStatus", variables.stringValue("status"),
-                "statusAction", activityId,
-                "requestedStatus", variables.stringValue("requestedStatus")
-        );
+        return switch (activityId) {
+            case "PrepareRecruiterDecisionTransition" ->
+                    statusTransitionService.prepareRecruiterDecisionTransition(
+                            variables.readRequiredUuid("applicationId"),
+                            variables.stringValue("decision"));
+            case "PrepareCandidateResponseTransition" ->
+                    statusTransitionService.prepareCandidateResponseTransition(
+                            variables.readRequiredUuid("applicationId"),
+                            variables.stringValue("responseType"));
+            case "PrepareCloseVacancyTransition" ->
+                    statusTransitionService.prepareCloseVacancyTransition(
+                            variables.readRequiredUuid("vacancyId"));
+            case "PrepareVacancyStatusTransition" ->
+                    statusTransitionService.prepareVacancyStatusTransition(
+                            variables.readRequiredUuid("vacancyId"),
+                            variables.stringValue("requestedStatus"));
+            default -> statusTransitionService.prepareStatusTransition("UNKNOWN", "UNKNOWN", "");
+        };
     }
 }

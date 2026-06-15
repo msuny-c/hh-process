@@ -59,10 +59,9 @@ public abstract class VacancyFlowWorker extends AbstractExternalTaskWorker {
             case "ReleaseScheduleSlotsForClosedVacancy" -> vacancyLifecycleService.releaseScheduleSlotsForClosedVacancy(vacancyId);
             case "CloseActiveApplicationsForVacancy" -> vacancyLifecycleService.closeActiveApplicationsForVacancy(vacancyId, closeReason);
             case "RecordVacancyClosedHistory" -> vacancyLifecycleService.recordVacancyClosedHistory(vacancyId);
-            case "CloseVacancyAndApplicationsToDb" -> vacancyLifecycleService.closeVacancyApplicationsInDb(vacancyId, closeReason);
             case "NotifyVacancyClosedCandidates" -> notificationService.notifyVacancyClosedCandidates(vacancyId);
             case "CorrelateVacancyClosedApplications" -> vacancyLifecycleService.correlateVacancyClosedApplications(vacancyId, closeReason);
-            default -> vacancyLifecycleService.closeVacancyApplications(vacancyId, closeReason);
+            default -> Map.of("vacancyCloseIgnored", true, "activityId", activityId);
         };
     }
 

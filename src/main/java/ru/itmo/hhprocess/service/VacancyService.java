@@ -23,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -33,7 +32,6 @@ import java.util.UUID;
 public class VacancyService {
 
     private final VacancyRepository vacancyRepository;
-    private final UserRepository userRepository;
     private final AuthService authService;
     private final VacancyMapper vacancyMapper;
     private final VacancyHistoryService vacancyHistoryService;

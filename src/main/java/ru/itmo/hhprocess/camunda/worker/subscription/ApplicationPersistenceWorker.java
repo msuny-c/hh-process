@@ -6,8 +6,6 @@ import ru.itmo.hhprocess.utils.CamundaFormValidator;
 import ru.itmo.hhprocess.service.ApplicationService;
 import ru.itmo.hhprocess.service.InterviewProcessService;
 import ru.itmo.hhprocess.service.InvitationResponseService;
-import ru.itmo.hhprocess.service.NotificationService;
-import ru.itmo.hhprocess.service.VacancyLifecycleService;
 
 @Component
 @ConditionalOnProperty(prefix = "app.camunda.worker", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -16,10 +14,7 @@ public class ApplicationPersistenceWorker extends ApplicationFlowWorker {
     public ApplicationPersistenceWorker(CamundaFormValidator formValidator,
                                         ApplicationService applicationService,
                                         InterviewProcessService interviewProcessService,
-                                        InvitationResponseService invitationResponseService,
-                                        NotificationService notificationService,
-                                        VacancyLifecycleService vacancyLifecycleService) {
-        super(formValidator, applicationService, interviewProcessService, invitationResponseService,
-                notificationService, vacancyLifecycleService);
+                                        InvitationResponseService invitationResponseService) {
+        super(formValidator, applicationService, interviewProcessService, invitationResponseService);
     }
 }

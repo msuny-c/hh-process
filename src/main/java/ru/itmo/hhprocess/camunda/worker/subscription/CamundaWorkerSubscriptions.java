@@ -19,16 +19,6 @@ public final class CamundaWorkerSubscriptions {
 
     @Target(ElementType.TYPE)
     @Retention(RetentionPolicy.RUNTIME)
-    @ExternalTaskSubscription(topicName = "notification-send", variableNames = {
-            "applicationId", "vacancyId", "recruiterComment", "invitationMessage",
-            "scheduledAt", "durationMinutes", "responseType", "responseMessage", "closeReason", "candidateUserId",
-            "starterUserId", "resumeText", "coverLetter", "interviewId"
-    })
-    public @interface NotificationSend {
-    }
-
-    @Target(ElementType.TYPE)
-    @Retention(RetentionPolicy.RUNTIME)
     @ExternalTaskSubscription(topicName = "application-persistence", variableNames = {
             "applicationId", "vacancyId", "recruiterComment", "invitationMessage",
             "scheduledAt", "durationMinutes", "responseType", "responseMessage", "closeReason", "candidateUserId",
@@ -39,20 +29,8 @@ public final class CamundaWorkerSubscriptions {
 
     @Target(ElementType.TYPE)
     @Retention(RetentionPolicy.RUNTIME)
-    @ExternalTaskSubscription(topicName = "application-notification", variableNames = {
-            "applicationId", "vacancyId", "recruiterComment", "invitationMessage",
-            "scheduledAt", "durationMinutes", "responseType", "responseMessage", "closeReason", "candidateUserId",
-            "starterUserId", "resumeText", "coverLetter", "interviewId"
-    })
-    public @interface ApplicationNotification {
-    }
-
-    @Target(ElementType.TYPE)
-    @Retention(RetentionPolicy.RUNTIME)
     @ExternalTaskSubscription(topicName = "application-message", variableNames = {
-            "applicationId", "vacancyId", "recruiterComment", "invitationMessage",
-            "scheduledAt", "durationMinutes", "responseType", "responseMessage", "closeReason", "candidateUserId",
-            "starterUserId", "resumeText", "coverLetter", "interviewId"
+            "applicationId", "closeReason"
     })
     public @interface ApplicationMessage {
     }
