@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 11,
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "type": "default",
+  "id": "admin-user-create-form",
+  "components": [
+    {
+      "type": "html",
+      "id": "errorBanner",
+      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\"><strong>Ошибка формы:</strong> {{formErrorMessage}}<br/><span>Поля: {{formErrorFields}}</span></div>",
+      "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
+    },
+    { "type": "text", "id": "header", "text": "## Создание пользователя" },
+    { "type": "textfield", "id": "starterUserId", "key": "starterUserId", "label": "Camunda пользователь администратора", "readonly": true },
+    { "type": "textfield", "id": "email", "key": "email", "label": "Email", "validate": { "required": true, "maxLength": 255 } },
+    { "type": "textfield", "id": "password", "key": "password", "label": "Пароль", "validate": { "required": true, "minLength": 8, "maxLength": 128 } },
+    { "type": "textfield", "id": "firstName", "key": "firstName", "label": "Имя", "validate": { "required": true, "minLength": 2, "maxLength": 255 } },
+    { "type": "textfield", "id": "lastName", "key": "lastName", "label": "Фамилия", "validate": { "required": true, "minLength": 2, "maxLength": 255 } }
+  ]
+}

@@ -139,6 +139,19 @@ def register_candidate(api: API, email: Optional[str] = None, password: str = CA
     return me(api, (actual_email, password), 'CANDIDATE')
 
 
+def create_recruiter(api: API, admin: SessionCtx, email: Optional[str] = None, password: str = CANDIDATE_PASSWORD) -> SessionCtx:
+    actual_email = email or unique_email('recruiter')
+    payload = {
+        'email': actual_email,
+        'password': password,
+        'first_name': 'Rec',
+        'last_name': 'Owner',
+    }
+    data = api.json('POST', '/api/v1/admin/users/recruiters', auth=admin.auth, expected=[200, 201], payload=payload)
+    ensure(data and (data.get('user_id') or data.get('userId')), f'Bad recruiter provision response: {data}')
+    return me(api, (actual_email, password), 'RECRUITER')
+
+
 def create_vacancy(api: API, recruiter: SessionCtx, title: str, screening_threshold: int = 1) -> Dict[str, Any]:
     return api.json(
         'POST',

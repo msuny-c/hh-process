@@ -16,12 +16,12 @@
       </bpmn:lane>
     </bpmn:laneSet>
     <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Рекрутер открыл карточку отклика" />
-    <bpmn:userTask id="EnterRecruiterApplicationId" name="Ввести или выбрать идентификатор отклика" camunda:formRef="application-id-input-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:userTask id="EnterRecruiterApplicationId" name="Ввести или выбрать идентификатор отклика" camunda:formRef="application-id-input-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
     <bpmn:serviceTask id="LoadRecruiterApplicationView" name="Загрузить отклик с проверкой владельца-вакансии" camunda:type="external" camunda:topic="ui-query" />
     <bpmn:boundaryEvent id="RecruiterApplicationViewValidationError" attachedToRef="LoadRecruiterApplicationView">
       <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
     </bpmn:boundaryEvent>
-    <bpmn:userTask id="DisplayRecruiterApplicationView" name="Показать рекрутеру детали отклика" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:userTask id="DisplayRecruiterApplicationView" name="Показать рекрутеру детали отклика" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
     <bpmn:endEvent id="End" name="Карточка отклика показана рекрутеру" />
     <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="EnterRecruiterApplicationId" />
     <bpmn:sequenceFlow id="F2" sourceRef="EnterRecruiterApplicationId" targetRef="LoadRecruiterApplicationView" />

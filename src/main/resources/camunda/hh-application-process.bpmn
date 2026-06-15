@@ -149,12 +149,12 @@
     <bpmn:serviceTask id="ResolveRecruiterDecisionPermission" name="Система: собрать данные для проверки права рассматривать отклик" camunda:type="external" camunda:topic="permission-check" />
     <bpmn:businessRuleTask id="EvaluateRecruiterDecisionPermission" name="Таблица решений: проверить право рекрутера на рассмотрение отклика" camunda:resultVariable="permissionAllowed" camunda:decisionRef="hhOperationPermissions" camunda:mapDecisionResult="singleEntry" camunda:decisionRefBinding="latest" />
     <bpmn:exclusiveGateway id="RecruiterDecisionPermissionGateway" name="Рекрутер имеет право рассмотреть этот отклик?" />
-    <bpmn:userTask id="RecruiterDecisionTask" name="Рекрутер рассматривает отклик" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:userTask id="RecruiterDecisionTask" name="Рекрутер рассматривает отклик" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest" camunda:assignee="${recruiterCamundaUserId}" />
     <bpmn:serviceTask id="ValidateInvitationForm" name="Проверить дату, длительность и текст приглашения" camunda:type="external" camunda:topic="form-validation" />
     <bpmn:endEvent id="RecruiterDecisionPermissionDenied" name="Рекрутеру запрещено рассматривать этот отклик" />
     <bpmn:exclusiveGateway id="RecruiterDecisionTransitionGateway" name="Таблица решений разрешила новый статус после решения рекрутера?" />
     <bpmn:endEvent id="RecruiterDecisionTransitionDenied" name="Таблица решений запретила новый статус отклика" />
-    <bpmn:userTask id="WriteInvitationTask" name="Рекрутер заполняет приглашение на интервью" camunda:formRef="invitation-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:userTask id="WriteInvitationTask" name="Рекрутер заполняет приглашение на интервью" camunda:formRef="invitation-form" camunda:formRefBinding="latest" camunda:assignee="${recruiterCamundaUserId}" />
     <bpmn:endEvent id="ResponseEnd" name="Ответ кандидата обработан" />
     <bpmn:userTask id="CandidateResponseResultTask" name="Показать результат ответа кандидата" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${candidateCamundaUserId}" />
     <bpmn:callActivity id="NotifyCandidateResponse" name="Подпроцесс: уведомить рекрутера об ответе кандидата" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">

@@ -40,17 +40,17 @@
     <bpmn:startEvent id="VacancyStart" name="Запущен процесс создания или управления вакансией" camunda:initiator="starterUserId" />
     <bpmn:exclusiveGateway id="VacancyCreationModeGateway" name="Способ запуска вакансии" default="VF2a" />
     <bpmn:serviceTask id="ValidateCreateVacancyForm" name="Проверить обязательные поля вакансии" camunda:type="external" camunda:topic="vacancy-create" />
-    <bpmn:userTask id="VacancyCreatedResultTask" name="Показать рекрутеру результат создания вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:userTask id="VacancyCreatedResultTask" name="Показать рекрутеру результат создания вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:assignee="${execution.hasVariable('recruiterCamundaUserId') ? recruiterCamundaUserId : starterUserId}" />
     <bpmn:serviceTask id="ValidateCloseVacancyForm" name="Проверить причину закрытия вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
     <bpmn:businessRuleTask id="EvaluateCloseVacancyTransition" name="Таблица решений: разрешить или запретить закрытие вакансии" camunda:resultVariable="statusTransition" camunda:decisionRef="hhStatusTransitions" camunda:mapDecisionResult="singleResult" camunda:decisionRefBinding="latest" />
     <bpmn:exclusiveGateway id="CloseVacancyTransitionGateway" name="Таблица решений разрешила закрыть вакансию?" />
     <bpmn:endEvent id="CloseVacancyTransitionDenied" name="Таблица решений запретила закрытие вакансии" />
-    <bpmn:userTask id="CreateVacancyTask" name="Рекрутер заполняет форму вакансии" camunda:formRef="create-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER">
+    <bpmn:userTask id="CreateVacancyTask" name="Рекрутер заполняет форму вакансии" camunda:formRef="create-vacancy-form" camunda:formRefBinding="latest" camunda:assignee="${execution.hasVariable('recruiterCamundaUserId') ? recruiterCamundaUserId : starterUserId}">
       <bpmn:incoming>VF2a</bpmn:incoming>
       <bpmn:outgoing>VF2</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:serviceTask id="CreateVacancyFromForm" name="Создать вакансию и связать её с рекрутером" camunda:type="external" camunda:topic="vacancy-create" />
-    <bpmn:userTask id="ManageVacancyTask" name="Рекрутер выбирает действие по вакансии" camunda:formRef="close-vacancy-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER">
+    <bpmn:userTask id="ManageVacancyTask" name="Рекрутер выбирает действие по вакансии" camunda:formRef="close-vacancy-form" camunda:formRefBinding="latest" camunda:assignee="${execution.hasVariable('recruiterCamundaUserId') ? recruiterCamundaUserId : starterUserId}">
       <bpmn:incoming>VF2g</bpmn:incoming>
       <bpmn:outgoing>VF3</bpmn:outgoing>
     </bpmn:userTask>
@@ -60,7 +60,7 @@
     </bpmn:intermediateThrowEvent>
     <bpmn:serviceTask id="RollbackVacancyTransaction" name="Восстановить данные вакансии после ошибки" camunda:type="external" camunda:topic="transaction-rollback" />
     <bpmn:endEvent id="VacancyRollbackEnd" name="Восстановление после закрытия вакансии завершено" />
-    <bpmn:userTask id="VacancyClosedResultTask" name="Показать результат закрытия вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:userTask id="VacancyClosedResultTask" name="Показать результат закрытия вакансии" camunda:formRef="vacancy-result-form" camunda:formRefBinding="latest" camunda:assignee="${execution.hasVariable('recruiterCamundaUserId') ? recruiterCamundaUserId : starterUserId}" />
     <bpmn:endEvent id="VacancyClosedEnd" name="Вакансия закрыта, интервью и отклики обработаны" />
     <bpmn:serviceTask id="CorrelateVacancyClosedApplications" name="Сообщить активным откликам о закрытии вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />
     <bpmn:serviceTask id="NotifyVacancyClosedCandidates" name="Создать уведомления кандидатам о закрытии вакансии" camunda:type="external" camunda:topic="vacancy-close-applications" />

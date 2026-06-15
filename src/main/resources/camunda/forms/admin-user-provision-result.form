@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 11,
+  "exporter": { "name": "Camunda Modeler", "version": "standalone-lab" },
+  "type": "default",
+  "id": "admin-user-provision-result-form",
+  "components": [
+    {
+      "type": "html",
+      "id": "errorBanner",
+      "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\"><strong>Ошибка формы:</strong> {{formErrorMessage}}<br/><span>Поля: {{formErrorFields}}</span></div>",
+      "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
+    },
+    { "type": "text", "id": "header", "text": "## Пользователь создан" },
+    { "type": "textfield", "id": "provisionedEmail", "key": "provisionedEmail", "label": "Email в приложении", "readonly": true },
+    { "type": "textfield", "id": "provisionedRole", "key": "provisionedRole", "label": "Роль", "readonly": true },
+    { "type": "textfield", "id": "provisionedUserId", "key": "provisionedUserId", "label": "ID пользователя в БД", "readonly": true },
+    { "type": "textfield", "id": "provisionedCamundaUserId", "key": "provisionedCamundaUserId", "label": "Логин Camunda", "readonly": true },
+    { "type": "textarea", "id": "provisioningResultMessage", "key": "provisioningResultMessage", "label": "Результат", "readonly": true }
+  ]
+}

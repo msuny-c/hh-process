@@ -2,9 +2,12 @@ package ru.itmo.hhprocess.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ru.itmo.hhprocess.dto.admin.AdminCreateUserRequest;
+import ru.itmo.hhprocess.dto.admin.AdminUserProvisionResponse;
 import ru.itmo.hhprocess.dto.admin.JobResultResponse;
 import ru.itmo.hhprocess.dto.admin.ResetInterviewRequest;
 import ru.itmo.hhprocess.dto.admin.ResetInterviewResponse;
+import ru.itmo.hhprocess.service.AdminUserProvisioningService;
 import ru.itmo.hhprocess.service.InterviewProcessService;
 import ru.itmo.hhprocess.service.TimeoutService;
 
@@ -29,6 +32,7 @@ public class AdminController {
 
     private final TimeoutService timeoutService;
     private final InterviewProcessService interviewProcessService;
+    private final AdminUserProvisioningService adminUserProvisioningService;
 
     @Operation(summary = "Закрыть просроченные приглашения")
     @PostMapping("/jobs/close-expired-invitations")
@@ -60,5 +64,19 @@ public class AdminController {
                                                  @Valid @RequestBody ResetInterviewRequest request) {
         log.info("Admin interview reset endpoint invoked; interviewId={}", interviewId);
         return interviewProcessService.resetInterviewByAdmin(interviewId, request);
+    }
+
+    @Operation(summary = "Создать кандидата в приложении и Camunda")
+    @PostMapping("/users/candidates")
+    @PreAuthorize("hasAuthority('USER_PROVISION')")
+    public AdminUserProvisionResponse createCandidate(@Valid @RequestBody AdminCreateUserRequest request) {
+        return adminUserProvisioningService.createCandidate(request);
+    }
+
+    @Operation(summary = "Создать рекрутера в приложении и Camunda")
+    @PostMapping("/users/recruiters")
+    @PreAuthorize("hasAuthority('USER_PROVISION')")
+    public AdminUserProvisionResponse createRecruiter(@Valid @RequestBody AdminCreateUserRequest request) {
+        return adminUserProvisioningService.createRecruiter(request);
     }
 }

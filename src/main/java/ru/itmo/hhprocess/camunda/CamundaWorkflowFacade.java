@@ -49,6 +49,7 @@ public class CamundaWorkflowFacade {
                 requestBusinessKey,
                 Map.of(
                         "recruiterUserId", recruiterUser.getId(),
+                        "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(recruiterUser),
                         "title", safe(title),
                         "description", safe(description),
                         "requiredSkills", requiredSkills == null ? "" : String.join(", ", requiredSkills),
@@ -67,6 +68,7 @@ public class CamundaWorkflowFacade {
                 Map.of(
                         "vacancyId", vacancy.getId(),
                         "recruiterUserId", vacancy.getRecruiterUser().getId(),
+                        "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(vacancy.getRecruiterUser()),
                         "title", vacancy.getTitle(),
                         "restAutoSubmit", true,
                         "status", vacancy.getStatus().name()
@@ -83,6 +85,7 @@ public class CamundaWorkflowFacade {
         variables.put("candidateUserId", application.getCandidateUser().getId());
         variables.put("candidateCamundaUserId", CamundaIdentitySyncService.camundaUserId(application.getCandidateUser()));
         variables.put("recruiterUserId", application.getVacancy().getRecruiterUser().getId());
+        variables.put("recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(application.getVacancy().getRecruiterUser()));
         variables.put("vacancyTitle", application.getVacancy().getTitle());
         variables.put("screeningPassed", screeningPassed);
         variables.put("status", application.getStatus().name());
@@ -104,6 +107,7 @@ public class CamundaWorkflowFacade {
         variables.put("candidateUserId", candidateUser.getId());
         variables.put("candidateCamundaUserId", CamundaIdentitySyncService.camundaUserId(candidateUser));
         variables.put("recruiterUserId", vacancy.getRecruiterUser().getId());
+        variables.put("recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(vacancy.getRecruiterUser()));
         variables.put("vacancyTitle", vacancy.getTitle());
         variables.put("resumeText", safe(resumeText));
         variables.put("coverLetter", safe(coverLetter));
@@ -130,9 +134,10 @@ public class CamundaWorkflowFacade {
         Map<String, Object> variables = Map.of(
                 "decision", "REJECT",
                 "recruiterComment", safe(comment),
-                "decidedAt", Instant.now()
+                "decidedAt", Instant.now(),
+                "completedByGroup", RECRUITER_GROUP
         );
-        if (completeApplicationTask(application.getId(), RECRUITER_DECISION_TASK, RECRUITER_GROUP, recruiterUser.getId(), variables)) {
+        if (completeApplicationTask(application.getId(), RECRUITER_DECISION_TASK, null, recruiterUser.getId(), variables)) {
             return true;
         }
         return completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, Map.of(
@@ -148,16 +153,18 @@ public class CamundaWorkflowFacade {
     public boolean recruiterInvited(ApplicationEntity application, UserEntity recruiterUser, String message, Instant scheduledAt, Integer durationMinutes, Instant expiresAt) {
         assertRecruiterCanComplete(application, recruiterUser);
         UUID applicationId = application.getId();
-        boolean decisionCompleted = completeApplicationTask(applicationId, RECRUITER_DECISION_TASK, RECRUITER_GROUP, recruiterUser.getId(), Map.of(
+        boolean decisionCompleted = completeApplicationTask(applicationId, RECRUITER_DECISION_TASK, null, recruiterUser.getId(), Map.of(
                 "decision", "INVITE",
-                "decidedAt", Instant.now()
+                "decidedAt", Instant.now(),
+                "completedByGroup", RECRUITER_GROUP
         ));
-        boolean invitationCompleted = completeApplicationTask(applicationId, WRITE_INVITATION_TASK, RECRUITER_GROUP, recruiterUser.getId(), Map.of(
+        boolean invitationCompleted = completeApplicationTask(applicationId, WRITE_INVITATION_TASK, null, recruiterUser.getId(), Map.of(
                 "invitationMessage", safe(message),
                 "scheduledAt", scheduledAt,
                 "durationMinutes", durationMinutes,
                 "invitationExpiresAt", expiresAt,
-                "invitationTimeoutDuration", "PT48H"
+                "invitationTimeoutDuration", "PT48H",
+                "completedByGroup", RECRUITER_GROUP
         ));
         return decisionCompleted && invitationCompleted;
     }
@@ -226,15 +233,17 @@ public class CamundaWorkflowFacade {
 
     public boolean closeVacancy(VacancyEntity vacancy, UserEntity recruiterUser, String reason) {
         assertVacancyRecruiterCanComplete(vacancy, recruiterUser);
-        completeTaskIfActive(vacancyBusinessKey(vacancy.getId()), VACANCY_CREATED_RESULT_TASK, RECRUITER_GROUP,
+        completeTaskIfActive(vacancyBusinessKey(vacancy.getId()), VACANCY_CREATED_RESULT_TASK, null,
                 recruiterUser.getId(), Map.of(
                         "resultAcknowledged", true,
-                        "acknowledgedAt", Instant.now()
+                        "acknowledgedAt", Instant.now(),
+                        "completedByGroup", RECRUITER_GROUP
                 ));
-        return completeVacancyTask(vacancy.getId(), MANAGE_VACANCY_TASK, RECRUITER_GROUP, recruiterUser.getId(), Map.of(
+        return completeVacancyTask(vacancy.getId(), MANAGE_VACANCY_TASK, null, recruiterUser.getId(), Map.of(
                 "action", "CLOSE",
                 "closeReason", safe(reason),
-                "closedAt", Instant.now()
+                "closedAt", Instant.now(),
+                "completedByGroup", RECRUITER_GROUP
         ));
     }
 
@@ -247,6 +256,7 @@ public class CamundaWorkflowFacade {
                 Map.of(
                         "vacancyId", vacancy.getId(),
                         "recruiterUserId", recruiterUser.getId(),
+                        "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(recruiterUser),
                         "requestedStatus", status.name(),
                         "requestedAt", Instant.now()
                 )
@@ -254,11 +264,12 @@ public class CamundaWorkflowFacade {
         processInstanceId.ifPresent(id -> completeTaskInProcessInstance(
                 id,
                 UPDATE_VACANCY_STATUS_TASK,
-                RECRUITER_GROUP,
+                null,
                 recruiterUser.getId(),
                 Map.of(
                         "requestedStatus", status.name(),
-                        "updatedAt", Instant.now()
+                        "updatedAt", Instant.now(),
+                        "completedByGroup", RECRUITER_GROUP
                 )));
         return processInstanceId;
     }
@@ -313,6 +324,7 @@ public class CamundaWorkflowFacade {
                         "vacancyId", application.getVacancy().getId(),
                         "candidateUserId", application.getCandidateUser().getId(),
                         "recruiterUserId", recruiterUser.getId(),
+                        "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(recruiterUser),
                         "cancelReason", safe(reason),
                         "requestedAt", Instant.now()
                 )
@@ -320,12 +332,13 @@ public class CamundaWorkflowFacade {
         processInstanceId.ifPresent(id -> completeTaskInProcessInstance(
                 id,
                 CANCEL_INTERVIEW_TASK,
-                RECRUITER_GROUP,
+                null,
                 recruiterUser.getId(),
                 Map.of(
                         "cancelReason", safe(reason),
                         "cancelledByRecruiterUserId", recruiterUser.getId(),
-                        "cancelledAt", Instant.now()
+                        "cancelledAt", Instant.now(),
+                        "completedByGroup", RECRUITER_GROUP
                 )));
         return processInstanceId;
     }

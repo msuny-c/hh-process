@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
+import ru.itmo.hhprocess.dto.admin.AdminCreateUserRequest;
+import ru.itmo.hhprocess.dto.admin.AdminUserProvisionResponse;
 import ru.itmo.hhprocess.dto.recruiter.WeekScheduleResponse;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.InterviewEntity;
@@ -26,6 +28,7 @@ import ru.itmo.hhprocess.repository.UserRepository;
 import ru.itmo.hhprocess.repository.VacancyRepository;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.service.HistoryService;
+import ru.itmo.hhprocess.service.AdminUserProvisioningService;
 import ru.itmo.hhprocess.service.InterviewService;
 import ru.itmo.hhprocess.service.NotificationService;
 import ru.itmo.hhprocess.service.ScheduleService;
@@ -72,6 +75,7 @@ public class CamundaProcessAdapterService {
     private final CamundaProperties camundaProperties;
     private final ObjectMapper objectMapper;
     private final CamundaFormValidator formValidator;
+    private final AdminUserProvisioningService adminUserProvisioningService;
 
     @Transactional
     public Map<String, Object> autoScreen(UUID applicationId) {
@@ -200,6 +204,36 @@ public class CamundaProcessAdapterService {
         UserEntity user = resolvePermissionUser(starterUserId, adminUserId);
         boolean ownership = user != null && user.isEnabled() && hasRole(user, "ADMIN");
         return permissionVariables(primaryRole(user), "ADMIN_RESET", ownership, user);
+    }
+
+    @Transactional
+    public Map<String, Object> provisionUserFromAdminForm(String starterUserId, String role, String email,
+                                                          String password, String firstName, String lastName) {
+        resolveUserFromCamundaStarter(starterUserId, "ADMIN");
+        String normalizedRole = formValidator.requiredChoice(role, "Role", Set.of("CANDIDATE", "RECRUITER"));
+        AdminCreateUserRequest request = new AdminCreateUserRequest();
+        request.setEmail(normalizeProvisionEmail(email));
+        request.setPassword(normalizeProvisionPassword(password));
+        request.setFirstName(normalizeRequiredText(firstName, "First name", 255));
+        request.setLastName(normalizeRequiredText(lastName, "Last name", 255));
+
+        try {
+            AdminUserProvisionResponse response = "CANDIDATE".equals(normalizedRole)
+                    ? adminUserProvisioningService.createCandidate(request)
+                    : adminUserProvisioningService.createRecruiter(request);
+            Map<String, Object> variables = new LinkedHashMap<>();
+            variables.put("provisionedUserId", response.getUserId());
+            variables.put("provisionedEmail", response.getEmail());
+            variables.put("provisionedRole", response.getRole());
+            variables.put("provisionedCamundaUserId", response.getCamundaUserId());
+            variables.put("provisioningResultMessage", "User created in application DB and Camunda");
+            return variables;
+        } catch (ApiException e) {
+            if (e.getHttpStatus() == HttpStatus.CONFLICT) {
+                throw new CamundaFormValidationException("Email", e.getMessage());
+            }
+            throw e;
+        }
     }
 
     @Transactional
@@ -804,8 +838,19 @@ public class CamundaProcessAdapterService {
         }
         formValidator.maxLength(coverLetter, "Cover letter", 10_000);
         if (applicationId != null) {
-            getApplication(applicationId);
-            return Map.of("formValidated", true, "formErrorMessage", "", "applicationId", applicationId);
+            ApplicationEntity application = getApplication(applicationId);
+            UserEntity candidate = application.getCandidateUser();
+            UserEntity recruiter = application.getVacancy().getRecruiterUser();
+            return Map.of(
+                    "formValidated", true,
+                    "formErrorMessage", "",
+                    "applicationId", applicationId,
+                    "candidateUserId", candidate.getId(),
+                    "candidateCamundaUserId", CamundaIdentitySyncService.camundaUserId(candidate),
+                    "recruiterUserId", recruiter.getId(),
+                    "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(recruiter),
+                    "vacancyTitle", application.getVacancy().getTitle()
+            );
         }
 
         VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
@@ -830,6 +875,7 @@ public class CamundaProcessAdapterService {
                 "candidateUserId", candidate.getId(),
                 "candidateCamundaUserId", CamundaIdentitySyncService.camundaUserId(candidate),
                 "recruiterUserId", vacancy.getRecruiterUser().getId(),
+                "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(vacancy.getRecruiterUser()),
                 "vacancyTitle", vacancy.getTitle()
         );
     }
@@ -840,6 +886,8 @@ public class CamundaProcessAdapterService {
                                                                 String processInstanceId) {
         if (existingApplicationId != null) {
             ApplicationEntity application = getApplication(existingApplicationId);
+            UserEntity candidate = application.getCandidateUser();
+            UserEntity recruiter = application.getVacancy().getRecruiterUser();
             if (application.getCamundaProcessInstanceId() == null || application.getCamundaProcessInstanceId().isBlank()) {
                 application.setCamundaProcessInstanceId(processInstanceId);
                 applicationRepository.save(application);
@@ -849,6 +897,10 @@ public class CamundaProcessAdapterService {
             return Map.of(
                     "applicationCreated", true,
                     "applicationId", application.getId(),
+                    "candidateUserId", candidate.getId(),
+                    "candidateCamundaUserId", CamundaIdentitySyncService.camundaUserId(candidate),
+                    "recruiterUserId", recruiter.getId(),
+                    "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(recruiter),
                     "status", application.getStatus().name(),
                     "idempotent", true
             );
@@ -893,6 +945,7 @@ public class CamundaProcessAdapterService {
                 "candidateUserId", candidate.getId(),
                 "candidateCamundaUserId", CamundaIdentitySyncService.camundaUserId(candidate),
                 "recruiterUserId", vacancy.getRecruiterUser().getId(),
+                "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(vacancy.getRecruiterUser()),
                 "vacancyTitle", vacancy.getTitle(),
                 "status", application.getStatus().name(),
                 "applicationBusinessKey", businessKey
@@ -1040,6 +1093,7 @@ public class CamundaProcessAdapterService {
                 "formValidated", true,
                 "formErrorMessage", "",
                 "recruiterUserId", recruiter.getId(),
+                "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(recruiter),
                 "title", normalizedTitle,
                 "description", normalizedDescription,
                 "requiredSkills", skills,
@@ -1071,17 +1125,18 @@ public class CamundaProcessAdapterService {
         String businessKey = "vacancy:" + vacancy.getId();
         camundaRestClient.updateProcessInstanceBusinessKey(processInstanceId, businessKey);
 
-        return Map.of(
-                "vacancyCreated", true,
-                "vacancyId", vacancy.getId(),
-                "recruiterUserId", recruiter.getId(),
-                "title", vacancy.getTitle(),
-                "vacancyTitle", vacancy.getTitle(),
-                "description", vacancy.getDescription() == null ? "" : vacancy.getDescription(),
-                "requiredSkills", vacancy.getRequiredSkills(),
-                "screeningThreshold", vacancy.getScreeningThreshold(),
-                "status", vacancy.getStatus().name(),
-                "vacancyBusinessKey", businessKey
+        return Map.ofEntries(
+                Map.entry("vacancyCreated", true),
+                Map.entry("vacancyId", vacancy.getId()),
+                Map.entry("recruiterUserId", recruiter.getId()),
+                Map.entry("recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(recruiter)),
+                Map.entry("title", vacancy.getTitle()),
+                Map.entry("vacancyTitle", vacancy.getTitle()),
+                Map.entry("description", vacancy.getDescription() == null ? "" : vacancy.getDescription()),
+                Map.entry("requiredSkills", vacancy.getRequiredSkills()),
+                Map.entry("screeningThreshold", vacancy.getScreeningThreshold()),
+                Map.entry("status", vacancy.getStatus().name()),
+                Map.entry("vacancyBusinessKey", businessKey)
         );
     }
 
@@ -1239,7 +1294,13 @@ public class CamundaProcessAdapterService {
             throw new CamundaFormValidationException("Vacancy does not belong to current recruiter");
         }
         parseVacancyStatus(requestedStatus);
-        return Map.of("formValidated", true, "formErrorMessage", "", "oldVacancyStatus", vacancy.getStatus().name());
+        return Map.of(
+                "formValidated", true,
+                "formErrorMessage", "",
+                "oldVacancyStatus", vacancy.getStatus().name(),
+                "recruiterUserId", recruiter.getId(),
+                "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(recruiter)
+        );
     }
 
     @Transactional
@@ -1276,7 +1337,9 @@ public class CamundaProcessAdapterService {
         return Map.of(
                 "formValidated", true,
                 "formErrorMessage", "",
-                "applicationId", interview.getApplication().getId()
+                "applicationId", interview.getApplication().getId(),
+                "recruiterUserId", recruiter.getId(),
+                "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(recruiter)
         );
     }
 
@@ -1634,6 +1697,22 @@ public class CamundaProcessAdapterService {
 
     private String normalizeRequiredText(String value, String fieldName, int maxLength) {
         return formValidator.requiredText(value, fieldName, maxLength);
+    }
+
+    private String normalizeProvisionEmail(String value) {
+        String email = formValidator.requiredText(value, "Email", 255).toLowerCase(java.util.Locale.ROOT);
+        if (!email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+            throw new CamundaFormValidationException("Email", "Email must be valid");
+        }
+        return email;
+    }
+
+    private String normalizeProvisionPassword(String value) {
+        String password = formValidator.requiredText(value, "Password", 128);
+        if (password.length() < 8) {
+            throw new CamundaFormValidationException("Password", "Password must be between 8 and 128 characters");
+        }
+        return password;
     }
 
     private String normalizeOptionalText(String value, String fieldName, int maxLength) {

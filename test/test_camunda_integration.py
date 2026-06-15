@@ -46,6 +46,13 @@ def filter_exists(name: str) -> bool:
     return resp.status_code == 200 and bool(resp.json())
 
 
+def filter_query(name: str) -> dict:
+    resp = get(f'/filter?name={quote(name, safe="")}')
+    if resp.status_code != 200 or not resp.json():
+        return {}
+    return resp.json()[0].get('query') or {}
+
+
 def form_resource_deployed(name: str) -> bool:
     deployments = get(f'/deployment?name={quote(DEPLOYMENT_NAME, safe="")}')
     if deployments.status_code != 200:
@@ -118,6 +125,8 @@ def main() -> int:
         'hhVacancyProcess': 'RECRUITER',
         'hhTimeoutSchedulerProcess': 'ADMIN',
         'hhAdminInterviewResetProcess': 'ADMIN',
+        'hhAdminCreateCandidateProcess': 'ADMIN',
+        'hhAdminCreateRecruiterProcess': 'ADMIN',
         'hhVacancyStatusUpdateProcess': 'RECRUITER',
         'hhRecruiterInterviewCancelProcess': 'RECRUITER',
         'hhNotificationProcess': '',
@@ -189,6 +198,8 @@ def main() -> int:
     required_forms = [
         'admin-reset-result.form',
         'admin-timeout-run.form',
+        'admin-user-create.form',
+        'admin-user-provision-result.form',
         'application-id-input.form',
         'application-result.form',
         'apply-to-vacancy.form',
@@ -221,6 +232,25 @@ def main() -> int:
             print(f'Camunda Tasklist filter is missing: {name}')
             return 1
         print(f'OK Camunda Tasklist filter: {name}')
+
+    recruiter_filter_query = filter_query('Задачи рекрутера')
+    if recruiter_filter_query.get('assigneeExpression') != '${currentUser()}' or recruiter_filter_query.get('candidateGroup'):
+        print(f'Camunda recruiter Tasklist filter must be personal assignee filter: {recruiter_filter_query}')
+        return 1
+    print('OK Camunda recruiter Tasklist filter is personal')
+
+    personal_recruiter_task_processes = [
+        'hhApplicationProcess',
+        'hhVacancyProcess',
+        'hhVacancyStatusUpdateProcess',
+        'hhRecruiterInterviewCancelProcess',
+    ]
+    for key in personal_recruiter_task_processes:
+        xml = process_xml(key)
+        if 'camunda:candidateGroups="RECRUITER"' in xml:
+            print(f'Executable BPMN still contains RECRUITER group task: {key}')
+            return 1
+        print(f'OK executable BPMN has no RECRUITER group user tasks: {key}')
 
     for name in ['Accounting', 'John\'s Tasks', 'Mary\'s Tasks', 'Peter\'s Tasks']:
         if filter_exists(name):
@@ -266,6 +296,8 @@ def main() -> int:
         ('RECRUITER', 'hhUiRecruiterSchedule'),
         ('RECRUITER', 'hhUiNotificationList'),
         ('ADMIN', 'hhAdminInterviewResetProcess'),
+        ('ADMIN', 'hhAdminCreateCandidateProcess'),
+        ('ADMIN', 'hhAdminCreateRecruiterProcess'),
         ('ADMIN', 'hhTimeoutSchedulerProcess'),
         ('ADMIN', 'hhUiAdminTimeoutReview'),
         ('ADMIN', 'hhUiNotificationList'),
@@ -284,6 +316,8 @@ def main() -> int:
         ('CANDIDATE', 'hhVacancyStatusUpdateProcess'),
         ('CANDIDATE', 'hhRecruiterInterviewCancelProcess'),
         ('CANDIDATE', 'hhAdminInterviewResetProcess'),
+        ('CANDIDATE', 'hhAdminCreateCandidateProcess'),
+        ('CANDIDATE', 'hhAdminCreateRecruiterProcess'),
         ('CANDIDATE', 'hhTimeoutSchedulerProcess'),
         ('CANDIDATE', 'hhUiAdminTimeoutReview'),
         ('RECRUITER', 'hhApplicationProcess'),
@@ -291,6 +325,8 @@ def main() -> int:
         ('RECRUITER', 'hhUiCandidateApplicationList'),
         ('RECRUITER', 'hhUiCandidateApplicationView'),
         ('RECRUITER', 'hhAdminInterviewResetProcess'),
+        ('RECRUITER', 'hhAdminCreateCandidateProcess'),
+        ('RECRUITER', 'hhAdminCreateRecruiterProcess'),
         ('RECRUITER', 'hhTimeoutSchedulerProcess'),
         ('RECRUITER', 'hhUiAdminTimeoutReview'),
         ('ADMIN', 'hhVacancyProcess'),

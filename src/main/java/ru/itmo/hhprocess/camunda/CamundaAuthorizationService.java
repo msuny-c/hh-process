@@ -38,6 +38,7 @@ public class CamundaAuthorizationService {
 
         configureWebAppAccess();
         removeRoleWildcardProcessStartAuthorizations();
+        removeForbiddenRoleProcessStartAuthorizations();
         grantStart(GROUP_CANDIDATE, properties.getApplicationProcessKey());
         grantStart(GROUP_CANDIDATE, "hhUiCandidateVacancyList");
         grantStart(GROUP_CANDIDATE, "hhUiCandidateApplicationList");
@@ -55,6 +56,8 @@ public class CamundaAuthorizationService {
         for (String processKey : List.of(
                 properties.getAdminInterviewResetProcessKey(),
                 properties.getTimeoutSchedulerProcessKey(),
+                "hhAdminCreateCandidateProcess",
+                "hhAdminCreateRecruiterProcess",
                 "hhUiAdminTimeoutReview",
                 "hhUiNotificationList")) {
             grantStart(GROUP_ADMIN, processKey);
@@ -88,7 +91,8 @@ public class CamundaAuthorizationService {
         for (String group : List.of(GROUP_CANDIDATE, GROUP_RECRUITER, GROUP_ADMIN, GROUP_CAMUNDA_ADMIN)) {
             grant(group, RESOURCE_APPLICATION, "tasklist", List.of("ACCESS"));
         }
-        grant(GROUP_CAMUNDA_ADMIN, RESOURCE_PROCESS_DEFINITION, "*", List.of("CREATE_INSTANCE", "READ"));
+        camundaRestClient.deleteGroupAuthorization(GROUP_CAMUNDA_ADMIN, RESOURCE_PROCESS_DEFINITION, "*");
+        grant(GROUP_CAMUNDA_ADMIN, RESOURCE_PROCESS_DEFINITION, "*", List.of("READ"));
         for (String group : List.of(GROUP_ADMIN, GROUP_CAMUNDA_ADMIN)) {
             grant(group, RESOURCE_APPLICATION, "cockpit", List.of("ACCESS"));
             grant(group, RESOURCE_APPLICATION, "admin", List.of("ACCESS"));
@@ -102,6 +106,46 @@ public class CamundaAuthorizationService {
     private void removeRoleWildcardProcessStartAuthorizations() {
         for (String group : List.of(GROUP_CANDIDATE, GROUP_RECRUITER, GROUP_ADMIN)) {
             camundaRestClient.deleteGroupAuthorization(group, RESOURCE_PROCESS_DEFINITION, "*");
+        }
+    }
+
+    private void removeForbiddenRoleProcessStartAuthorizations() {
+        for (String processKey : List.of(
+                properties.getVacancyProcessKey(),
+                properties.getVacancyStatusUpdateProcessKey(),
+                properties.getRecruiterInterviewCancelProcessKey(),
+                "hhUiRecruiterVacancyList",
+                "hhUiRecruiterApplicationList",
+                "hhUiRecruiterApplicationView",
+                "hhUiRecruiterSchedule")) {
+            camundaRestClient.deleteGroupAuthorization(GROUP_ADMIN, RESOURCE_PROCESS_DEFINITION, processKey);
+        }
+        for (String processKey : List.of(
+                properties.getApplicationProcessKey(),
+                "hhUiCandidateVacancyList",
+                "hhUiCandidateApplicationList",
+                "hhUiCandidateApplicationView")) {
+            camundaRestClient.deleteGroupAuthorization(GROUP_RECRUITER, RESOURCE_PROCESS_DEFINITION, processKey);
+            camundaRestClient.deleteGroupAuthorization(GROUP_ADMIN, RESOURCE_PROCESS_DEFINITION, processKey);
+        }
+        for (String processKey : List.of(
+                properties.getVacancyProcessKey(),
+                properties.getVacancyStatusUpdateProcessKey(),
+                properties.getRecruiterInterviewCancelProcessKey(),
+                properties.getAdminInterviewResetProcessKey(),
+                properties.getTimeoutSchedulerProcessKey(),
+                "hhAdminCreateCandidateProcess",
+                "hhAdminCreateRecruiterProcess",
+                "hhUiAdminTimeoutReview")) {
+            camundaRestClient.deleteGroupAuthorization(GROUP_CANDIDATE, RESOURCE_PROCESS_DEFINITION, processKey);
+        }
+        for (String processKey : List.of(
+                properties.getAdminInterviewResetProcessKey(),
+                properties.getTimeoutSchedulerProcessKey(),
+                "hhAdminCreateCandidateProcess",
+                "hhAdminCreateRecruiterProcess",
+                "hhUiAdminTimeoutReview")) {
+            camundaRestClient.deleteGroupAuthorization(GROUP_RECRUITER, RESOURCE_PROCESS_DEFINITION, processKey);
         }
     }
 

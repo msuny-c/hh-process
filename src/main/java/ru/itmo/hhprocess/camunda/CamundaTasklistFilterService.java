@@ -31,7 +31,7 @@ public class CamundaTasklistFilterService {
     }
 
     private void createRoleFilter(String name, String groupId) {
-        Map<String, ?> query = GROUP_CANDIDATE.equals(groupId)
+        Map<String, ?> query = GROUP_CANDIDATE.equals(groupId) || GROUP_RECRUITER.equals(groupId)
                 ? Map.of("active", true, "assigneeExpression", "${currentUser()}")
                 : Map.of("active", true, "candidateGroup", groupId);
         recreateFilter(

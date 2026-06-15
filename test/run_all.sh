@@ -21,6 +21,7 @@ python /tests/test_camunda_smoke_flow.py
 python /tests/test_composite_transactions.py
 python /tests/test_security_validation.py
 python /tests/test_access_matrix.py
+python /tests/test_recruiter_task_isolation.py
 python /tests/test_transaction_atomicity.py
 python /tests/test_business_rules.py
 python /tests/test_timeout_job_db_fixture.py

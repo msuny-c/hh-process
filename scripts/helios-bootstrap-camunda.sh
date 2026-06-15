@@ -226,7 +226,8 @@ for group in ("CANDIDATE", "RECRUITER", "ADMIN", "camunda-admin"):
 for group in ("CANDIDATE", "RECRUITER", "ADMIN"):
     remove_authorization(group, PROCESS_DEFINITION, "*")
 
-ensure_authorization("camunda-admin", PROCESS_DEFINITION, "*", ["CREATE_INSTANCE", "READ"])
+remove_authorization("camunda-admin", PROCESS_DEFINITION, "*")
+ensure_authorization("camunda-admin", PROCESS_DEFINITION, "*", ["READ"])
 
 start_process_groups = {
     "CANDIDATE": (
@@ -248,11 +249,54 @@ start_process_groups = {
     ),
     "ADMIN": (
         "hhAdminInterviewResetProcess",
+        "hhAdminCreateCandidateProcess",
+        "hhAdminCreateRecruiterProcess",
         "hhTimeoutSchedulerProcess",
         "hhUiAdminTimeoutReview",
         "hhUiNotificationList",
     ),
 }
+
+for process_key in (
+    "hhVacancyProcess",
+    "hhVacancyStatusUpdateProcess",
+    "hhRecruiterInterviewCancelProcess",
+    "hhUiRecruiterVacancyList",
+    "hhUiRecruiterApplicationList",
+    "hhUiRecruiterApplicationView",
+    "hhUiRecruiterSchedule",
+):
+    remove_authorization("ADMIN", PROCESS_DEFINITION, process_key)
+
+for process_key in (
+    "hhApplicationProcess",
+    "hhUiCandidateVacancyList",
+    "hhUiCandidateApplicationList",
+    "hhUiCandidateApplicationView",
+):
+    remove_authorization("RECRUITER", PROCESS_DEFINITION, process_key)
+    remove_authorization("ADMIN", PROCESS_DEFINITION, process_key)
+
+for process_key in (
+    "hhVacancyProcess",
+    "hhVacancyStatusUpdateProcess",
+    "hhRecruiterInterviewCancelProcess",
+    "hhAdminInterviewResetProcess",
+    "hhAdminCreateCandidateProcess",
+    "hhAdminCreateRecruiterProcess",
+    "hhTimeoutSchedulerProcess",
+    "hhUiAdminTimeoutReview",
+):
+    remove_authorization("CANDIDATE", PROCESS_DEFINITION, process_key)
+
+for process_key in (
+    "hhAdminInterviewResetProcess",
+    "hhAdminCreateCandidateProcess",
+    "hhAdminCreateRecruiterProcess",
+    "hhTimeoutSchedulerProcess",
+    "hhUiAdminTimeoutReview",
+):
+    remove_authorization("RECRUITER", PROCESS_DEFINITION, process_key)
 
 for group, process_keys in start_process_groups.items():
     for process_key in process_keys:

@@ -14,7 +14,7 @@
     </bpmn:laneSet>
     <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Рекрутер открыл список откликов" />
     <bpmn:serviceTask id="LoadRecruiterApplicationList" name="Загрузить отклики по вакансиям текущего рекрутера" camunda:type="external" camunda:topic="ui-query" />
-    <bpmn:userTask id="DisplayRecruiterApplicationList" name="Показать рекрутеру отклики по его вакансиям" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:userTask id="DisplayRecruiterApplicationList" name="Показать рекрутеру отклики по его вакансиям" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
     <bpmn:endEvent id="End" name="Список откликов показан рекрутеру" />
     <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadRecruiterApplicationList" />
     <bpmn:sequenceFlow id="F2" sourceRef="LoadRecruiterApplicationList" targetRef="DisplayRecruiterApplicationList" />

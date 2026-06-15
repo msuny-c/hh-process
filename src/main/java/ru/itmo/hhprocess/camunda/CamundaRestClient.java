@@ -875,6 +875,7 @@ public class CamundaRestClient {
                                 "candidateUserId",
                                 "candidateCamundaUserId",
                                 "recruiterUserId",
+                                "recruiterCamundaUserId",
                                 "adminUserId",
                                 "vacancyTitle",
                                 "starterUserId",

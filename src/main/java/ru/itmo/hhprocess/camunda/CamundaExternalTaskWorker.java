@@ -32,6 +32,7 @@ public class CamundaExternalTaskWorker {
     private static final String TOPIC_INTERVIEW_CANCEL = "interview-cancel";
     private static final String TOPIC_ROLLBACK = "transaction-rollback";
     private static final String TOPIC_ADMIN_INTERVIEW_RESET = "admin-interview-reset";
+    private static final String TOPIC_ADMIN_USER_PROVISION = "admin-user-provision";
     private static final String TOPIC_UI_QUERY = "ui-query";
     private static final String TOPIC_PERMISSION_CHECK = "permission-check";
     private static final String TOPIC_STATUS_TRANSITION = "status-transition";
@@ -54,7 +55,7 @@ public class CamundaExternalTaskWorker {
         List<Map<String, Object>> tasks = camundaRestClient.fetchAndLockExternalTasks(
                 List.of(TOPIC_AUTO_SCREEN, TOPIC_NOTIFY, TOPIC_APPLICATION_PERSISTENCE, TOPIC_APPLICATION_NOTIFICATION, TOPIC_APPLICATION_MESSAGE,
                         TOPIC_FORM_VALIDATION, TOPIC_TIMEOUT, TOPIC_VACANCY_CREATE, TOPIC_VACANCY_CLOSE,
-                        TOPIC_VACANCY_STATUS_UPDATE, TOPIC_INTERVIEW_CANCEL, TOPIC_ROLLBACK, TOPIC_ADMIN_INTERVIEW_RESET, TOPIC_UI_QUERY,
+                        TOPIC_VACANCY_STATUS_UPDATE, TOPIC_INTERVIEW_CANCEL, TOPIC_ROLLBACK, TOPIC_ADMIN_INTERVIEW_RESET, TOPIC_ADMIN_USER_PROVISION, TOPIC_UI_QUERY,
                         TOPIC_PERMISSION_CHECK, TOPIC_STATUS_TRANSITION, TOPIC_NOTIFICATION_DECISION, TOPIC_NOTIFICATION_DISPATCH)
         );
         for (Map<String, Object> task : tasks) {
@@ -79,6 +80,7 @@ public class CamundaExternalTaskWorker {
                 case TOPIC_INTERVIEW_CANCEL -> handleInterviewCancelTask(activityId, task);
                 case TOPIC_ROLLBACK -> handleRollbackTask(activityId, task);
                 case TOPIC_ADMIN_INTERVIEW_RESET -> handleAdminInterviewResetTask(activityId, task);
+                case TOPIC_ADMIN_USER_PROVISION -> handleAdminUserProvisionTask(activityId, task);
                 case TOPIC_UI_QUERY -> handleUiQueryTask(activityId, task);
                 case TOPIC_PERMISSION_CHECK -> handlePermissionTask(activityId, task);
                 case TOPIC_STATUS_TRANSITION -> handleStatusTransitionTask(activityId, task);
@@ -285,6 +287,22 @@ public class CamundaExternalTaskWorker {
                     readRequiredUuid(task, "applicationId"), resetReason);
             default -> adapterService.resetInterviewByAdmin(interviewId, adminUserId, resetReason);
         };
+    }
+
+    private Map<String, Object> handleAdminUserProvisionTask(String activityId, Map<String, Object> task) {
+        String role = switch (activityId) {
+            case "ProvisionCandidateUser" -> "CANDIDATE";
+            case "ProvisionRecruiterUser" -> "RECRUITER";
+            default -> "";
+        };
+        return adapterService.provisionUserFromAdminForm(
+                stringValue(task, "starterUserId"),
+                role,
+                stringValue(task, "email"),
+                stringValue(task, "password"),
+                stringValue(task, "firstName"),
+                stringValue(task, "lastName")
+        );
     }
 
     private Map<String, Object> handleVacancyCreateTask(String activityId, Map<String, Object> task) {

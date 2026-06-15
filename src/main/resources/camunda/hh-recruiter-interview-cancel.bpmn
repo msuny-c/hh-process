@@ -29,7 +29,7 @@
       <bpmn:compensateEventDefinition waitForCompletion="true" />
     </bpmn:intermediateThrowEvent>
     <bpmn:startEvent id="RecruiterCancelStart" name="Рекрутер начал отмену интервью" camunda:initiator="starterUserId" />
-    <bpmn:userTask id="CancelInterviewTask" name="Подтвердить отмену интервью" camunda:formRef="cancel-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER" />
+    <bpmn:userTask id="CancelInterviewTask" name="Подтвердить отмену интервью" camunda:formRef="cancel-interview-form" camunda:formRefBinding="latest" camunda:assignee="${execution.hasVariable('recruiterCamundaUserId') ? recruiterCamundaUserId : starterUserId}" />
     <bpmn:serviceTask id="ValidateRecruiterCancelInterview" name="Проверить, что интервью можно отменить" camunda:type="external" camunda:topic="interview-cancel" />
     <bpmn:callActivity id="NotifyRecruiterCancelParticipants" name="Подпроцесс: уведомить кандидата об отмене интервью" calledElement="hhNotificationProcess" camunda:calledElementBinding="latest">
       <bpmn:extensionElements>
@@ -40,7 +40,7 @@
         <camunda:out source="notificationKind" target="lastNotificationKind" />
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:userTask id="RecruiterCancelResultTask" name="Показать результат отмены интервью" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER,ADMIN" />
+    <bpmn:userTask id="RecruiterCancelResultTask" name="Показать результат отмены интервью" camunda:formRef="application-result-form" camunda:formRefBinding="latest" camunda:assignee="${execution.hasVariable('recruiterCamundaUserId') ? recruiterCamundaUserId : starterUserId}" />
     <bpmn:endEvent id="RecruiterCancelEnd" name="Интервью отменено и отклик возвращён рекрутеру" />
     <bpmn:endEvent id="RecruiterCancelRollbackEnd" name="Отмена интервью не выполнена" />
     <bpmn:serviceTask id="RollbackRecruiterCancel" name="Восстановить данные после ошибки отмены" camunda:type="external" camunda:topic="transaction-rollback" />

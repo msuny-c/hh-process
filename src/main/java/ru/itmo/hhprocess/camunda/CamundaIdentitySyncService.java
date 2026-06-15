@@ -103,7 +103,7 @@ public class CamundaIdentitySyncService {
         return "CANDIDATE".equals(groupId) || "RECRUITER".equals(groupId) || "ADMIN".equals(groupId);
     }
 
-    static String camundaUserId(UserEntity user) {
+    public static String camundaUserId(UserEntity user) {
         if (user.getEmail() == null || user.getEmail().isBlank()) {
             return "user" + user.getId().toString().replace("-", "");
         }

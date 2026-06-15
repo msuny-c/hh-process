@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hhAdminCreateRecruiterProcess" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+  <bpmn:error id="Error_FormValidationFailed" name="FORM_VALIDATION_FAILED" errorCode="FORM_VALIDATION_FAILED" />
+  <bpmn:collaboration id="Collaboration_hhAdminCreateRecruiterProcess" name="Пул: создание рекрутера администратором">
+    <bpmn:participant id="Participant_hhAdminCreateRecruiterProcess" name="Пул: создание рекрутера администратором" processRef="hhAdminCreateRecruiterProcess" />
+  </bpmn:collaboration>
+  <bpmn:process id="hhAdminCreateRecruiterProcess" name="Создание рекрутера администратором" isExecutable="true" camunda:candidateStarterGroups="ADMIN" camunda:historyTimeToLive="30">
+    <bpmn:laneSet id="LaneSet_hhAdminCreateRecruiterProcess">
+      <bpmn:lane id="Lane_hhAdminCreateRecruiterProcess_AdminSystem" name="Администратор / система">
+        <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EnterRecruiterUserData</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ProvisionRecruiterUser</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>RecruiterProvisionFormError</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>DisplayRecruiterProvisionResult</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start" name="Администратор начал создание рекрутера" camunda:initiator="starterUserId" />
+    <bpmn:userTask id="EnterRecruiterUserData" name="Администратор заполняет данные рекрутера" camunda:formRef="admin-user-create-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
+    <bpmn:serviceTask id="ProvisionRecruiterUser" name="Система: создать рекрутера в БД, XML и Camunda" camunda:type="external" camunda:topic="admin-user-provision" />
+    <bpmn:boundaryEvent id="RecruiterProvisionFormError" attachedToRef="ProvisionRecruiterUser">
+      <bpmn:errorEventDefinition errorRef="Error_FormValidationFailed" />
+    </bpmn:boundaryEvent>
+    <bpmn:userTask id="DisplayRecruiterProvisionResult" name="Показать результат создания рекрутера" camunda:formRef="admin-user-provision-result-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN" />
+    <bpmn:endEvent id="End" name="Рекрутер создан" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="EnterRecruiterUserData" />
+    <bpmn:sequenceFlow id="F2" sourceRef="EnterRecruiterUserData" targetRef="ProvisionRecruiterUser" />
+    <bpmn:sequenceFlow id="F2e" name="ошибка формы: повторить ввод" sourceRef="RecruiterProvisionFormError" targetRef="EnterRecruiterUserData" />
+    <bpmn:sequenceFlow id="F3" sourceRef="ProvisionRecruiterUser" targetRef="DisplayRecruiterProvisionResult" />
+    <bpmn:sequenceFlow id="F4" sourceRef="DisplayRecruiterProvisionResult" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_hhAdminCreateRecruiterProcess">
+    <bpmndi:BPMNPlane id="BPMNPlane_hhAdminCreateRecruiterProcess" bpmnElement="Collaboration_hhAdminCreateRecruiterProcess">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_hhAdminCreateRecruiterProcess" bpmnElement="Participant_hhAdminCreateRecruiterProcess" isHorizontal="true">
+        <dc:Bounds x="150" y="80" width="1480" height="280" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_hhAdminCreateRecruiterProcess_AdminSystem" bpmnElement="Lane_hhAdminCreateRecruiterProcess_AdminSystem" isHorizontal="true">
+        <dc:Bounds x="250" y="100" width="1360" height="220" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Start" bpmnElement="Start">
+        <dc:Bounds x="330" y="172" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="306" y="208" width="84" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_EnterRecruiterUserData" bpmnElement="EnterRecruiterUserData">
+        <dc:Bounds x="460" y="150" width="180" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ProvisionRecruiterUser" bpmnElement="ProvisionRecruiterUser">
+        <dc:Bounds x="760" y="150" width="190" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_RecruiterProvisionFormError" bpmnElement="RecruiterProvisionFormError">
+        <dc:Bounds x="932" y="212" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_DisplayRecruiterProvisionResult" bpmnElement="DisplayRecruiterProvisionResult">
+        <dc:Bounds x="1080" y="150" width="190" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_End" bpmnElement="End">
+        <dc:Bounds x="1432" y="172" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1413" y="208" width="74" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_F1" bpmnElement="F1">
+        <di:waypoint x="366" y="190" />
+        <di:waypoint x="460" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_F2" bpmnElement="F2">
+        <di:waypoint x="640" y="190" />
+        <di:waypoint x="760" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_F2e" bpmnElement="F2e">
+        <di:waypoint x="950" y="248" />
+        <di:waypoint x="950" y="288" />
+        <di:waypoint x="550" y="288" />
+        <di:waypoint x="550" y="230" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="902" y="260" width="96" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_F3" bpmnElement="F3">
+        <di:waypoint x="950" y="190" />
+        <di:waypoint x="1080" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_F4" bpmnElement="F4">
+        <di:waypoint x="1270" y="190" />
+        <di:waypoint x="1432" y="190" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
