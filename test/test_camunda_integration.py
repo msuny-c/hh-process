@@ -99,6 +99,29 @@ def user_synced(email: str, expected_group: str) -> bool:
     return any(item.get('id') == expected_group for item in groups.json())
 
 
+def user_in_group(user_id: str, expected_group: str) -> bool:
+    profile = get(f'/user/{quote(user_id, safe="")}/profile')
+    if profile.status_code != 200:
+        return False
+    groups = get(f'/group?member={quote(user_id, safe="")}')
+    if groups.status_code != 200:
+        return False
+    return any(item.get('id') == expected_group for item in groups.json())
+
+
+def group_authorization_has_permission(group_id: str, resource_type: int, resource_id: str, permission: str) -> bool:
+    resp = get(
+        f'/authorization?type=1&groupIdIn={quote(group_id, safe="")}'
+        f'&resourceType={resource_type}&resourceId={quote(resource_id, safe="")}'
+    )
+    if resp.status_code != 200:
+        return False
+    for item in resp.json():
+        if permission in (item.get('permissions') or []):
+            return True
+    return False
+
+
 def start_authorization_exists(group_id: str, process_key: str) -> bool:
     resp = get(
         f'/authorization?type=1&groupIdIn={quote(group_id, safe="")}'
@@ -268,18 +291,27 @@ def main() -> int:
         return 1
 
     required_users = [
+        ('admin', 'ADMIN'),
         ('admin@example.com', 'ADMIN'),
         ('recruiter@example.com', 'RECRUITER'),
     ]
     for email, group in required_users:
         for _ in range(60):
-            if user_synced(email, group):
-                print(f'OK Camunda user synced: {camunda_user_id(email)} -> {group}')
+            synced = user_in_group(email, group) if email == 'admin' else user_synced(email, group)
+            user_id = email if email == 'admin' else camunda_user_id(email)
+            if synced:
+                print(f'OK Camunda user synced: {user_id} -> {group}')
                 break
             time.sleep(2)
         else:
             print(f'Camunda user was not synced: {email} -> {group}')
             return 1
+
+    for group in ['CANDIDATE', 'RECRUITER', 'ADMIN', 'camunda-admin']:
+        if not group_authorization_has_permission(group, 8, '*', 'CREATE'):
+            print(f'Camunda ProcessInstance CREATE authorization is missing: {group}')
+            return 1
+        print(f'OK Camunda ProcessInstance CREATE authorization: {group}')
 
     required_authorizations = [
         ('CANDIDATE', 'hhApplicationProcess'),

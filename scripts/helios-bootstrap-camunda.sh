@@ -139,6 +139,8 @@ def remove_authorization(group_id, resource_type, resource_id):
             print(f"removed authorization {group_id} resourceType={resource_type} resourceId={resource_id}")
 
 managed_process_keys = (
+    "hhAdminCreateCandidateProcess",
+    "hhAdminCreateRecruiterProcess",
     "hhAdminInterviewResetProcess",
     "hhApplicationProcess",
     "hhNotificationProcess",
@@ -202,7 +204,7 @@ for group_id, name, group_type in (
     ensure_group(group_id, name, group_type)
 
 users = (
-    ("admin", "Admin", "User", "admin@localhost", "admin", ("camunda-admin",)),
+    ("admin", "Admin", "User", "admin@localhost", "admin", ("ADMIN", "camunda-admin")),
     ("adminexamplecom", "Admin", "User", "admin@example.com", "camunda", ("ADMIN", "camunda-admin")),
     ("recruiterexamplecom", "Seed", "Recruiter", "recruiter@example.com", "camunda", ("RECRUITER",)),
     ("candidatedemoexamplecom", "Candidate", "Demo", "candidate-demo@example.com", "password123", ("CANDIDATE",)),
@@ -299,6 +301,7 @@ for process_key in (
     remove_authorization("RECRUITER", PROCESS_DEFINITION, process_key)
 
 for group, process_keys in start_process_groups.items():
+    ensure_authorization(group, PROCESS_INSTANCE, "*", ["CREATE"])
     for process_key in process_keys:
         ensure_authorization(group, PROCESS_DEFINITION, process_key, ["CREATE_INSTANCE", "READ"])
 
@@ -306,7 +309,7 @@ for group in ("ADMIN", "camunda-admin"):
     ensure_authorization(group, APPLICATION, "cockpit", ["ACCESS"])
     ensure_authorization(group, APPLICATION, "admin", ["ACCESS"])
     ensure_authorization(group, TASK, "*", ["READ", "UPDATE", "TASK_WORK"])
-    ensure_authorization(group, PROCESS_INSTANCE, "*", ["READ", "UPDATE"])
+    ensure_authorization(group, PROCESS_INSTANCE, "*", ["CREATE", "READ", "UPDATE"])
     ensure_authorization(group, DECISION_DEFINITION, "*", ["READ"])
     ensure_authorization(group, AUTHORIZATION, "*", ["READ", "CREATE", "UPDATE", "DELETE"])
 

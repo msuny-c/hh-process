@@ -84,6 +84,7 @@ public class CamundaAuthorizationService {
 
     private void ensureAdminUser() {
         camundaRestClient.ensureUserExists("admin", "admin@localhost", "Admin", "User", "admin", true);
+        camundaRestClient.ensureMembershipExists("admin", GROUP_ADMIN);
         camundaRestClient.ensureMembershipExists("admin", GROUP_CAMUNDA_ADMIN);
     }
 
@@ -91,13 +92,16 @@ public class CamundaAuthorizationService {
         for (String group : List.of(GROUP_CANDIDATE, GROUP_RECRUITER, GROUP_ADMIN, GROUP_CAMUNDA_ADMIN)) {
             grant(group, RESOURCE_APPLICATION, "tasklist", List.of("ACCESS"));
         }
+        for (String group : List.of(GROUP_CANDIDATE, GROUP_RECRUITER, GROUP_ADMIN)) {
+            grant(group, RESOURCE_PROCESS_INSTANCE, "*", List.of("CREATE"));
+        }
         camundaRestClient.deleteGroupAuthorization(GROUP_CAMUNDA_ADMIN, RESOURCE_PROCESS_DEFINITION, "*");
         grant(GROUP_CAMUNDA_ADMIN, RESOURCE_PROCESS_DEFINITION, "*", List.of("READ"));
         for (String group : List.of(GROUP_ADMIN, GROUP_CAMUNDA_ADMIN)) {
             grant(group, RESOURCE_APPLICATION, "cockpit", List.of("ACCESS"));
             grant(group, RESOURCE_APPLICATION, "admin", List.of("ACCESS"));
             grant(group, RESOURCE_TASK, "*", List.of("READ", "UPDATE", "TASK_WORK"));
-            grant(group, RESOURCE_PROCESS_INSTANCE, "*", List.of("READ", "UPDATE"));
+            grant(group, RESOURCE_PROCESS_INSTANCE, "*", List.of("CREATE", "READ", "UPDATE"));
             grant(group, RESOURCE_DECISION_DEFINITION, "*", List.of("READ"));
             grant(group, RESOURCE_AUTHORIZATION, "*", List.of("READ", "CREATE", "UPDATE", "DELETE"));
         }
