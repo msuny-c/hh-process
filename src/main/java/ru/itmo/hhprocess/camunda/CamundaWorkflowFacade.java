@@ -1,5 +1,7 @@
 package ru.itmo.hhprocess.camunda;
 
+import ru.itmo.hhprocess.config.CamundaProperties;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -19,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.springframework.http.HttpStatus;
 
 @Slf4j
@@ -388,66 +391,37 @@ public class CamundaWorkflowFacade {
 
     private boolean completeTask(String businessKey, String taskDefinitionKey, String expectedGroup,
                                  UUID actorUserId, Map<String, ?> variables) {
-        for (int attempt = 1; attempt <= 20; attempt++) {
-            var tasks = camundaRestClient.findActiveTasks(businessKey, taskDefinitionKey);
-            if (!tasks.isEmpty()) {
-                Object id = tasks.get(0).get("id");
-                if (id != null) {
-                    String taskId = String.valueOf(id);
-                    if (expectedGroup != null && !camundaRestClient.taskHasCandidateGroup(taskId, expectedGroup)) {
-                        log.warn("Camunda task {} for businessKey={} does not expose candidate group {}", taskDefinitionKey, businessKey, expectedGroup);
-                        return false;
-                    }
-                    Map<String, Object> completedVariables = new LinkedHashMap<>(variables);
-                    if (actorUserId != null) {
-                        completedVariables.put("completedByUserId", actorUserId);
-                    }
-                    if (expectedGroup != null) {
-                        completedVariables.put("completedByGroup", expectedGroup);
-                    }
-                    boolean completed = camundaRestClient.completeTask(taskId, completedVariables);
-                    if (completed) {
-                        log.info("Completed Camunda task {}; businessKey={}; taskId={}", taskDefinitionKey, businessKey, taskId);
-                    }
-                    return completed;
-                }
-            }
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
-        }
-        log.warn("Camunda task {} for businessKey={} was not found", taskDefinitionKey, businessKey);
-        return false;
+        return pollAndCompleteTask(
+                () -> camundaRestClient.findActiveTasks(businessKey, taskDefinitionKey),
+                taskDefinitionKey + "; businessKey=" + businessKey,
+                expectedGroup, actorUserId, variables);
     }
 
     private boolean completeTaskInProcessInstance(String processInstanceId, String taskDefinitionKey, String expectedGroup,
                                                   UUID actorUserId, Map<String, ?> variables) {
+        return pollAndCompleteTask(
+                () -> camundaRestClient.findActiveTasksByProcessInstanceId(processInstanceId, taskDefinitionKey),
+                taskDefinitionKey + "; processInstanceId=" + processInstanceId,
+                expectedGroup, actorUserId, variables);
+    }
+
+    private boolean pollAndCompleteTask(Supplier<List<Map<String, Object>>> taskFetcher, String logContext,
+                                        String expectedGroup, UUID actorUserId, Map<String, ?> variables) {
         for (int attempt = 1; attempt <= 20; attempt++) {
-            var tasks = camundaRestClient.findActiveTasksByProcessInstanceId(processInstanceId, taskDefinitionKey);
+            var tasks = taskFetcher.get();
             if (!tasks.isEmpty()) {
                 Object id = tasks.get(0).get("id");
                 if (id != null) {
                     String taskId = String.valueOf(id);
                     if (expectedGroup != null && !camundaRestClient.taskHasCandidateGroup(taskId, expectedGroup)) {
-                        log.warn("Camunda task {} for processInstanceId={} does not expose candidate group {}",
-                                taskDefinitionKey, processInstanceId, expectedGroup);
+                        log.warn("Camunda task {} does not expose candidate group {}", logContext, expectedGroup);
                         return false;
                     }
-                    Map<String, Object> completedVariables = new LinkedHashMap<>(variables);
-                    if (actorUserId != null) {
-                        completedVariables.put("completedByUserId", actorUserId);
-                    }
-                    if (expectedGroup != null) {
-                        completedVariables.put("completedByGroup", expectedGroup);
-                    }
-                    boolean completed = camundaRestClient.completeTask(taskId, completedVariables);
-                    if (completed) {
-                        log.info("Completed Camunda task {}; processInstanceId={}; taskId={}",
-                                taskDefinitionKey, processInstanceId, taskId);
-                    }
+                    Map<String, Object> vars = new LinkedHashMap<>(variables);
+                    if (actorUserId != null) vars.put("completedByUserId", actorUserId);
+                    if (expectedGroup != null) vars.put("completedByGroup", expectedGroup);
+                    boolean completed = camundaRestClient.completeTask(taskId, vars);
+                    if (completed) log.info("Completed Camunda task {}; taskId={}", logContext, taskId);
                     return completed;
                 }
             }
@@ -458,7 +432,7 @@ public class CamundaWorkflowFacade {
                 return false;
             }
         }
-        log.warn("Camunda task {} for processInstanceId={} was not found", taskDefinitionKey, processInstanceId);
+        log.warn("Camunda task {} was not found after 20 attempts", logContext);
         return false;
     }
 

@@ -1,4 +1,6 @@
-package ru.itmo.hhprocess.camunda;
+package ru.itmo.hhprocess.utils;
+
+import ru.itmo.hhprocess.exception.CamundaFormValidationException;
 
 import org.springframework.stereotype.Component;
 

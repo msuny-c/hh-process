@@ -1,6 +1,9 @@
-package ru.itmo.hhprocess.camunda;
+package ru.itmo.hhprocess.config;
 
 import lombok.RequiredArgsConstructor;
+import org.camunda.bpm.client.ExternalTaskClient;
+import org.camunda.bpm.client.ExternalTaskClientBuilder;
+import org.camunda.bpm.client.interceptor.auth.BasicAuthProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
@@ -36,6 +39,20 @@ public class CamundaConfig {
             restTemplate.setInterceptors(interceptors);
         }
         return restTemplate;
+    }
+
+    @Bean
+    public ExternalTaskClient externalTaskClient(CamundaProperties properties) {
+        ExternalTaskClientBuilder builder = ExternalTaskClient.create()
+                .baseUrl(properties.getBaseUrl())
+                .workerId(properties.getWorker().getId())
+                .maxTasks(properties.getWorker().getMaxTasks())
+                .asyncResponseTimeout(properties.getWorker().getAsyncResponseTimeoutMs())
+                .lockDuration(properties.getWorker().getLockDurationMs());
+        if (hasText(properties.getUsername())) {
+            builder.addInterceptor(new BasicAuthProvider(properties.getUsername(), properties.getPassword()));
+        }
+        return builder.build();
     }
 
     private static boolean hasText(String value) {

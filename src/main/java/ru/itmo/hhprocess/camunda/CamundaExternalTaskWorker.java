@@ -1,17 +1,29 @@
 package ru.itmo.hhprocess.camunda;
 
+import ru.itmo.hhprocess.config.CamundaProperties;
+
+import ru.itmo.hhprocess.exception.CamundaFormValidationException;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.camunda.bpm.client.ExternalTaskClient;
+import org.camunda.bpm.client.task.ExternalTask;
+import org.camunda.bpm.client.task.ExternalTaskService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import ru.itmo.hhprocess.enums.ResponseType;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.service.TimeoutBatchProcessor;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiFunction;
 
 @Slf4j
 @Component
@@ -43,171 +55,177 @@ public class CamundaExternalTaskWorker {
     private static final String ADMIN_RESET_FAILED = "ADMIN_RESET_FAILED";
     private static final String FORM_VALIDATION_FAILED = "FORM_VALIDATION_FAILED";
 
-    private final CamundaRestClient camundaRestClient;
+    private static final List<String> VARIABLES = List.of(
+            "applicationId", "expiredApplicationId", "interviewId", "scheduleSlotId",
+            "oldApplicationStatus", "formErrorMessage", "formErrorField", "formErrorFields", "formErrorCode",
+            "vacancyId", "candidateUserId", "candidateCamundaUserId", "recruiterUserId", "recruiterCamundaUserId",
+            "adminUserId", "vacancyTitle", "starterUserId", "title", "description", "requiredSkills",
+            "screeningThreshold", "screeningScore", "screeningScoreDelta", "screeningMatchedCount",
+            "screeningTotalSkills", "requestedStatus", "resumeText", "coverLetter", "screeningPassed", "status",
+            "action", "decision", "recruiterComment", "invitationMessage", "scheduledAt", "durationMinutes",
+            "responseType", "responseMessage", "closeReason", "cancelReason", "resetReason", "rollbackReason",
+            "permissionRole", "permissionOperation", "permissionOwnership", "permissionAllowed", "permissionChecked",
+            "currentStatus", "statusAction", "statusTransition", "notificationStatus", "recipientRole",
+            "notificationTemplateCode", "notificationTemplate", "notificationType", "notificationKind",
+            "notificationDispatched", "applicationIdText", "weekOffset", "uiTitle", "uiPayload",
+            "email", "password", "firstName", "lastName");
+
+    private final ExternalTaskClient externalTaskClient;
     private final TimeoutBatchProcessor timeoutBatchProcessor;
     private final CamundaProcessAdapterService adapterService;
+    private final CamundaProperties properties;
 
-    @Scheduled(fixedDelayString = "${app.camunda.worker.poll-interval-ms:3000}", initialDelayString = "${app.camunda.worker.initial-delay-ms:10000}")
-    public void poll() {
-        if (!camundaRestClient.isEnabled()) {
-            return;
-        }
-        List<Map<String, Object>> tasks = camundaRestClient.fetchAndLockExternalTasks(
-                List.of(TOPIC_AUTO_SCREEN, TOPIC_NOTIFY, TOPIC_APPLICATION_PERSISTENCE, TOPIC_APPLICATION_NOTIFICATION, TOPIC_APPLICATION_MESSAGE,
-                        TOPIC_FORM_VALIDATION, TOPIC_TIMEOUT, TOPIC_VACANCY_CREATE, TOPIC_VACANCY_CLOSE,
-                        TOPIC_VACANCY_STATUS_UPDATE, TOPIC_INTERVIEW_CANCEL, TOPIC_ROLLBACK, TOPIC_ADMIN_INTERVIEW_RESET, TOPIC_ADMIN_USER_PROVISION, TOPIC_UI_QUERY,
-                        TOPIC_PERMISSION_CHECK, TOPIC_STATUS_TRANSITION, TOPIC_NOTIFICATION_DECISION, TOPIC_NOTIFICATION_DISPATCH)
-        );
-        for (Map<String, Object> task : tasks) {
-            handleTask(task);
-        }
+    @EventListener(ApplicationReadyEvent.class)
+    void subscribe() {
+        if (!properties.isEnabled()) return;
+        register(TOPIC_AUTO_SCREEN, this::handleAutoScreenTask);
+        register(TOPIC_NOTIFY, this::handleNotificationBackedTask);
+        register(TOPIC_APPLICATION_PERSISTENCE, this::handleNotificationBackedTask);
+        register(TOPIC_APPLICATION_NOTIFICATION, this::handleNotificationBackedTask);
+        register(TOPIC_APPLICATION_MESSAGE, this::handleNotificationBackedTask);
+        register(TOPIC_FORM_VALIDATION, this::handleFormValidationTask);
+        register(TOPIC_TIMEOUT, this::handleTimeoutTask);
+        register(TOPIC_VACANCY_CREATE, this::handleVacancyCreateTask);
+        register(TOPIC_VACANCY_CLOSE, this::handleVacancyCloseTask);
+        register(TOPIC_VACANCY_STATUS_UPDATE, this::handleVacancyStatusUpdateTask);
+        register(TOPIC_INTERVIEW_CANCEL, this::handleInterviewCancelTask);
+        register(TOPIC_ROLLBACK, this::handleRollbackTask);
+        register(TOPIC_ADMIN_INTERVIEW_RESET, this::handleAdminInterviewResetTask);
+        register(TOPIC_ADMIN_USER_PROVISION, this::handleAdminUserProvisionTask);
+        register(TOPIC_UI_QUERY, this::handleUiQueryTask);
+        register(TOPIC_PERMISSION_CHECK, this::handlePermissionTask);
+        register(TOPIC_STATUS_TRANSITION, this::handleStatusTransitionTask);
+        register(TOPIC_NOTIFICATION_DECISION, (id, t) -> handleNotificationDecisionTask(t));
+        register(TOPIC_NOTIFICATION_DISPATCH, (id, t) -> handleNotificationDispatchTask(t));
     }
 
-    private void handleTask(Map<String, Object> task) {
-        String taskId = String.valueOf(task.get("id"));
-        String topic = String.valueOf(task.get("topicName"));
-        String activityId = String.valueOf(task.get("activityId"));
-        try {
-            Map<String, Object> variables = switch (topic) {
-                case TOPIC_AUTO_SCREEN -> handleAutoScreenTask(activityId, task);
-                case TOPIC_NOTIFY, TOPIC_APPLICATION_PERSISTENCE, TOPIC_APPLICATION_NOTIFICATION, TOPIC_APPLICATION_MESSAGE ->
-                        handleNotificationBackedTask(activityId, task);
-                case TOPIC_FORM_VALIDATION -> handleFormValidationTask(activityId, task);
-                case TOPIC_TIMEOUT -> handleTimeoutTask(activityId, task);
-                case TOPIC_VACANCY_CREATE -> handleVacancyCreateTask(activityId, task);
-                case TOPIC_VACANCY_CLOSE -> handleVacancyCloseTask(activityId, task);
-                case TOPIC_VACANCY_STATUS_UPDATE -> handleVacancyStatusUpdateTask(activityId, task);
-                case TOPIC_INTERVIEW_CANCEL -> handleInterviewCancelTask(activityId, task);
-                case TOPIC_ROLLBACK -> handleRollbackTask(activityId, task);
-                case TOPIC_ADMIN_INTERVIEW_RESET -> handleAdminInterviewResetTask(activityId, task);
-                case TOPIC_ADMIN_USER_PROVISION -> handleAdminUserProvisionTask(activityId, task);
-                case TOPIC_UI_QUERY -> handleUiQueryTask(activityId, task);
-                case TOPIC_PERMISSION_CHECK -> handlePermissionTask(activityId, task);
-                case TOPIC_STATUS_TRANSITION -> handleStatusTransitionTask(activityId, task);
-                case TOPIC_NOTIFICATION_DECISION -> handleNotificationDecisionTask(task);
-                case TOPIC_NOTIFICATION_DISPATCH -> handleNotificationDispatchTask(task);
-                default -> Map.of("ignored", true, "topic", topic);
-            };
-            camundaRestClient.completeExternalTask(taskId, variables);
-        } catch (CamundaFormValidationException e) {
-            log.warn("Camunda form validation failed; taskId={}, topic={}, activityId={}, message={}",
-                    taskId, topic, activityId, e.getMessage());
-            if (throwFormValidationBpmnError(taskId, task, e)) {
-                return;
-            }
-            camundaRestClient.failExternalTask(taskId, e.getMessage(), stackTraceToString(e));
-        } catch (Exception e) {
-            log.error("Camunda external task failed; taskId={}, topic={}", taskId, topic, e);
-            if (shouldRouteToBpmnRollback(e) && throwRollbackBpmnError(taskId, activityId, task, e)) {
-                return;
-            }
-            camundaRestClient.failExternalTask(taskId, e.getMessage(), stackTraceToString(e));
-        }
+    private void register(String topic, BiFunction<String, ExternalTask, Map<String, Object>> handler) {
+        externalTaskClient.subscribe(topic)
+                .variables(VARIABLES.toArray(String[]::new))
+                .lockDuration(properties.getWorker().getLockDurationMs())
+                .handler((task, service) -> {
+                    String activityId = task.getActivityId();
+                    try {
+                        service.complete(task, flattenForClient(handler.apply(activityId, task)));
+                    } catch (CamundaFormValidationException e) {
+                        log.warn("Camunda form validation failed; topic={}, activityId={}: {}",
+                                topic, activityId, e.getMessage());
+                        if (!throwFormValidationBpmnError(service, task, e)) {
+                            service.handleFailure(task, e.getMessage(), stackTraceToString(e), 3, 10_000L);
+                        }
+                    } catch (Exception e) {
+                        log.error("Camunda external task failed; topic={}, activityId={}", topic, activityId, e);
+                        if (!shouldRouteToBpmnRollback(e) || !throwRollbackBpmnError(service, task, activityId, e)) {
+                            service.handleFailure(task,
+                                    e.getMessage() == null ? "External task failed" : e.getMessage(),
+                                    stackTraceToString(e), 3, 10_000L);
+                        }
+                    }
+                })
+                .open();
     }
 
-    private Map<String, Object> handleAutoScreenTask(String activityId, Map<String, Object> task) {
-        UUID applicationId = readRequiredUuid(task, "applicationId");
+    private Map<String, Object> handleAutoScreenTask(String activityId, ExternalTask task) {
+        UUID applicationId = requiredUuid(task, "applicationId");
         return switch (activityId) {
             case "AutoScreenApplication" -> adapterService.prepareAutoScreen(applicationId);
             case "SaveAutoScreenDecision" -> adapterService.saveAutoScreenDecision(
                     applicationId,
-                    booleanValue(task, "screeningPassed"),
-                    integerValue(task, "screeningScore"));
+                    bool(task, "screeningPassed"),
+                    integer(task, "screeningScore"));
             default -> adapterService.prepareAutoScreen(applicationId);
         };
     }
 
-    private Map<String, Object> handleFormValidationTask(String activityId, Map<String, Object> task) {
-        UUID applicationId = readUuid(task, "applicationId");
+    private Map<String, Object> handleFormValidationTask(String activityId, ExternalTask task) {
+        UUID applicationId = uuid(task, "applicationId");
         return switch (activityId) {
             case "ValidateApplyToVacancyForm" -> adapterService.validateApplyToVacancyForm(
                     applicationId,
-                    readUuid(task, "vacancyId"),
-                    readUuid(task, "candidateUserId"),
-                    stringValue(task, "starterUserId"),
-                    stringValue(task, "resumeText"),
-                    stringValue(task, "coverLetter")
+                    uuid(task, "vacancyId"),
+                    uuid(task, "candidateUserId"),
+                    str(task, "starterUserId"),
+                    str(task, "resumeText"),
+                    str(task, "coverLetter")
             );
             case "ValidateRecruiterDecisionForm" -> adapterService.validateRecruiterDecisionForm(
-                    required(applicationId, "applicationId"),
-                    stringValue(task, "decision"),
-                    stringValue(task, "recruiterComment")
+                    requireNonNull(applicationId, "applicationId"),
+                    str(task, "decision"),
+                    str(task, "recruiterComment")
             );
             case "ValidateInvitationForm" -> adapterService.validateInvitationForm(
-                    required(applicationId, "applicationId"),
-                    stringValue(task, "invitationMessage"),
-                    adapterService.requiredScheduledAt(readValue(task, "scheduledAt")),
-                    adapterService.requiredDurationMinutes(readValue(task, "durationMinutes"))
+                    requireNonNull(applicationId, "applicationId"),
+                    str(task, "invitationMessage"),
+                    adapterService.requiredScheduledAt(task.getVariable("scheduledAt")),
+                    adapterService.requiredDurationMinutes(task.getVariable("durationMinutes"))
             );
             case "ValidateCandidateResponseForm" -> adapterService.validateCandidateResponseForm(
-                    required(applicationId, "applicationId"),
-                    stringValue(task, "responseType"),
-                    stringValue(task, "responseMessage")
+                    requireNonNull(applicationId, "applicationId"),
+                    str(task, "responseType"),
+                    str(task, "responseMessage")
             );
             default -> Map.of("formValidationIgnored", true, "activityId", activityId);
         };
     }
 
-    private Map<String, Object> handleNotificationBackedTask(String activityId, Map<String, Object> task) {
-        UUID applicationId = readUuid(task, "applicationId");
+    private Map<String, Object> handleNotificationBackedTask(String activityId, ExternalTask task) {
+        UUID applicationId = uuid(task, "applicationId");
         return switch (activityId) {
             case "CreateApplicationFromForm" -> adapterService.createApplicationFromCamundaForm(
-                    readUuid(task, "applicationId"),
-                    readRequiredUuid(task, "vacancyId"),
-                    readUuid(task, "candidateUserId"),
-                    stringValue(task, "starterUserId"),
-                    stringValue(task, "resumeText"),
-                    stringValue(task, "coverLetter"),
-                    task.get("processInstanceId") == null ? "" : String.valueOf(task.get("processInstanceId"))
+                    uuid(task, "applicationId"),
+                    requiredUuid(task, "vacancyId"),
+                    uuid(task, "candidateUserId"),
+                    str(task, "starterUserId"),
+                    str(task, "resumeText"),
+                    str(task, "coverLetter"),
+                    task.getProcessInstanceId() == null ? "" : task.getProcessInstanceId()
             );
             case "NotifyScreeningFailed" -> adapterService.notifyScreeningFailed(applicationId);
             case "NotifyRecruiter" -> adapterService.notifyRecruiter(applicationId);
             case "PersistRejection" -> {
-                Map<String, Object> variables = new java.util.LinkedHashMap<>(
-                        adapterService.rejectApplication(applicationId, stringValue(task, "recruiterComment")));
+                Map<String, Object> variables = new LinkedHashMap<>(
+                        adapterService.rejectApplication(applicationId, str(task, "recruiterComment")));
                 variables.putAll(adapterService.notifyApplicationRejected(applicationId));
                 yield variables;
             }
-            case "ValidateRejectionAllowed" -> adapterService.validateRejectionAllowed(applicationId, stringValue(task, "recruiterComment"));
-            case "CancelRejectionInterviewIfAny" -> adapterService.cancelRejectionInterviewIfAny(applicationId, stringValue(task, "recruiterComment"));
-            case "MarkApplicationRejected" -> adapterService.markApplicationRejected(applicationId, stringValue(task, "recruiterComment"));
+            case "ValidateRejectionAllowed" -> adapterService.validateRejectionAllowed(applicationId, str(task, "recruiterComment"));
+            case "CancelRejectionInterviewIfAny" -> adapterService.cancelRejectionInterviewIfAny(applicationId, str(task, "recruiterComment"));
+            case "MarkApplicationRejected" -> adapterService.markApplicationRejected(applicationId, str(task, "recruiterComment"));
             case "RecordRejectionHistory" -> adapterService.recordRejectionHistory(applicationId);
-            case "PersistRejectionToDb" -> adapterService.rejectApplication(applicationId, stringValue(task, "recruiterComment"));
+            case "PersistRejectionToDb" -> adapterService.rejectApplication(applicationId, str(task, "recruiterComment"));
             case "NotifyRejection" -> adapterService.notifyApplicationRejected(applicationId);
             case "PersistInvitation" -> {
-                String invitationMessage = stringValue(task, "invitationMessage");
-                Map<String, Object> variables = new java.util.LinkedHashMap<>(adapterService.persistInvitation(
+                String invitationMessage = str(task, "invitationMessage");
+                Map<String, Object> variables = new LinkedHashMap<>(adapterService.persistInvitation(
                         applicationId,
                         invitationMessage,
-                        adapterService.scheduledAtOrDefault(readValue(task, "scheduledAt")),
-                        adapterService.durationOrDefault(readValue(task, "durationMinutes"))
+                        adapterService.scheduledAtOrDefault(task.getVariable("scheduledAt")),
+                        adapterService.durationOrDefault(task.getVariable("durationMinutes"))
                 ));
                 variables.putAll(adapterService.notifyInvitation(applicationId, invitationMessage));
                 yield variables;
             }
             case "PersistInvitationToDb" -> adapterService.saveInvitationToDb(
-                    applicationId,
-                    stringValue(task, "invitationMessage")
-            );
+                    applicationId, str(task, "invitationMessage"));
             case "CreateInvitationInterview" -> adapterService.createInvitationInterview(
                     applicationId,
-                    stringValue(task, "invitationMessage"),
-                    adapterService.requiredScheduledAt(readValue(task, "scheduledAt")),
-                    adapterService.requiredDurationMinutes(readValue(task, "durationMinutes"))
+                    str(task, "invitationMessage"),
+                    adapterService.requiredScheduledAt(task.getVariable("scheduledAt")),
+                    adapterService.requiredDurationMinutes(task.getVariable("durationMinutes"))
             );
             case "ReserveInvitationSlot" -> adapterService.reserveInvitationSlot(
                     applicationId,
-                    readRequiredUuid(task, "interviewId"),
-                    adapterService.requiredScheduledAt(readValue(task, "scheduledAt")),
-                    adapterService.requiredDurationMinutes(readValue(task, "durationMinutes"))
+                    requiredUuid(task, "interviewId"),
+                    adapterService.requiredScheduledAt(task.getVariable("scheduledAt")),
+                    adapterService.requiredDurationMinutes(task.getVariable("durationMinutes"))
             );
             case "RecordInvitationHistory" -> adapterService.recordInvitationHistory(applicationId);
-            case "NotifyInvitation" -> adapterService.notifyInvitation(applicationId, stringValue(task, "invitationMessage"));
+            case "NotifyInvitation" -> adapterService.notifyInvitation(applicationId, str(task, "invitationMessage"));
             case "PersistCandidateResponse" -> {
-                Map<String, Object> variables = new java.util.LinkedHashMap<>(adapterService.persistCandidateResponse(
+                Map<String, Object> variables = new LinkedHashMap<>(adapterService.persistCandidateResponse(
                         applicationId,
-                        ResponseType.valueOf(stringValue(task, "responseType")),
-                        stringValue(task, "responseMessage")
+                        ResponseType.valueOf(str(task, "responseType")),
+                        str(task, "responseMessage")
                 ));
                 variables.putAll(adapterService.notifyCandidateResponse(applicationId));
                 yield variables;
@@ -215,66 +233,47 @@ public class CamundaExternalTaskWorker {
             case "CheckInvitationStillActive" -> adapterService.checkInvitationStillActive(applicationId);
             case "SaveCandidateResponse" -> adapterService.saveCandidateResponse(
                     applicationId,
-                    adapterService.requiredResponseType(stringValue(task, "responseType")),
-                    stringValue(task, "responseMessage")
+                    adapterService.requiredResponseType(str(task, "responseType")),
+                    str(task, "responseMessage")
             );
             case "MarkCandidateResponseReceived" -> adapterService.markCandidateResponseReceived(applicationId);
             case "RecordCandidateResponseHistory" -> adapterService.recordCandidateResponseHistory(applicationId);
             case "PersistCandidateResponseToDb" -> adapterService.persistCandidateResponse(
                     applicationId,
-                    ResponseType.valueOf(stringValue(task, "responseType")),
-                    stringValue(task, "responseMessage")
+                    ResponseType.valueOf(str(task, "responseType")),
+                    str(task, "responseMessage")
             );
             case "NotifyCandidateResponse" -> adapterService.notifyCandidateResponse(applicationId);
             case "HandleVacancyClosedMessage" -> adapterService.handleVacancyClosedMessage(
-                    applicationId,
-                    stringValue(task, "closeReason")
-            );
+                    applicationId, str(task, "closeReason"));
             default -> Map.of("adapterCompleted", true, "activityId", activityId);
         };
     }
 
-    private Map<String, Object> handleTimeoutTask(String activityId, Map<String, Object> task) {
+    private Map<String, Object> handleTimeoutTask(String activityId, ExternalTask task) {
         if ("CloseByTimeout".equals(activityId)) {
-            return adapterService.closeByTimeout(readRequiredUuid(task, "applicationId"));
+            return adapterService.closeByTimeout(requiredUuid(task, "applicationId"));
         }
         switch (activityId) {
-            case "FindOneExpiredInvitation" -> {
-                return timeoutBatchProcessor.findOneExpiredInvitation();
-            }
-            case "CancelExpiredInvitationInterview" -> {
-                return timeoutBatchProcessor.cancelExpiredInvitationInterview(readRequiredUuid(task, "expiredApplicationId"));
-            }
-            case "ReleaseExpiredInvitationSlot" -> {
-                return timeoutBatchProcessor.releaseExpiredInvitationSlot(readRequiredUuid(task, "expiredApplicationId"));
-            }
-            case "CloseExpiredInvitationApplication" -> {
-                return timeoutBatchProcessor.closeExpiredInvitationApplication(readRequiredUuid(task, "expiredApplicationId"));
-            }
-            case "RecordExpiredInvitationHistory" -> {
-                return timeoutBatchProcessor.recordExpiredInvitationHistory(readRequiredUuid(task, "expiredApplicationId"));
-            }
-            case "NotifyExpiredInvitationParticipants" -> {
-                return timeoutBatchProcessor.notifyExpiredInvitationParticipants(readRequiredUuid(task, "expiredApplicationId"));
-            }
-            case "CompleteExpiredInvitationProcess" -> {
-                return timeoutBatchProcessor.completeExpiredInvitationProcess(readRequiredUuid(task, "expiredApplicationId"));
-            }
+            case "FindOneExpiredInvitation" -> { return timeoutBatchProcessor.findOneExpiredInvitation(); }
+            case "CancelExpiredInvitationInterview" -> { return timeoutBatchProcessor.cancelExpiredInvitationInterview(requiredUuid(task, "expiredApplicationId")); }
+            case "ReleaseExpiredInvitationSlot" -> { return timeoutBatchProcessor.releaseExpiredInvitationSlot(requiredUuid(task, "expiredApplicationId")); }
+            case "CloseExpiredInvitationApplication" -> { return timeoutBatchProcessor.closeExpiredInvitationApplication(requiredUuid(task, "expiredApplicationId")); }
+            case "RecordExpiredInvitationHistory" -> { return timeoutBatchProcessor.recordExpiredInvitationHistory(requiredUuid(task, "expiredApplicationId")); }
+            case "NotifyExpiredInvitationParticipants" -> { return timeoutBatchProcessor.notifyExpiredInvitationParticipants(requiredUuid(task, "expiredApplicationId")); }
+            case "CompleteExpiredInvitationProcess" -> { return timeoutBatchProcessor.completeExpiredInvitationProcess(requiredUuid(task, "expiredApplicationId")); }
             case "ProcessOneExpiredInvitation" -> {
                 int batchClosed = timeoutBatchProcessor.processOneExpired();
-                return Map.of(
-                        "batchClosed", batchClosed,
-                        "expiredFound", batchClosed > 0,
-                        "timeoutBatchIterationCompleted", true);
+                return Map.of("batchClosed", batchClosed, "expiredFound", batchClosed > 0, "timeoutBatchIterationCompleted", true);
             }
         }
         return Map.of("timeoutTaskIgnored", true, "activityId", activityId);
     }
 
-    private Map<String, Object> handleAdminInterviewResetTask(String activityId, Map<String, Object> task) {
-        UUID interviewId = readRequiredUuid(task, "interviewId");
-        UUID adminUserId = readRequiredUuid(task, "adminUserId");
-        String resetReason = stringValue(task, "resetReason");
+    private Map<String, Object> handleAdminInterviewResetTask(String activityId, ExternalTask task) {
+        UUID interviewId = requiredUuid(task, "interviewId");
+        UUID adminUserId = requiredUuid(task, "adminUserId");
+        String resetReason = str(task, "resetReason");
         return switch (activityId) {
             case "ValidateAdminResetForm" -> adapterService.validateAdminResetForm(interviewId, adminUserId, resetReason);
             case "ValidateInterviewCanBeReset" -> adapterService.validateInterviewCanBeReset(interviewId, adminUserId);
@@ -284,55 +283,46 @@ public class CamundaExternalTaskWorker {
             case "RecordAdminResetHistory" -> adapterService.recordAdminResetHistory(interviewId, adminUserId);
             case "ResetInterviewToDb" -> adapterService.resetInterviewByAdminInDb(interviewId, adminUserId, resetReason);
             case "NotifyAdminResetParticipants" -> adapterService.notifyAdminInterviewReset(
-                    readRequiredUuid(task, "applicationId"), resetReason);
+                    requiredUuid(task, "applicationId"), resetReason);
             default -> adapterService.resetInterviewByAdmin(interviewId, adminUserId, resetReason);
         };
     }
 
-    private Map<String, Object> handleAdminUserProvisionTask(String activityId, Map<String, Object> task) {
+    private Map<String, Object> handleAdminUserProvisionTask(String activityId, ExternalTask task) {
         String role = switch (activityId) {
             case "ProvisionCandidateUser" -> "CANDIDATE";
             case "ProvisionRecruiterUser" -> "RECRUITER";
             default -> "";
         };
         return adapterService.provisionUserFromAdminForm(
-                stringValue(task, "starterUserId"),
-                role,
-                stringValue(task, "email"),
-                stringValue(task, "password"),
-                stringValue(task, "firstName"),
-                stringValue(task, "lastName")
+                str(task, "starterUserId"), role,
+                str(task, "email"), str(task, "password"),
+                str(task, "firstName"), str(task, "lastName")
         );
     }
 
-    private Map<String, Object> handleVacancyCreateTask(String activityId, Map<String, Object> task) {
+    private Map<String, Object> handleVacancyCreateTask(String activityId, ExternalTask task) {
         return switch (activityId) {
             case "ValidateCreateVacancyForm" -> adapterService.validateCreateVacancyForm(
-                    stringValue(task, "starterUserId"),
-                    readUuid(task, "recruiterUserId"),
-                    stringValue(task, "title"),
-                    stringValue(task, "description"),
-                    readValue(task, "requiredSkills"),
-                    readValue(task, "screeningThreshold")
+                    str(task, "starterUserId"), uuid(task, "recruiterUserId"),
+                    str(task, "title"), str(task, "description"),
+                    task.getVariable("requiredSkills"), task.getVariable("screeningThreshold")
             );
             case "CreateVacancyFromForm" -> adapterService.createVacancyFromCamundaForm(
-                    stringValue(task, "starterUserId"),
-                    readUuid(task, "recruiterUserId"),
-                    stringValue(task, "title"),
-                    stringValue(task, "description"),
-                    readValue(task, "requiredSkills"),
-                    readValue(task, "screeningThreshold"),
-                    task.get("processInstanceId") == null ? "" : String.valueOf(task.get("processInstanceId"))
+                    str(task, "starterUserId"), uuid(task, "recruiterUserId"),
+                    str(task, "title"), str(task, "description"),
+                    task.getVariable("requiredSkills"), task.getVariable("screeningThreshold"),
+                    task.getProcessInstanceId() == null ? "" : task.getProcessInstanceId()
             );
             default -> Map.of("vacancyCreateIgnored", true, "activityId", activityId);
         };
     }
 
-    private Map<String, Object> handleVacancyCloseTask(String activityId, Map<String, Object> task) {
-        UUID vacancyId = readRequiredUuid(task, "vacancyId");
-        String closeReason = stringValue(task, "closeReason");
+    private Map<String, Object> handleVacancyCloseTask(String activityId, ExternalTask task) {
+        UUID vacancyId = requiredUuid(task, "vacancyId");
+        String closeReason = str(task, "closeReason");
         return switch (activityId) {
-            case "ValidateCloseVacancyForm" -> adapterService.validateCloseVacancyForm(vacancyId, stringValue(task, "action"), closeReason);
+            case "ValidateCloseVacancyForm" -> adapterService.validateCloseVacancyForm(vacancyId, str(task, "action"), closeReason);
             case "MarkVacancyClosed" -> adapterService.markVacancyClosed(vacancyId);
             case "CancelActiveInterviewsForVacancy" -> adapterService.cancelActiveInterviewsForVacancy(vacancyId, closeReason);
             case "ReleaseScheduleSlotsForClosedVacancy" -> adapterService.releaseScheduleSlotsForClosedVacancy(vacancyId);
@@ -345,150 +335,139 @@ public class CamundaExternalTaskWorker {
         };
     }
 
-    private Map<String, Object> handleVacancyStatusUpdateTask(String activityId, Map<String, Object> task) {
-        UUID vacancyId = readRequiredUuid(task, "vacancyId");
-        UUID recruiterUserId = readUuid(task, "recruiterUserId");
-        String requestedStatus = stringValue(task, "requestedStatus");
+    private Map<String, Object> handleVacancyStatusUpdateTask(String activityId, ExternalTask task) {
+        UUID vacancyId = requiredUuid(task, "vacancyId");
+        UUID recruiterUserId = uuid(task, "recruiterUserId");
+        String requestedStatus = str(task, "requestedStatus");
         return switch (activityId) {
-            case "ValidateVacancyStatusUpdate" -> adapterService.validateVacancyStatusUpdate(vacancyId, recruiterUserId, stringValue(task, "starterUserId"), requestedStatus);
-            case "ApplyVacancyStatusUpdate" -> adapterService.applyVacancyStatusUpdate(vacancyId, recruiterUserId, stringValue(task, "starterUserId"), requestedStatus);
+            case "ValidateVacancyStatusUpdate" -> adapterService.validateVacancyStatusUpdate(
+                    vacancyId, recruiterUserId, str(task, "starterUserId"), requestedStatus);
+            case "ApplyVacancyStatusUpdate" -> adapterService.applyVacancyStatusUpdate(
+                    vacancyId, recruiterUserId, str(task, "starterUserId"), requestedStatus);
             default -> Map.of("vacancyStatusUpdateIgnored", true, "activityId", activityId);
         };
     }
 
-    private Map<String, Object> handleInterviewCancelTask(String activityId, Map<String, Object> task) {
-        UUID interviewId = readRequiredUuid(task, "interviewId");
-        UUID recruiterUserId = readUuid(task, "recruiterUserId");
-        String cancelReason = stringValue(task, "cancelReason");
+    private Map<String, Object> handleInterviewCancelTask(String activityId, ExternalTask task) {
+        UUID interviewId = requiredUuid(task, "interviewId");
+        UUID recruiterUserId = uuid(task, "recruiterUserId");
+        String cancelReason = str(task, "cancelReason");
         return switch (activityId) {
-            case "ValidateRecruiterCancelInterview" -> adapterService.validateRecruiterCancelInterview(interviewId, recruiterUserId, stringValue(task, "starterUserId"), cancelReason);
-            case "CancelInterviewByRecruiter" -> adapterService.cancelInterviewByRecruiter(interviewId, recruiterUserId, stringValue(task, "starterUserId"), cancelReason);
+            case "ValidateRecruiterCancelInterview" -> adapterService.validateRecruiterCancelInterview(
+                    interviewId, recruiterUserId, str(task, "starterUserId"), cancelReason);
+            case "CancelInterviewByRecruiter" -> adapterService.cancelInterviewByRecruiter(
+                    interviewId, recruiterUserId, str(task, "starterUserId"), cancelReason);
             case "ReleaseRecruiterCancelSlot" -> adapterService.releaseRecruiterCancelSlot(interviewId);
-            case "ReturnCancelApplicationToReview" -> adapterService.returnCancelApplicationToReview(interviewId, recruiterUserId, stringValue(task, "starterUserId"), cancelReason);
-            case "RecordRecruiterCancelHistory" -> adapterService.recordRecruiterCancelHistory(interviewId, recruiterUserId, stringValue(task, "starterUserId"));
+            case "ReturnCancelApplicationToReview" -> adapterService.returnCancelApplicationToReview(
+                    interviewId, recruiterUserId, str(task, "starterUserId"), cancelReason);
+            case "RecordRecruiterCancelHistory" -> adapterService.recordRecruiterCancelHistory(
+                    interviewId, recruiterUserId, str(task, "starterUserId"));
             case "NotifyRecruiterCancelParticipants" -> adapterService.notifyRecruiterCancelParticipants(
-                    readRequiredUuid(task, "applicationId"), cancelReason);
+                    requiredUuid(task, "applicationId"), cancelReason);
             default -> Map.of("interviewCancelIgnored", true, "activityId", activityId);
         };
     }
 
-    private Map<String, Object> handleUiQueryTask(String activityId, Map<String, Object> task) {
+    private Map<String, Object> handleUiQueryTask(String activityId, ExternalTask task) {
         return switch (activityId) {
-            case "LoadCandidateVacancyList" -> adapterService.loadCandidateVacancyList(stringValue(task, "starterUserId"));
-            case "LoadCandidateApplicationList" -> adapterService.loadCandidateApplicationList(stringValue(task, "starterUserId"));
+            case "LoadCandidateVacancyList" -> adapterService.loadCandidateVacancyList(str(task, "starterUserId"));
+            case "LoadCandidateApplicationList" -> adapterService.loadCandidateApplicationList(str(task, "starterUserId"));
             case "LoadCandidateApplicationView" -> adapterService.loadCandidateApplicationView(
-                    stringValue(task, "starterUserId"), stringValue(task, "applicationIdText"));
-            case "LoadRecruiterVacancyList" -> adapterService.loadRecruiterVacancyList(stringValue(task, "starterUserId"));
-            case "LoadRecruiterApplicationList" -> adapterService.loadRecruiterApplicationList(stringValue(task, "starterUserId"));
+                    str(task, "starterUserId"), str(task, "applicationIdText"));
+            case "LoadRecruiterVacancyList" -> adapterService.loadRecruiterVacancyList(str(task, "starterUserId"));
+            case "LoadRecruiterApplicationList" -> adapterService.loadRecruiterApplicationList(str(task, "starterUserId"));
             case "LoadRecruiterApplicationView" -> adapterService.loadRecruiterApplicationView(
-                    stringValue(task, "starterUserId"), stringValue(task, "applicationIdText"));
+                    str(task, "starterUserId"), str(task, "applicationIdText"));
             case "LoadRecruiterSchedule" -> adapterService.loadRecruiterSchedule(
-                    stringValue(task, "starterUserId"), readValue(task, "weekOffset"));
-            case "LoadNotificationList" -> adapterService.loadNotificationList(stringValue(task, "starterUserId"));
-            case "RunTimeoutReview" -> adapterService.runTimeoutReview(stringValue(task, "starterUserId"));
+                    str(task, "starterUserId"), task.getVariable("weekOffset"));
+            case "LoadNotificationList" -> adapterService.loadNotificationList(str(task, "starterUserId"));
+            case "RunTimeoutReview" -> adapterService.runTimeoutReview(str(task, "starterUserId"));
             default -> Map.of("uiQueryIgnored", true, "activityId", activityId);
         };
     }
 
-    private Map<String, Object> handlePermissionTask(String activityId, Map<String, Object> task) {
+    private Map<String, Object> handlePermissionTask(String activityId, ExternalTask task) {
         return switch (activityId) {
-            case "ResolveCreateVacancyPermission" ->
-                    adapterService.resolveCreateVacancyPermission(
-                            stringValue(task, "starterUserId"),
-                            readUuid(task, "recruiterUserId"));
-            case "ResolveRecruiterDecisionPermission" ->
-                    adapterService.resolveRecruiterDecisionPermission(
-                            stringValue(task, "starterUserId"),
-                            readUuid(task, "applicationId"));
-            case "ResolveCandidateResponsePermission" ->
-                    adapterService.resolveCandidateResponsePermission(
-                            stringValue(task, "starterUserId"),
-                            readUuid(task, "applicationId"));
-            case "ResolveAdminResetPermission" ->
-                    adapterService.resolveAdminResetPermission(
-                            stringValue(task, "starterUserId"),
-                            readUuid(task, "adminUserId"));
+            case "ResolveCreateVacancyPermission" -> adapterService.resolveCreateVacancyPermission(
+                    str(task, "starterUserId"), uuid(task, "recruiterUserId"));
+            case "ResolveRecruiterDecisionPermission" -> adapterService.resolveRecruiterDecisionPermission(
+                    str(task, "starterUserId"), uuid(task, "applicationId"));
+            case "ResolveCandidateResponsePermission" -> adapterService.resolveCandidateResponsePermission(
+                    str(task, "starterUserId"), uuid(task, "applicationId"));
+            case "ResolveAdminResetPermission" -> adapterService.resolveAdminResetPermission(
+                    str(task, "starterUserId"), uuid(task, "adminUserId"));
             default -> adapterService.resolveOperationPermission("SYSTEM", "UNKNOWN", false);
         };
     }
 
-    private Map<String, Object> handleStatusTransitionTask(String activityId, Map<String, Object> task) {
+    private Map<String, Object> handleStatusTransitionTask(String activityId, ExternalTask task) {
         return switch (activityId) {
-            case "PrepareRecruiterDecisionTransition" ->
-                    adapterService.prepareRecruiterDecisionTransition(
-                            readRequiredUuid(task, "applicationId"),
-                            stringValue(task, "decision"));
-            case "PrepareCandidateResponseTransition" ->
-                    adapterService.prepareCandidateResponseTransition(
-                            readRequiredUuid(task, "applicationId"),
-                            stringValue(task, "responseType"));
-            case "PrepareCloseVacancyTransition" ->
-                    adapterService.prepareCloseVacancyTransition(readRequiredUuid(task, "vacancyId"));
-            case "PrepareVacancyStatusTransition" ->
-                    adapterService.prepareVacancyStatusTransition(
-                            readRequiredUuid(task, "vacancyId"),
-                            stringValue(task, "requestedStatus"));
+            case "PrepareRecruiterDecisionTransition" -> adapterService.prepareRecruiterDecisionTransition(
+                    requiredUuid(task, "applicationId"), str(task, "decision"));
+            case "PrepareCandidateResponseTransition" -> adapterService.prepareCandidateResponseTransition(
+                    requiredUuid(task, "applicationId"), str(task, "responseType"));
+            case "PrepareCloseVacancyTransition" -> adapterService.prepareCloseVacancyTransition(
+                    requiredUuid(task, "vacancyId"));
+            case "PrepareVacancyStatusTransition" -> adapterService.prepareVacancyStatusTransition(
+                    requiredUuid(task, "vacancyId"), str(task, "requestedStatus"));
             default -> adapterService.prepareStatusTransition("UNKNOWN", "UNKNOWN", "");
         };
     }
 
-    private Map<String, Object> handleNotificationDecisionTask(Map<String, Object> task) {
+    private Map<String, Object> handleNotificationDecisionTask(ExternalTask task) {
         return adapterService.prepareNotificationDecision(
-                stringValue(task, "notificationKind"),
-                readUuid(task, "applicationId"),
-                readUuid(task, "vacancyId"),
-                stringValue(task, "recipientRole")
+                str(task, "notificationKind"),
+                uuid(task, "applicationId"),
+                uuid(task, "vacancyId"),
+                str(task, "recipientRole")
         );
     }
 
-    private Map<String, Object> handleNotificationDispatchTask(Map<String, Object> task) {
-        String notificationKind = stringValue(task, "notificationKind");
-        UUID applicationId = readUuid(task, "applicationId");
-        if (applicationId == null) {
-            applicationId = readUuid(task, "expiredApplicationId");
-        }
+    private Map<String, Object> handleNotificationDispatchTask(ExternalTask task) {
+        UUID applicationId = uuid(task, "applicationId");
+        if (applicationId == null) applicationId = uuid(task, "expiredApplicationId");
         return adapterService.dispatchNotification(
-                notificationKind,
+                str(task, "notificationKind"),
                 applicationId,
-                readUuid(task, "vacancyId"),
-                stringValue(task, "invitationMessage"),
-                stringValue(task, "closeReason"),
-                stringValue(task, "cancelReason"),
-                stringValue(task, "resetReason"),
-                stringValue(task, "notificationTemplateCode")
+                uuid(task, "vacancyId"),
+                str(task, "invitationMessage"),
+                str(task, "closeReason"),
+                str(task, "cancelReason"),
+                str(task, "resetReason"),
+                str(task, "notificationTemplateCode")
         );
     }
 
-    private Map<String, Object> handleRollbackTask(String activityId, Map<String, Object> task) {
+    private Map<String, Object> handleRollbackTask(String activityId, ExternalTask task) {
         return switch (activityId) {
-            case "RollbackApplicationTransaction" -> adapterService.rollbackApplicationTransaction(
-                    readRequiredUuid(task, "applicationId"), stringValue(task, "rollbackReason"));
+            case "RollbackApplicationTransaction", "RollbackAdminReset", "RollbackRecruiterCancel" ->
+                    adapterService.rollbackApplicationTransaction(
+                            requiredUuid(task, "applicationId"), str(task, "rollbackReason"));
             case "RollbackVacancyTransaction" -> adapterService.rollbackVacancyTransaction(
-                    readRequiredUuid(task, "vacancyId"), stringValue(task, "rollbackReason"));
-            case "RollbackAdminReset" -> adapterService.rollbackApplicationTransaction(
-                    readRequiredUuid(task, "applicationId"), stringValue(task, "rollbackReason"));
-            case "RollbackRecruiterCancel" -> adapterService.rollbackApplicationTransaction(
-                    readRequiredUuid(task, "applicationId"), stringValue(task, "rollbackReason"));
+                    requiredUuid(task, "vacancyId"), str(task, "rollbackReason"));
             default -> Map.of("rollbackIgnored", true, "activityId", activityId);
         };
     }
 
-    private boolean throwFormValidationBpmnError(String taskId, Map<String, Object> task, CamundaFormValidationException e) {
-        Object applicationId = readValue(task, "applicationId");
-        Map<String, Object> variables = new java.util.LinkedHashMap<>();
-        if (applicationId != null) {
-            variables.put("applicationId", applicationId);
-        }
+    private boolean throwFormValidationBpmnError(ExternalTaskService service, ExternalTask task, CamundaFormValidationException e) {
         String fieldName = e.getFieldName() == null ? "" : e.getFieldName();
+        Map<String, Object> variables = new LinkedHashMap<>();
+        Object applicationId = task.getVariable("applicationId");
+        if (applicationId != null) variables.put("applicationId", String.valueOf(applicationId));
         variables.put("formErrorMessage", e.getMessage() == null ? "Invalid form data" : e.getMessage());
         variables.put("formErrorField", fieldName);
         variables.put("formErrorFields", fieldName);
         variables.put("formErrorCode", FORM_VALIDATION_FAILED);
-        return camundaRestClient.throwBpmnErrorExternalTask(
-                taskId, FORM_VALIDATION_FAILED, e.getMessage(), variables);
+        try {
+            service.handleBpmnError(task, FORM_VALIDATION_FAILED, e.getMessage(), variables);
+            return true;
+        } catch (Exception ex) {
+            log.warn("Cannot throw form validation BPMN error for task {}: {}", task.getId(), ex.getMessage());
+            return false;
+        }
     }
 
-    private boolean throwRollbackBpmnError(String taskId, String activityId, Map<String, Object> task, Exception e) {
+    private boolean throwRollbackBpmnError(ExternalTaskService service, ExternalTask task, String activityId, Exception e) {
         String errorCode = switch (activityId) {
             case "CloseActiveApplications", "CloseVacancyAndApplicationsToDb", "NotifyVacancyClosedCandidates",
                  "MarkVacancyClosed", "CancelActiveInterviewsForVacancy", "ReleaseScheduleSlotsForClosedVacancy",
@@ -496,45 +475,36 @@ public class CamundaExternalTaskWorker {
             case "ResetInterviewTransaction", "ResetInterviewToDb", "NotifyAdminResetParticipants",
                  "ValidateInterviewCanBeReset", "CancelInterviewByAdmin", "ReleaseAdminResetSlot",
                  "ReturnApplicationToReview", "RecordAdminResetHistory" -> ADMIN_RESET_FAILED;
-            case "CancelInterviewByRecruiter", "ReleaseRecruiterCancelSlot", "ReturnCancelApplicationToReview",
-                 "RecordRecruiterCancelHistory", "NotifyRecruiterCancelParticipants" -> APPLICATION_TRANSACTION_FAILED;
             default -> APPLICATION_TRANSACTION_FAILED;
         };
-        Object applicationId = readValue(task, "applicationId");
-        Object vacancyId = readValue(task, "vacancyId");
-        Map<String, Object> variables = new java.util.LinkedHashMap<>();
-        if (applicationId != null) {
-            variables.put("applicationId", applicationId);
-        }
-        if (vacancyId != null) {
-            variables.put("vacancyId", vacancyId);
-        }
+        Map<String, Object> variables = new LinkedHashMap<>();
+        Object applicationId = task.getVariable("applicationId");
+        Object vacancyId = task.getVariable("vacancyId");
+        if (applicationId != null) variables.put("applicationId", String.valueOf(applicationId));
+        if (vacancyId != null) variables.put("vacancyId", String.valueOf(vacancyId));
         variables.put("rollbackReason", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
-        return camundaRestClient.throwBpmnErrorExternalTask(taskId, errorCode, e.getMessage(), variables);
+        try {
+            service.handleBpmnError(task, errorCode, e.getMessage(), variables);
+            return true;
+        } catch (Exception ex) {
+            log.warn("Cannot throw rollback BPMN error for task {}: {}", task.getId(), ex.getMessage());
+            return false;
+        }
     }
 
     private boolean shouldRouteToBpmnRollback(Exception e) {
         return e instanceof ApiException || e instanceof IllegalArgumentException;
     }
 
-    private UUID readRequiredUuid(Map<String, Object> task, String name) {
-        UUID value = readUuid(task, name);
-        return required(value, name);
-    }
-
-    private UUID required(UUID value, String name) {
-        if (value == null) {
-            throw new IllegalArgumentException("Camunda external task variable is required: " + name);
-        }
+    private UUID requiredUuid(ExternalTask task, String name) {
+        UUID value = uuid(task, name);
+        if (value == null) throw new IllegalArgumentException("Camunda external task variable is required: " + name);
         return value;
     }
 
-    @SuppressWarnings("unchecked")
-    private UUID readUuid(Map<String, Object> task, String name) {
-        Object value = readValue(task, name);
-        if (value == null || String.valueOf(value).isBlank()) {
-            return null;
-        }
+    private UUID uuid(ExternalTask task, String name) {
+        Object value = task.getVariable(name);
+        if (value == null || String.valueOf(value).isBlank()) return null;
         try {
             return UUID.fromString(String.valueOf(value).trim());
         } catch (IllegalArgumentException e) {
@@ -542,39 +512,39 @@ public class CamundaExternalTaskWorker {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private Object readValue(Map<String, Object> task, String name) {
-        Object variablesRaw = task.get("variables");
-        if (!(variablesRaw instanceof Map<?, ?> variables)) {
-            return null;
-        }
-        return CamundaVariable.readValue((Map<String, Object>) variables, name);
+    private <T> T requireNonNull(T value, String name) {
+        if (value == null) throw new IllegalArgumentException("Camunda external task variable is required: " + name);
+        return value;
     }
 
-    private String stringValue(Map<String, Object> task, String name) {
-        Object value = readValue(task, name);
+    private String str(ExternalTask task, String name) {
+        Object value = task.getVariable(name);
         return value == null ? "" : String.valueOf(value);
     }
 
-    private boolean booleanValue(Map<String, Object> task, String name) {
-        Object value = readValue(task, name);
-        if (value instanceof Boolean bool) {
-            return bool;
-        }
+    private boolean bool(ExternalTask task, String name) {
+        Object value = task.getVariable(name);
+        if (value instanceof Boolean b) return b;
         return Boolean.parseBoolean(String.valueOf(value));
     }
 
-    private int integerValue(Map<String, Object> task, String name) {
-        Object value = readValue(task, name);
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
+    private int integer(ExternalTask task, String name) {
+        Object value = task.getVariable(name);
+        if (value instanceof Number n) return n.intValue();
         return Integer.parseInt(String.valueOf(value));
     }
 
+    private static Map<String, Object> flattenForClient(Map<String, Object> vars) {
+        if (vars == null || vars.isEmpty()) return Map.of();
+        Map<String, Object> result = new LinkedHashMap<>(vars.size());
+        vars.forEach((k, v) ->
+                result.put(k, (v == null || v instanceof Boolean || v instanceof Number) ? v : String.valueOf(v)));
+        return result;
+    }
+
     private static String stackTraceToString(Exception e) {
-        java.io.StringWriter stringWriter = new java.io.StringWriter();
-        e.printStackTrace(new java.io.PrintWriter(stringWriter));
-        return stringWriter.toString();
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

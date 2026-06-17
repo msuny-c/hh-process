@@ -1,4 +1,4 @@
-package ru.itmo.hhprocess.camunda;
+package ru.itmo.hhprocess.utils;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -6,10 +6,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
-final class CamundaVariable {
+public final class CamundaVariable {
     private CamundaVariable() {}
 
-    static Map<String, Object> variables(Map<String, ?> values) {
+    public static Map<String, Object> variables(Map<String, ?> values) {
         Map<String, Object> result = new LinkedHashMap<>();
         if (values == null) {
             return result;
@@ -18,7 +18,7 @@ final class CamundaVariable {
         return result;
     }
 
-    static Map<String, Object> variable(Object value) {
+    public static Map<String, Object> variable(Object value) {
         Map<String, Object> result = new LinkedHashMap<>();
         if (value == null) {
             result.put("value", null);
@@ -46,7 +46,7 @@ final class CamundaVariable {
     }
 
     @SuppressWarnings("unchecked")
-    static Object readValue(Map<String, Object> variables, String name) {
+    public static Object readValue(Map<String, Object> variables, String name) {
         Object raw = variables == null ? null : variables.get(name);
         if (raw instanceof Map<?, ?> rawMap) {
             return ((Map<String, Object>) rawMap).get("value");

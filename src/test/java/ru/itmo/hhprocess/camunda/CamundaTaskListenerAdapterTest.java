@@ -1,11 +1,14 @@
 package ru.itmo.hhprocess.camunda;
 
+import ru.itmo.hhprocess.config.CamundaProperties;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.entity.RoleEntity;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.repository.UserRepository;
+import ru.itmo.hhprocess.utils.CamundaVariable;
 
 import java.lang.reflect.Proxy;
 import java.util.HashMap;

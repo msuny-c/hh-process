@@ -1,5 +1,9 @@
 package ru.itmo.hhprocess.camunda;
 
+import ru.itmo.hhprocess.config.CamundaProperties;
+
+import ru.itmo.hhprocess.exception.CamundaFormValidationException;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -34,6 +38,7 @@ import ru.itmo.hhprocess.service.NotificationService;
 import ru.itmo.hhprocess.service.ScheduleService;
 import ru.itmo.hhprocess.service.ScreeningService;
 import ru.itmo.hhprocess.service.VacancyHistoryService;
+import ru.itmo.hhprocess.utils.CamundaFormValidator;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -214,8 +219,8 @@ public class CamundaProcessAdapterService {
         AdminCreateUserRequest request = new AdminCreateUserRequest();
         request.setEmail(normalizeProvisionEmail(email));
         request.setPassword(normalizeProvisionPassword(password));
-        request.setFirstName(normalizeRequiredText(firstName, "First name", 255));
-        request.setLastName(normalizeRequiredText(lastName, "Last name", 255));
+        request.setFirstName(formValidator.requiredText(firstName, "First name", 255));
+        request.setLastName(formValidator.requiredText(lastName, "Last name", 255));
 
         try {
             AdminUserProvisionResponse response = "CANDIDATE".equals(normalizedRole)
@@ -594,18 +599,12 @@ public class CamundaProcessAdapterService {
                 continue;
             }
             interviewService.findActiveByApplicationId(application.getId()).ifPresent(interview -> {
-                interview.setStatus(InterviewStatus.CANCELLED);
-                interview.setCancelReason(reason);
-                interview.setCancelledAt(now);
+                interviewService.cancel(interview, reason);
                 scheduleService.releaseForInterview(interview);
             });
             application.setStatus(ApplicationStatus.CLOSED_BY_VACANCY);
             application.setClosedAt(now);
-            application.setInvitationText(null);
-            application.setInvitationSentAt(null);
-            application.setInvitationExpiresAt(null);
-            application.setResponseReceivedAt(null);
-            application.setRecruiterComment(reason);
+            clearInvitationFields(application, reason);
             historyService.record(application, oldStatus, ApplicationStatus.CLOSED_BY_VACANCY, vacancy.getRecruiterUser());
             closedCount++;
         }
@@ -760,11 +759,7 @@ public class CamundaProcessAdapterService {
         scheduleService.releaseForInterview(interview);
 
         application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
-        application.setInvitationText(null);
-        application.setInvitationSentAt(null);
-        application.setInvitationExpiresAt(null);
-        application.setResponseReceivedAt(null);
-        application.setRecruiterComment(reason);
+        clearInvitationFields(application, reason);
         applicationRepository.save(application);
 
         historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW, adminUser);
@@ -799,11 +794,7 @@ public class CamundaProcessAdapterService {
         });
         if (oldStatus == ApplicationStatus.INVITED || oldStatus == ApplicationStatus.INVITATION_RESPONDED) {
             application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
-            application.setInvitationText(null);
-            application.setInvitationSentAt(null);
-            application.setInvitationExpiresAt(null);
-            application.setResponseReceivedAt(null);
-            application.setRecruiterComment(reason);
+            clearInvitationFields(application, reason);
             applicationRepository.save(application);
             historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW,
                     application.getVacancy().getRecruiterUser());
@@ -1085,10 +1076,10 @@ public class CamundaProcessAdapterService {
     public Map<String, Object> validateCreateVacancyForm(String starterUserId, UUID recruiterUserId, String title, String description,
                                                          Object requiredSkillsRaw, Object screeningThresholdRaw) {
         UserEntity recruiter = resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
-        String normalizedTitle = normalizeRequiredText(title, "Vacancy title", 255);
-        String normalizedDescription = normalizeOptionalText(description, "Vacancy description", 10_000);
-        List<String> skills = parseRequiredSkills(requiredSkillsRaw);
-        int threshold = requiredScreeningThreshold(screeningThresholdRaw);
+        String normalizedTitle = formValidator.requiredText(title, "Vacancy title", 255);
+        String normalizedDescription = formValidator.optionalText(description, "Vacancy description", 10_000);
+        List<String> skills = formValidator.requiredSkills(requiredSkillsRaw);
+        int threshold = formValidator.integerRange(screeningThresholdRaw, "Screening threshold", 0, 100);
         return Map.of(
                 "formValidated", true,
                 "formErrorMessage", "",
@@ -1106,10 +1097,10 @@ public class CamundaProcessAdapterService {
                                                             Object requiredSkillsRaw, Object screeningThresholdRaw,
                                                             String processInstanceId) {
         UserEntity recruiter = resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
-        String normalizedTitle = normalizeRequiredText(title, "Vacancy title", 255);
-        String normalizedDescription = normalizeOptionalText(description, "Vacancy description", 10_000);
-        List<String> skills = parseRequiredSkills(requiredSkillsRaw);
-        int threshold = requiredScreeningThreshold(screeningThresholdRaw);
+        String normalizedTitle = formValidator.requiredText(title, "Vacancy title", 255);
+        String normalizedDescription = formValidator.optionalText(description, "Vacancy description", 10_000);
+        List<String> skills = formValidator.requiredSkills(requiredSkillsRaw);
+        int threshold = formValidator.integerRange(screeningThresholdRaw, "Screening threshold", 0, 100);
 
         VacancyEntity vacancy = vacancyRepository.save(VacancyEntity.builder()
                 .recruiterUser(recruiter)
@@ -1165,11 +1156,9 @@ public class CamundaProcessAdapterService {
         List<ApplicationEntity> applications = applicationRepository.findByVacancyIdAndStatusIn(vacancyId, ACTIVE_APPLICATION_STATUSES);
         int cancelled = 0;
         for (ApplicationEntity application : applications) {
-            if (interviewService.findActiveByApplicationId(application.getId()).isPresent()) {
-                InterviewEntity interview = interviewService.findActiveByApplicationId(application.getId()).get();
-                interview.setStatus(InterviewStatus.CANCELLED);
-                interview.setCancelReason(reason);
-                interview.setCancelledAt(Instant.now());
+            var opt = interviewService.findActiveByApplicationId(application.getId());
+            if (opt.isPresent()) {
+                interviewService.cancel(opt.get(), reason);
                 cancelled++;
             }
         }
@@ -1204,11 +1193,7 @@ public class CamundaProcessAdapterService {
             }
             application.setStatus(ApplicationStatus.CLOSED_BY_VACANCY);
             application.setClosedAt(now);
-            application.setInvitationText(null);
-            application.setInvitationSentAt(null);
-            application.setInvitationExpiresAt(null);
-            application.setResponseReceivedAt(null);
-            application.setRecruiterComment(reason);
+            clearInvitationFields(application, reason);
             historyService.record(application, oldStatus, ApplicationStatus.CLOSED_BY_VACANCY, vacancy.getRecruiterUser());
             closedCount++;
         }
@@ -1261,11 +1246,7 @@ public class CamundaProcessAdapterService {
         ApplicationEntity application = interview.getApplication();
         ApplicationStatus oldStatus = application.getStatus();
         application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
-        application.setInvitationText(null);
-        application.setInvitationSentAt(null);
-        application.setInvitationExpiresAt(null);
-        application.setResponseReceivedAt(null);
-        application.setRecruiterComment(reason);
+        clearInvitationFields(application, reason);
         applicationRepository.save(application);
         return Map.of("applicationReturnedToReview", true, "applicationId", application.getId(),
                 "oldApplicationStatus", oldStatus.name(), "applicationStatus", application.getStatus().name());
@@ -1293,7 +1274,7 @@ public class CamundaProcessAdapterService {
         if (!vacancy.getRecruiterUser().getId().equals(recruiter.getId())) {
             throw new CamundaFormValidationException("Vacancy does not belong to current recruiter");
         }
-        parseVacancyStatus(requestedStatus);
+        formValidator.requiredEnum(requestedStatus, "Vacancy status", VacancyStatus.class, null);
         return Map.of(
                 "formValidated", true,
                 "formErrorMessage", "",
@@ -1306,7 +1287,7 @@ public class CamundaProcessAdapterService {
     @Transactional
     public Map<String, Object> applyVacancyStatusUpdate(UUID vacancyId, UUID recruiterUserId, String starterUserId, String requestedStatus) {
         validateVacancyStatusUpdate(vacancyId, recruiterUserId, starterUserId, requestedStatus);
-        VacancyStatus newStatus = parseVacancyStatus(requestedStatus);
+        VacancyStatus newStatus = formValidator.requiredEnum(requestedStatus, "Vacancy status", VacancyStatus.class, null);
         VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
                 .orElseThrow(() -> new IllegalArgumentException("Vacancy not found: " + vacancyId));
         VacancyStatus oldStatus = vacancy.getStatus();
@@ -1369,11 +1350,7 @@ public class CamundaProcessAdapterService {
         ApplicationEntity application = interview.getApplication();
         ApplicationStatus oldStatus = application.getStatus();
         application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
-        application.setInvitationText(null);
-        application.setInvitationSentAt(null);
-        application.setInvitationExpiresAt(null);
-        application.setResponseReceivedAt(null);
-        application.setRecruiterComment(reason);
+        clearInvitationFields(application, reason);
         applicationRepository.save(application);
         UserEntity recruiter = resolveRecruiterForVacancyCommand(starterUserId, recruiterUserId);
         historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW, recruiter);
@@ -1432,7 +1409,7 @@ public class CamundaProcessAdapterService {
     @Transactional(readOnly = true)
     public Map<String, Object> loadCandidateApplicationView(String starterUserId, String applicationIdText) {
         UserEntity candidate = resolveUserFromCamundaStarter(starterUserId, "CANDIDATE");
-        ApplicationEntity application = getApplication(parseUuidText(applicationIdText, "applicationId"));
+        ApplicationEntity application = getApplication(formValidator.requiredUuidText(applicationIdText, "applicationId"));
         if (!application.getCandidateUser().getId().equals(candidate.getId())) {
             throw new CamundaFormValidationException("Not your application");
         }
@@ -1466,7 +1443,7 @@ public class CamundaProcessAdapterService {
     @Transactional(readOnly = true)
     public Map<String, Object> loadRecruiterApplicationView(String starterUserId, String applicationIdText) {
         UserEntity recruiter = resolveUserFromCamundaStarter(starterUserId, "RECRUITER");
-        ApplicationEntity application = getApplication(parseUuidText(applicationIdText, "applicationId"));
+        ApplicationEntity application = getApplication(formValidator.requiredUuidText(applicationIdText, "applicationId"));
         if (!application.getVacancy().getRecruiterUser().getId().equals(recruiter.getId())) {
             throw new CamundaFormValidationException("Application does not belong to your vacancy");
         }
@@ -1476,7 +1453,7 @@ public class CamundaProcessAdapterService {
     @Transactional(readOnly = true)
     public Map<String, Object> loadRecruiterSchedule(String starterUserId, Object weekOffsetRaw) {
         UserEntity recruiter = resolveUserFromCamundaStarter(starterUserId, "RECRUITER");
-        int weekOffset = parseWeekOffset(weekOffsetRaw);
+        int weekOffset = formValidator.optionalIntegerRange(weekOffsetRaw, "weekOffset", -52, 52, 0);
         return uiPayload("Расписание рекрутера", recruiterScheduleUiPayload(
                 scheduleService.getRecruiterWeekSchedule(recruiter, weekOffset)));
     }
@@ -1541,10 +1518,6 @@ public class CamundaProcessAdapterService {
     }
 
 
-    private UserEntity resolveRecruiterFromCamundaStarter(String starterUserId) {
-        return resolveUserFromCamundaStarter(starterUserId, "RECRUITER");
-    }
-
     private UserEntity resolveRecruiterForVacancyCommand(String starterUserId, UUID recruiterUserId) {
         if (recruiterUserId != null) {
             UserEntity recruiter = userRepository.findById(recruiterUserId)
@@ -1557,7 +1530,7 @@ public class CamundaProcessAdapterService {
             }
             return recruiter;
         }
-        return resolveRecruiterFromCamundaStarter(starterUserId);
+        return resolveUserFromCamundaStarter(starterUserId, "RECRUITER");
     }
 
     private UserEntity resolveUserFromCamundaStarter(String starterUserId, String requiredRole) {
@@ -1695,10 +1668,6 @@ public class CamundaProcessAdapterService {
         }
     }
 
-    private String normalizeRequiredText(String value, String fieldName, int maxLength) {
-        return formValidator.requiredText(value, fieldName, maxLength);
-    }
-
     private String normalizeProvisionEmail(String value) {
         String email = formValidator.requiredText(value, "Email", 255).toLowerCase(java.util.Locale.ROOT);
         if (!email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
@@ -1713,30 +1682,6 @@ public class CamundaProcessAdapterService {
             throw new CamundaFormValidationException("Password", "Password must be between 8 and 128 characters");
         }
         return password;
-    }
-
-    private String normalizeOptionalText(String value, String fieldName, int maxLength) {
-        return formValidator.optionalText(value, fieldName, maxLength);
-    }
-
-    private List<String> parseRequiredSkills(Object raw) {
-        return formValidator.requiredSkills(raw);
-    }
-
-    private int requiredScreeningThreshold(Object raw) {
-        return formValidator.integerRange(raw, "Screening threshold", 0, 100);
-    }
-
-    private VacancyStatus parseVacancyStatus(String requestedStatus) {
-        return formValidator.requiredEnum(requestedStatus, "Vacancy status", VacancyStatus.class, null);
-    }
-
-    private UUID parseUuidText(String value, String fieldName) {
-        return formValidator.requiredUuidText(value, fieldName);
-    }
-
-    private int parseWeekOffset(Object raw) {
-        return formValidator.optionalIntegerRange(raw, "weekOffset", -52, 52, 0);
     }
 
     private Map<String, Object> applicationSummary(ApplicationEntity application) {
@@ -1811,5 +1756,13 @@ public class CamundaProcessAdapterService {
     private ApplicationEntity getApplication(UUID applicationId) {
         return applicationRepository.findDetailedById(applicationId)
                 .orElseThrow(() -> new IllegalArgumentException("Application not found: " + applicationId));
+    }
+
+    private void clearInvitationFields(ApplicationEntity application, String reason) {
+        application.setInvitationText(null);
+        application.setInvitationSentAt(null);
+        application.setInvitationExpiresAt(null);
+        application.setResponseReceivedAt(null);
+        application.setRecruiterComment(reason);
     }
 }

@@ -23,8 +23,8 @@ public class XaDataSourceConfig {
             @Value("${POSTGRES_SCHEMA:public}") String currentSchema
     ) {
         PGXADataSource dataSource = new PGXADataSource();
-        dataSource.setServerName(host);
-        dataSource.setPortNumber(port);
+        dataSource.setServerNames(new String[] { host });
+        dataSource.setPortNumbers(new int[] { port });
         dataSource.setDatabaseName(database);
         dataSource.setUser(user);
         dataSource.setPassword(password);

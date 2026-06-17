@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.repository.UserRepository;
+import ru.itmo.hhprocess.utils.CamundaVariable;
 
 import java.util.Map;
 import java.util.Optional;

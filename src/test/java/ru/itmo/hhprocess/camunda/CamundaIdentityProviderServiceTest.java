@@ -1,5 +1,7 @@
 package ru.itmo.hhprocess.camunda;
 
+import ru.itmo.hhprocess.config.CamundaProperties;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
