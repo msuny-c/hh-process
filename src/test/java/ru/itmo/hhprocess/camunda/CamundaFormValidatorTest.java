@@ -4,8 +4,6 @@ import org.junit.jupiter.api.Test;
 import ru.itmo.hhprocess.enums.ResponseType;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Set;
 import java.util.UUID;
 
@@ -30,16 +28,6 @@ class CamundaFormValidatorTest {
                 ResponseType.class,
                 Set.of(ResponseType.ACCEPT, ResponseType.DECLINE, ResponseType.OTHER)));
         assertEquals(java.util.List.of("Java", "SQL"), validator.requiredSkills("Java, SQL"));
-    }
-
-    @Test
-    void acceptsHumanReadableDateTimeValues() {
-        Instant expected = LocalDateTime.of(2030, 6, 20, 12, 30)
-                .atZone(ZoneId.systemDefault())
-                .toInstant();
-
-        assertEquals(expected, validator.requiredInstant("20.06.2030 12:30", "Interview date/time"));
-        assertEquals(expected, validator.requiredInstant("2030-06-20 12:30", "Interview date/time"));
     }
 
     @Test

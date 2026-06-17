@@ -9,7 +9,6 @@ import ru.itmo.hhprocess.enums.ResponseType;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.service.TimeoutBatchProcessor;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -48,11 +47,6 @@ public class CamundaExternalTaskWorker {
     private final TimeoutBatchProcessor timeoutBatchProcessor;
     private final CamundaProcessAdapterService adapterService;
 
-    @FunctionalInterface
-    private interface TopicHandler {
-        Map<String, Object> handle(String activityId, Map<String, Object> task);
-    }
-
     @Scheduled(fixedDelayString = "${app.camunda.worker.poll-interval-ms:3000}", initialDelayString = "${app.camunda.worker.initial-delay-ms:10000}")
     public void poll() {
         if (!camundaRestClient.isEnabled()) {
@@ -74,8 +68,26 @@ public class CamundaExternalTaskWorker {
         String topic = String.valueOf(task.get("topicName"));
         String activityId = String.valueOf(task.get("activityId"));
         try {
-            TopicHandler handler = topicHandlers().getOrDefault(topic, (ignored, ignoredTask) -> Map.of("ignored", true, "topic", topic));
-            Map<String, Object> variables = handler.handle(activityId, task);
+            Map<String, Object> variables = switch (topic) {
+                case TOPIC_AUTO_SCREEN -> handleAutoScreenTask(activityId, task);
+                case TOPIC_NOTIFY, TOPIC_APPLICATION_PERSISTENCE, TOPIC_APPLICATION_NOTIFICATION, TOPIC_APPLICATION_MESSAGE ->
+                        handleNotificationBackedTask(activityId, task);
+                case TOPIC_FORM_VALIDATION -> handleFormValidationTask(activityId, task);
+                case TOPIC_TIMEOUT -> handleTimeoutTask(activityId, task);
+                case TOPIC_VACANCY_CREATE -> handleVacancyCreateTask(activityId, task);
+                case TOPIC_VACANCY_CLOSE -> handleVacancyCloseTask(activityId, task);
+                case TOPIC_VACANCY_STATUS_UPDATE -> handleVacancyStatusUpdateTask(activityId, task);
+                case TOPIC_INTERVIEW_CANCEL -> handleInterviewCancelTask(activityId, task);
+                case TOPIC_ROLLBACK -> handleRollbackTask(activityId, task);
+                case TOPIC_ADMIN_INTERVIEW_RESET -> handleAdminInterviewResetTask(activityId, task);
+                case TOPIC_ADMIN_USER_PROVISION -> handleAdminUserProvisionTask(activityId, task);
+                case TOPIC_UI_QUERY -> handleUiQueryTask(activityId, task);
+                case TOPIC_PERMISSION_CHECK -> handlePermissionTask(activityId, task);
+                case TOPIC_STATUS_TRANSITION -> handleStatusTransitionTask(activityId, task);
+                case TOPIC_NOTIFICATION_DECISION -> handleNotificationDecisionTask(task);
+                case TOPIC_NOTIFICATION_DISPATCH -> handleNotificationDispatchTask(task);
+                default -> Map.of("ignored", true, "topic", topic);
+            };
             camundaRestClient.completeExternalTask(taskId, variables);
         } catch (CamundaFormValidationException e) {
             log.warn("Camunda form validation failed; taskId={}, topic={}, activityId={}, message={}",
@@ -91,30 +103,6 @@ public class CamundaExternalTaskWorker {
             }
             camundaRestClient.failExternalTask(taskId, e.getMessage(), stackTraceToString(e));
         }
-    }
-
-    private Map<String, TopicHandler> topicHandlers() {
-        return Map.ofEntries(
-                Map.entry(TOPIC_AUTO_SCREEN, this::handleAutoScreenTask),
-                Map.entry(TOPIC_NOTIFY, this::handleNotificationBackedTask),
-                Map.entry(TOPIC_APPLICATION_PERSISTENCE, this::handleNotificationBackedTask),
-                Map.entry(TOPIC_APPLICATION_NOTIFICATION, this::handleNotificationBackedTask),
-                Map.entry(TOPIC_APPLICATION_MESSAGE, this::handleNotificationBackedTask),
-                Map.entry(TOPIC_FORM_VALIDATION, this::handleFormValidationTask),
-                Map.entry(TOPIC_TIMEOUT, this::handleTimeoutTask),
-                Map.entry(TOPIC_VACANCY_CREATE, this::handleVacancyCreateTask),
-                Map.entry(TOPIC_VACANCY_CLOSE, this::handleVacancyCloseTask),
-                Map.entry(TOPIC_VACANCY_STATUS_UPDATE, this::handleVacancyStatusUpdateTask),
-                Map.entry(TOPIC_INTERVIEW_CANCEL, this::handleInterviewCancelTask),
-                Map.entry(TOPIC_ROLLBACK, this::handleRollbackTask),
-                Map.entry(TOPIC_ADMIN_INTERVIEW_RESET, this::handleAdminInterviewResetTask),
-                Map.entry(TOPIC_ADMIN_USER_PROVISION, this::handleAdminUserProvisionTask),
-                Map.entry(TOPIC_UI_QUERY, this::handleUiQueryTask),
-                Map.entry(TOPIC_PERMISSION_CHECK, this::handlePermissionTask),
-                Map.entry(TOPIC_STATUS_TRANSITION, this::handleStatusTransitionTask),
-                Map.entry(TOPIC_NOTIFICATION_DECISION, (activityId, task) -> handleNotificationDecisionTask(task)),
-                Map.entry(TOPIC_NOTIFICATION_DISPATCH, (activityId, task) -> handleNotificationDispatchTask(task))
-        );
     }
 
     private Map<String, Object> handleAutoScreenTask(String activityId, Map<String, Object> task) {
@@ -175,7 +163,7 @@ public class CamundaExternalTaskWorker {
             case "NotifyScreeningFailed" -> adapterService.notifyScreeningFailed(applicationId);
             case "NotifyRecruiter" -> adapterService.notifyRecruiter(applicationId);
             case "PersistRejection" -> {
-                Map<String, Object> variables = new LinkedHashMap<>(
+                Map<String, Object> variables = new java.util.LinkedHashMap<>(
                         adapterService.rejectApplication(applicationId, stringValue(task, "recruiterComment")));
                 variables.putAll(adapterService.notifyApplicationRejected(applicationId));
                 yield variables;
@@ -188,7 +176,7 @@ public class CamundaExternalTaskWorker {
             case "NotifyRejection" -> adapterService.notifyApplicationRejected(applicationId);
             case "PersistInvitation" -> {
                 String invitationMessage = stringValue(task, "invitationMessage");
-                Map<String, Object> variables = new LinkedHashMap<>(adapterService.persistInvitation(
+                Map<String, Object> variables = new java.util.LinkedHashMap<>(adapterService.persistInvitation(
                         applicationId,
                         invitationMessage,
                         adapterService.scheduledAtOrDefault(readValue(task, "scheduledAt")),
@@ -216,7 +204,7 @@ public class CamundaExternalTaskWorker {
             case "RecordInvitationHistory" -> adapterService.recordInvitationHistory(applicationId);
             case "NotifyInvitation" -> adapterService.notifyInvitation(applicationId, stringValue(task, "invitationMessage"));
             case "PersistCandidateResponse" -> {
-                Map<String, Object> variables = new LinkedHashMap<>(adapterService.persistCandidateResponse(
+                Map<String, Object> variables = new java.util.LinkedHashMap<>(adapterService.persistCandidateResponse(
                         applicationId,
                         ResponseType.valueOf(stringValue(task, "responseType")),
                         stringValue(task, "responseMessage")
@@ -487,7 +475,7 @@ public class CamundaExternalTaskWorker {
 
     private boolean throwFormValidationBpmnError(String taskId, Map<String, Object> task, CamundaFormValidationException e) {
         Object applicationId = readValue(task, "applicationId");
-        Map<String, Object> variables = new LinkedHashMap<>();
+        Map<String, Object> variables = new java.util.LinkedHashMap<>();
         if (applicationId != null) {
             variables.put("applicationId", applicationId);
         }
@@ -514,7 +502,7 @@ public class CamundaExternalTaskWorker {
         };
         Object applicationId = readValue(task, "applicationId");
         Object vacancyId = readValue(task, "vacancyId");
-        Map<String, Object> variables = new LinkedHashMap<>();
+        Map<String, Object> variables = new java.util.LinkedHashMap<>();
         if (applicationId != null) {
             variables.put("applicationId", applicationId);
         }

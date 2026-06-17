@@ -3,11 +3,7 @@ package ru.itmo.hhprocess.camunda;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -15,16 +11,6 @@ import java.util.UUID;
 
 @Component
 public class CamundaFormValidator {
-
-    private static final ZoneId HUMAN_DATE_ZONE = ZoneId.systemDefault();
-    private static final List<DateTimeFormatter> HUMAN_DATE_TIME_FORMATS = List.of(
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm"),
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"),
-            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"),
-            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
-    );
 
     public String requiredText(String value, String fieldName, int maxLength) {
         if (value == null || value.isBlank()) {
@@ -93,20 +79,14 @@ public class CamundaFormValidator {
         if (value == null || String.valueOf(value).isBlank()) {
             throw validationError(fieldName, fieldName + " is required");
         }
-        String raw = String.valueOf(value).trim();
+        String raw = String.valueOf(value);
         try {
             return Instant.parse(raw);
         } catch (RuntimeException instantParseException) {
             try {
                 return OffsetDateTime.parse(raw).toInstant();
             } catch (RuntimeException offsetParseException) {
-                for (DateTimeFormatter formatter : HUMAN_DATE_TIME_FORMATS) {
-                    try {
-                        return LocalDateTime.parse(raw, formatter).atZone(HUMAN_DATE_ZONE).toInstant();
-                    } catch (DateTimeParseException ignored) {
-                    }
-                }
-                throw validationError(fieldName, fieldName + " must be a valid date/time");
+                throw validationError(fieldName, fieldName + " must be a valid ISO-8601 timestamp");
             }
         }
     }
