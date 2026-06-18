@@ -3,17 +3,13 @@ package ru.itmo.hhprocess.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import ru.itmo.hhprocess.dto.recruiter.*;
-import ru.itmo.hhprocess.dto.admin.ResetInterviewRequest;
-import ru.itmo.hhprocess.dto.admin.ResetInterviewResponse;
 import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.InterviewEntity;
 import ru.itmo.hhprocess.entity.RecruiterScheduleSlotEntity;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.enums.ErrorCode;
-import ru.itmo.hhprocess.enums.NotificationType;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
 
@@ -33,10 +29,7 @@ public class InterviewProcessService {
     private final VacancyService vacancyService;
     private final InterviewService interviewService;
     private final ScheduleService scheduleService;
-    private final HistoryService historyService;
-    private final NotificationService notificationService;
     private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
-    private final AuthService authService;
 
     public InviteResponse invite(UUID applicationId, InviteRequest request) {
         UserEntity recruiterUser = vacancyService.getRecruiterUserForCurrentUser();
@@ -93,28 +86,6 @@ public class InterviewProcessService {
 
         application = waitForApplicationStatus(applicationId, ApplicationStatus.REJECTED_BY_RECRUITER);
         return RejectResponse.builder().applicationId(application.getId()).status(ApplicationStatus.REJECTED_BY_RECRUITER.toExternalStatus()).build();
-    }
-
-    public ResetInterviewResponse resetInterviewByAdmin(UUID interviewId, ResetInterviewRequest request) {
-        UserEntity adminUser = authService.getCurrentUser();
-        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
-        if (interview.getStatus() != ru.itmo.hhprocess.enums.InterviewStatus.SCHEDULED) {
-            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE, "Interview is not active");
-        }
-
-        if (!camundaWorkflowFacade.adminResetInterview(interview, adminUser, request.getReason())) {
-            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.INVALID_APPLICATION_STATE,
-                    "Camunda admin reset process was not started");
-        }
-
-        interview = waitForInterviewCancelled(interviewId);
-        camundaWorkflowFacade.returnInvitationToRecruiterReview(interview.getApplication(), request.getReason(), "ADMIN_RESET");
-        return ResetInterviewResponse.builder()
-                .interviewId(interview.getId())
-                .applicationId(interview.getApplication().getId())
-                .status("CANCELLED")
-                .message("Interview reset")
-                .build();
     }
 
     public InterviewActionResponse cancelInterview(UUID interviewId, CancelInterviewRequest request) {

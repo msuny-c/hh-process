@@ -213,7 +213,6 @@ python test/test_camunda_visual_model_contract.py
 python test/test_camunda_decisions_runtime.py
 python test/test_camunda_tasklist_candidate_apply.py
 python test/test_camunda_smoke_flow.py
-python test/test_admin_interview_reset.py
 python test/test_camunda_integration.py
 python test/test_camunda_scenarios.py
 python test/test_camunda_e2e.py
@@ -235,7 +234,7 @@ docker run --rm --network hh-process_default \
   -v "$PWD:/workspace" \
   -w /workspace \
   hh-process-tests:local \
-  sh -c 'set -eu; for f in test/test_camunda_model_coverage.py test/test_camunda_visual_model_contract.py test/test_camunda_decisions_runtime.py test/test_camunda_tasklist_candidate_apply.py test/test.py test/test_camunda_smoke_flow.py test/test_composite_transactions.py test/test_security_validation.py test/test_access_matrix.py test/test_transaction_atomicity.py test/test_business_rules.py test/test_timeout_job_db_fixture.py test/test_admin_interview_reset.py test/test_camunda_integration.py test/test_camunda_scenarios.py test/test_camunda_e2e.py; do echo "===== $f"; python "$f"; done'
+  sh -c 'set -eu; for f in test/test_camunda_model_coverage.py test/test_camunda_visual_model_contract.py test/test_camunda_decisions_runtime.py test/test_camunda_tasklist_candidate_apply.py test/test.py test/test_camunda_smoke_flow.py test/test_composite_transactions.py test/test_security_validation.py test/test_access_matrix.py test/test_transaction_atomicity.py test/test_business_rules.py test/test_timeout_job_db_fixture.py test/test_camunda_integration.py test/test_camunda_scenarios.py test/test_camunda_e2e.py; do echo "===== $f"; python "$f"; done'
 ```
 
 Java unit tests также можно запускать в контейнере:
@@ -253,7 +252,7 @@ Camunda-focused проверки:
 - `test/test_camunda_decisions_runtime.py` — runtime evaluation DMN через Camunda REST.
 - `test/test_camunda_tasklist_candidate_apply.py` — кандидат создаёт отклик через Camunda Form/Tasklist path, не через REST apply endpoint.
 - `test/test_camunda_smoke_flow.py` — сквозной Camunda smoke: users/groups, instances, history activities, UI-процессы, variables и отсутствие incidents.
-- `test/test_admin_interview_reset.py`, `test/test_camunda_integration.py`, `test/test_camunda_scenarios.py`, `test/test_camunda_e2e.py` — полные runtime-сценарии Camunda, административный reset, deployed artifacts, authorizations, scheduler и e2e happy path.
+- `test/test_camunda_integration.py`, `test/test_camunda_scenarios.py`, `test/test_camunda_e2e.py` — полные runtime-сценарии Camunda, deployed artifacts, authorizations, scheduler и e2e happy path.
 
 
 ## Локальный запуск через WildFly в Docker

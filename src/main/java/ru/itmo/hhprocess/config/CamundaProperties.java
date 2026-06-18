@@ -24,8 +24,7 @@ public class CamundaProperties {
     private String applicationProcessKey = "hhApplicationProcess";
     private String vacancyProcessKey = "hhVacancyProcess";
     private String timeoutSchedulerProcessKey = "hhTimeoutSchedulerProcess";
-    private String adminInterviewResetProcessKey = "hhAdminInterviewResetProcess";
-    private String vacancyStatusUpdateProcessKey = "hhVacancyStatusUpdateProcess";
+private String vacancyStatusUpdateProcessKey = "hhVacancyStatusUpdateProcess";
     private String recruiterInterviewCancelProcessKey = "hhRecruiterInterviewCancelProcess";
 
     private String identitySyncInitialPassword = "camunda";

@@ -7,18 +7,15 @@ import ru.itmo.hhprocess.dto.candidate.CreateApplicationResponse;
 import ru.itmo.hhprocess.entity.*;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
 import ru.itmo.hhprocess.enums.ErrorCode;
-import ru.itmo.hhprocess.enums.NotificationType;
 import ru.itmo.hhprocess.enums.VacancyStatus;
 import ru.itmo.hhprocess.exception.ApiException;
 import ru.itmo.hhprocess.mapper.ApplicationMapper;
 import ru.itmo.hhprocess.repository.ApplicationRepository;
-import ru.itmo.hhprocess.repository.UserRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,11 +24,7 @@ import java.util.UUID;
 public class ApplicationService {
 
         private final ApplicationRepository applicationRepository;
-        private final UserRepository userRepository;
         private final VacancyService vacancyService;
-        private final ScreeningService screeningService;
-        private final HistoryService historyService;
-        private final NotificationService notificationService;
         private final AuthService authService;
         private final ApplicationMapper applicationMapper;
         private final InterviewService interviewService;

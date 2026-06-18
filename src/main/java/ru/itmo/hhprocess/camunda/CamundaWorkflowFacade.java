@@ -34,12 +34,10 @@ public class CamundaWorkflowFacade {
     private static final String WRITE_INVITATION_TASK = "WriteInvitationTask";
     private static final String CANDIDATE_RESPONSE_TASK = "CandidateInvitationResponseTask";
     private static final String MANAGE_VACANCY_TASK = "ManageVacancyTask";
-    private static final String ADMIN_RESET_APPROVAL_TASK = "AdminResetApprovalTask";
     private static final String UPDATE_VACANCY_STATUS_TASK = "UpdateVacancyStatusTask";
     private static final String CANCEL_INTERVIEW_TASK = "CancelInterviewTask";
     private static final String RECRUITER_GROUP = "RECRUITER";
     private static final String CANDIDATE_GROUP = "CANDIDATE";
-    private static final String ADMIN_GROUP = "ADMIN";
 
     private final CamundaRestClient camundaRestClient;
     private final CamundaProperties properties;
@@ -204,7 +202,6 @@ public class CamundaWorkflowFacade {
                 "returnedToRecruiterReviewAt", Instant.now()
         );
         String messageName = switch (responseType) {
-            case "ADMIN_RESET" -> "MSG_ADMIN_RESET_DONE";
             case "RECRUITER_CANCEL" -> "MSG_INTERVIEW_CANCELLED";
             default -> "";
         };
@@ -287,31 +284,6 @@ public class CamundaWorkflowFacade {
                 "timeout-scheduler",
                 Map.of("startedAt", Instant.now())
         );
-    }
-
-    public boolean adminResetInterview(InterviewEntity interview, UserEntity adminUser, String reason) {
-        ApplicationEntity application = interview.getApplication();
-        String businessKey = "admin-reset:" + interview.getId() + ":" + UUID.randomUUID();
-        Optional<String> processInstanceId = camundaRestClient.startProcessByKey(
-                properties.getAdminInterviewResetProcessKey(),
-                businessKey,
-                Map.of(
-                        "interviewId", interview.getId(),
-                        "applicationId", application.getId(),
-                        "vacancyId", application.getVacancy().getId(),
-                        "candidateUserId", application.getCandidateUser().getId(),
-                        "recruiterUserId", application.getVacancy().getRecruiterUser().getId(),
-                        "adminUserId", adminUser.getId(),
-                        "resetReason", safe(reason),
-                        "requestedAt", Instant.now()
-                )
-        );
-        return processInstanceId.isPresent()
-                && completeTaskInProcessInstance(processInstanceId.get(), ADMIN_RESET_APPROVAL_TASK, ADMIN_GROUP, adminUser.getId(), Map.of(
-                "approvedByAdminUserId", adminUser.getId(),
-                "resetReason", safe(reason),
-                "approvedAt", Instant.now()
-        ));
     }
 
     public Optional<String> recruiterCancelInterview(InterviewEntity interview, UserEntity recruiterUser, String reason) {

@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import ru.itmo.hhprocess.dto.recruiter.CloseVacancyRequest;
 import ru.itmo.hhprocess.dto.recruiter.VacancyResponse;
-import ru.itmo.hhprocess.entity.ApplicationEntity;
 import ru.itmo.hhprocess.entity.UserEntity;
 import ru.itmo.hhprocess.entity.VacancyEntity;
 import ru.itmo.hhprocess.enums.ApplicationStatus;
@@ -31,11 +30,6 @@ public class VacancyLifecycleService {
 
     private final VacancyService vacancyService;
     private final ApplicationRepository applicationRepository;
-    private final InterviewService interviewService;
-    private final ScheduleService scheduleService;
-    private final HistoryService historyService;
-    private final VacancyHistoryService vacancyHistoryService;
-    private final NotificationService notificationService;
     private final VacancyMapper vacancyMapper;
     private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
 

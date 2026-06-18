@@ -4,8 +4,7 @@
   <bpmn:error id="Error_ApplicationTxFailed" name="APPLICATION_TX_FAILED" errorCode="APPLICATION_TX_FAILED" />
   <bpmn:message id="Message_VacancyClosed" name="MSG_VACANCY_CLOSED" />
   <bpmn:message id="Message_InterviewCancelled" name="MSG_INTERVIEW_CANCELLED" />
-  <bpmn:message id="Message_AdminResetDone" name="MSG_ADMIN_RESET_DONE" />
-  <bpmn:message id="Message_InvitationExpired" name="MSG_INVITATION_EXPIRED" />
+<bpmn:message id="Message_InvitationExpired" name="MSG_INVITATION_EXPIRED" />
   <bpmn:collaboration id="Collaboration_hhApplicationProcess" name="Пул: процесс отклика кандидата">
     <bpmn:participant id="Participant_hhApplicationProcess" name="Пул: процесс отклика кандидата" processRef="hhApplicationProcess" />
   </bpmn:collaboration>
@@ -21,8 +20,7 @@
         <bpmn:flowNodeRef>CandidateResponseGateway</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>CandidateInvitationResponseTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>InvitationExpiredAtCandidateResponse</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>AdminResetDoneAtCandidateResponse</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>InterviewCancelledAtCandidateResponse</bpmn:flowNodeRef>
+<bpmn:flowNodeRef>InterviewCancelledAtCandidateResponse</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>VacancyClosedAtCandidateResponse</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>InvitationTimeoutBoundary</bpmn:flowNodeRef>
       </bpmn:lane>
@@ -293,8 +291,7 @@
     <bpmn:sequenceFlow id="F10" sourceRef="ValidateRecruiterDecisionForm" targetRef="PrepareRecruiterDecisionTransition" />
     <bpmn:sequenceFlow id="F19" sourceRef="CandidateInvitationResponseTask" targetRef="CandidateResponseGateway" />
     <bpmn:sequenceFlow id="F_MSG_InterviewCancelled" name="тип ответа: интервью отменил рекрутер" sourceRef="InterviewCancelledAtCandidateResponse" targetRef="CandidateResponseGateway" />
-    <bpmn:sequenceFlow id="F_MSG_AdminResetDone" name="тип ответа: интервью сбросил администратор" sourceRef="AdminResetDoneAtCandidateResponse" targetRef="CandidateResponseGateway" />
-    <bpmn:sequenceFlow id="F_MSG_InvitationExpired" name="тип ответа: приглашение просрочено" sourceRef="InvitationExpiredAtCandidateResponse" targetRef="CandidateResponseGateway" />
+<bpmn:sequenceFlow id="F_MSG_InvitationExpired" name="тип ответа: приглашение просрочено" sourceRef="InvitationExpiredAtCandidateResponse" targetRef="CandidateResponseGateway" />
     <bpmn:sequenceFlow id="F21" sourceRef="CandidateResponseGateway" targetRef="Transaction_Rejection">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType == 'RECRUITER_REJECT'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -302,10 +299,10 @@
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType == 'TIMEOUT'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F21b" sourceRef="CandidateResponseGateway" targetRef="ResolveRecruiterDecisionPermission">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType == 'RECRUITER_CANCEL' || responseType == 'ADMIN_RESET'}</bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType == 'RECRUITER_CANCEL'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F22" sourceRef="CandidateResponseGateway" targetRef="ValidateCandidateResponseForm">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType != 'TIMEOUT' &amp;&amp; responseType != 'RECRUITER_REJECT' &amp;&amp; responseType != 'RECRUITER_CANCEL' &amp;&amp; responseType != 'ADMIN_RESET'}</bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${responseType != 'TIMEOUT' &amp;&amp; responseType != 'RECRUITER_REJECT' &amp;&amp; responseType != 'RECRUITER_CANCEL'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F23" sourceRef="ValidateCandidateResponseForm" targetRef="PrepareCandidateResponseTransition" />
     <bpmn:sequenceFlow id="F23_DMN_PREPARED" name="статус и действие подготовлены" sourceRef="PrepareCandidateResponseTransition" targetRef="EvaluateCandidateResponseTransition" />
@@ -387,10 +384,7 @@
     <bpmn:boundaryEvent id="InvitationExpiredAtCandidateResponse" name="Событие: приглашение просрочено" attachedToRef="CandidateInvitationResponseTask">
       <bpmn:messageEventDefinition messageRef="Message_InvitationExpired" />
     </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="AdminResetDoneAtCandidateResponse" name="Событие: администратор сбросил интервью" attachedToRef="CandidateInvitationResponseTask">
-      <bpmn:messageEventDefinition messageRef="Message_AdminResetDone" />
-    </bpmn:boundaryEvent>
-    <bpmn:boundaryEvent id="InterviewCancelledAtCandidateResponse" name="Событие: интервью отменено рекрутером" attachedToRef="CandidateInvitationResponseTask">
+<bpmn:boundaryEvent id="InterviewCancelledAtCandidateResponse" name="Событие: интервью отменено рекрутером" attachedToRef="CandidateInvitationResponseTask">
       <bpmn:messageEventDefinition messageRef="Message_InterviewCancelled" />
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="VacancyClosedAtCandidateResponse" attachedToRef="CandidateInvitationResponseTask">
@@ -868,13 +862,7 @@
           <dc:Bounds x="6406" y="247" width="68" height="40" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_AdminResetDoneAtCandidateResponse" bpmnElement="AdminResetDoneAtCandidateResponse">
-        <dc:Bounds x="6393" y="230" width="1" height="1" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="6330" y="230" width="79" height="53" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_InterviewCancelledAtCandidateResponse" bpmnElement="InterviewCancelledAtCandidateResponse">
+<bpmndi:BPMNShape id="BPMNShape_InterviewCancelledAtCandidateResponse" bpmnElement="InterviewCancelledAtCandidateResponse">
         <dc:Bounds x="6348" y="230" width="1" height="1" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="6282" y="263" width="60" height="53" />
@@ -1021,15 +1009,6 @@
         <di:waypoint x="6555" y="320" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="6263" y="286" width="57" height="53" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_F_MSG_AdminResetDone" bpmnElement="F_MSG_AdminResetDone">
-        <di:waypoint x="6394" y="231" />
-        <di:waypoint x="6530" y="231" />
-        <di:waypoint x="6530" y="320" />
-        <di:waypoint x="6555" y="320" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="6520" y="240" width="79" height="53" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F_MSG_InvitationExpired" bpmnElement="F_MSG_InvitationExpired">

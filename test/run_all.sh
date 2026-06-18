@@ -25,7 +25,6 @@ python /tests/test_recruiter_task_isolation.py
 python /tests/test_transaction_atomicity.py
 python /tests/test_business_rules.py
 python /tests/test_timeout_job_db_fixture.py
-python /tests/test_admin_interview_reset.py
 python /tests/test_camunda_integration.py
 python /tests/test_camunda_scenarios.py
 python /tests/test_camunda_e2e.py

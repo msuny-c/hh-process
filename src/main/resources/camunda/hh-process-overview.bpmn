@@ -14,10 +14,7 @@
         <bpmn:flowNodeRef>OverviewEnd</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>OverviewTimeout</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_Admin_O" name="Администратор">
-        <bpmn:flowNodeRef>OverviewAdminReset</bpmn:flowNodeRef>
-      </bpmn:lane>
-      <bpmn:lane id="Lane_Recruiter_O" name="Рекрутер">
+<bpmn:lane id="Lane_Recruiter_O" name="Рекрутер">
         <bpmn:flowNodeRef>OverviewRecruiterDecision</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>OverviewCloseVacancy</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>OverviewInvitation</bpmn:flowNodeRef>
@@ -35,7 +32,6 @@
     <bpmn:userTask id="OverviewRecruiterDecision" name="Рекрутер принимает решение" camunda:formRef="recruiter-decision-form" camunda:formRefBinding="latest" camunda:candidateGroups="RECRUITER">
       <bpmn:incoming>OF5</bpmn:incoming>
       <bpmn:incoming>OF15</bpmn:incoming>
-      <bpmn:outgoing>Flow_0rjoo46</bpmn:outgoing>
       <bpmn:outgoing>Flow_1rw6o35</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:sequenceFlow id="OF1" sourceRef="OverviewStart" targetRef="OverviewCandidateApply" />
@@ -47,13 +43,11 @@
     <bpmn:sequenceFlow id="OF16" name="переход к проверке таймаутов" sourceRef="OverviewCandidateResponse" targetRef="OverviewTimeout" />
     <bpmn:sequenceFlow id="OF11" sourceRef="OverviewTimeout" targetRef="OverviewEnd" />
     <bpmn:sequenceFlow id="OF9" sourceRef="OverviewCloseVacancy" targetRef="OverviewEnd" />
-    <bpmn:sequenceFlow id="OF10" sourceRef="OverviewAdminReset" targetRef="OverviewEnd" />
-    <bpmn:sequenceFlow id="OF17" name="результат операции показан" sourceRef="OverviewResultForms" targetRef="OverviewEnd" />
+<bpmn:sequenceFlow id="OF17" name="результат операции показан" sourceRef="OverviewResultForms" targetRef="OverviewEnd" />
     <bpmn:sequenceFlow id="Flow_1q3d668" sourceRef="OverviewVacancyClosedMessage" targetRef="OverviewEnd" />
     <bpmn:sequenceFlow id="OF3" sourceRef="OverviewAutoScreen" targetRef="OverviewRecruiterDecision" />
     <bpmn:sequenceFlow id="OF15" name="переход к админскому сбросу интервью" sourceRef="OverviewCandidateResponse" targetRef="OverviewRecruiterDecision" />
-    <bpmn:sequenceFlow id="Flow_0rjoo46" sourceRef="OverviewRecruiterDecision" targetRef="OverviewAdminReset" />
-    <bpmn:sequenceFlow id="Flow_1rw6o35" sourceRef="OverviewRecruiterDecision" targetRef="OverviewInvitation" />
+<bpmn:sequenceFlow id="Flow_1rw6o35" sourceRef="OverviewRecruiterDecision" targetRef="OverviewInvitation" />
     <bpmn:sequenceFlow id="Flow_1c9hlw5" sourceRef="OverviewInvitation" targetRef="OverviewCloseVacancy" />
     <bpmn:sequenceFlow id="OF12" sourceRef="OverviewCloseVacancy" targetRef="OverviewVacancyClosedMessage" />
     <bpmn:sequenceFlow id="Flow_1xvdpsg" sourceRef="OverviewResultForms" targetRef="OverviewVacancyClosedMessage" />
@@ -84,10 +78,7 @@
     <bpmn:endEvent id="OverviewEnd" name="Обзорный процесс завершён">
       <bpmn:incoming>Flow_1q3d668</bpmn:incoming>
     </bpmn:endEvent>
-    <bpmn:userTask id="OverviewAdminReset" name="Админ сбрасывает интервью" camunda:formRef="reset-interview-form" camunda:formRefBinding="latest" camunda:candidateGroups="ADMIN">
-      <bpmn:incoming>Flow_0rjoo46</bpmn:incoming>
-    </bpmn:userTask>
-    <bpmn:serviceTask id="OverviewTimeout" name="Планировщик закрывает просроченные приглашения" camunda:type="external" camunda:topic="timeout-close-expired" />
+<bpmn:serviceTask id="OverviewTimeout" name="Планировщик закрывает просроченные приглашения" camunda:type="external" camunda:topic="timeout-close-expired" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_Overview">
     <bpmndi:BPMNPlane id="BPMNPlane_Overview" bpmnElement="Collaboration_hhProcessOverview">
@@ -97,10 +88,7 @@
       <bpmndi:BPMNShape id="BPMNShape_Lane_System_O" bpmnElement="Lane_System_O" isHorizontal="true">
         <dc:Bounds x="260" y="580" width="2820" height="150" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_Lane_Admin_O" bpmnElement="Lane_Admin_O" isHorizontal="true">
-        <dc:Bounds x="260" y="420" width="2820" height="150" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_Lane_Recruiter_O" bpmnElement="Lane_Recruiter_O" isHorizontal="true">
+<bpmndi:BPMNShape id="BPMNShape_Lane_Recruiter_O" bpmnElement="Lane_Recruiter_O" isHorizontal="true">
         <dc:Bounds x="260" y="260" width="2820" height="150" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_Candidate_O" bpmnElement="Lane_Candidate_O" isHorizontal="true">
@@ -148,10 +136,7 @@
           <dc:Bounds x="1264" y="592" width="52" height="40" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_OverviewAdminReset" bpmnElement="OverviewAdminReset">
-        <dc:Bounds x="985" y="465" width="170" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_OverviewTimeout" bpmnElement="OverviewTimeout">
+<bpmndi:BPMNShape id="BPMNShape_OverviewTimeout" bpmnElement="OverviewTimeout">
         <dc:Bounds x="2245" y="615" width="170" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_OF1" bpmnElement="OF1">
@@ -209,13 +194,7 @@
         <di:waypoint x="1841" y="660" />
         <di:waypoint x="1308" y="660" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_OF10" bpmnElement="OF10">
-        <di:waypoint x="1155" y="500" />
-        <di:waypoint x="1631" y="500" />
-        <di:waypoint x="1631" y="660" />
-        <di:waypoint x="1308" y="660" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_OF17" bpmnElement="OF17">
+<bpmndi:BPMNEdge id="BPMNEdge_OF17" bpmnElement="OF17">
         <di:waypoint x="2140" y="205" />
         <di:waypoint x="2140" y="700" />
         <di:waypoint x="1290" y="700" />
@@ -243,13 +222,7 @@
           <dc:Bounds x="563.9999999999995" y="371" width="88" height="40" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_0rjoo46_di" bpmnElement="Flow_0rjoo46">
-        <di:waypoint x="680" y="375" />
-        <di:waypoint x="680" y="440" />
-        <di:waypoint x="1070" y="440" />
-        <di:waypoint x="1070" y="465" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1rw6o35_di" bpmnElement="Flow_1rw6o35">
+<bpmndi:BPMNEdge id="Flow_1rw6o35_di" bpmnElement="Flow_1rw6o35">
         <di:waypoint x="715" y="340" />
         <di:waypoint x="835" y="340" />
         <di:waypoint x="835" y="370" />

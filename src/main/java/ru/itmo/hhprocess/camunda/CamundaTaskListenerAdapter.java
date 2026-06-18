@@ -70,7 +70,7 @@ public class CamundaTaskListenerAdapter {
                  "DisplayRecruiterApplicationList", "DisplayRecruiterVacancyList", "DisplayRecruiterSchedule" ->
                     ownerFromVariable(variables, "recruiterUserId", "RECRUITER")
                             .or(() -> ownerFromStarter(variables, "RECRUITER"));
-            case "AdminResetApprovalTask", "AdminResetResultTask", "ConfirmTimeoutReview", "DisplayTimeoutReview" ->
+            case "ConfirmTimeoutReview", "DisplayTimeoutReview" ->
                     ownerFromVariable(variables, "adminUserId", "ADMIN")
                             .or(() -> ownerFromStarter(variables, "ADMIN"));
             case "DisplayNotificationList" -> ownerFromStarter(variables, null);

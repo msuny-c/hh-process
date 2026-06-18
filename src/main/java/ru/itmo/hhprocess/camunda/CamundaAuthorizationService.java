@@ -56,7 +56,6 @@ public class CamundaAuthorizationService {
         grantStart(GROUP_RECRUITER, "hhUiNotificationList");
 
         for (String processKey : List.of(
-                properties.getAdminInterviewResetProcessKey(),
                 properties.getTimeoutSchedulerProcessKey(),
                 "hhAdminCreateCandidateProcess",
                 "hhAdminCreateRecruiterProcess",
@@ -138,7 +137,6 @@ public class CamundaAuthorizationService {
                 properties.getVacancyProcessKey(),
                 properties.getVacancyStatusUpdateProcessKey(),
                 properties.getRecruiterInterviewCancelProcessKey(),
-                properties.getAdminInterviewResetProcessKey(),
                 properties.getTimeoutSchedulerProcessKey(),
                 "hhAdminCreateCandidateProcess",
                 "hhAdminCreateRecruiterProcess",
@@ -146,7 +144,6 @@ public class CamundaAuthorizationService {
             camundaRestClient.deleteGroupAuthorization(GROUP_CANDIDATE, RESOURCE_PROCESS_DEFINITION, processKey);
         }
         for (String processKey : List.of(
-                properties.getAdminInterviewResetProcessKey(),
                 properties.getTimeoutSchedulerProcessKey(),
                 "hhAdminCreateCandidateProcess",
                 "hhAdminCreateRecruiterProcess",

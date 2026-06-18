@@ -60,13 +60,7 @@
         <inputEntry id="Rule_timeout_role"><text>"CANDIDATE,RECRUITER"</text></inputEntry>
         <outputEntry id="Rule_timeout_code"><text>"TIMEOUT|INVITATION_TIMEOUT|CANDIDATE,RECRUITER|Interview invitation expired for vacancy: {vacancyTitle}"</text></outputEntry>
       </rule>
-      <rule id="Rule_admin_reset">
-        <inputEntry id="Rule_admin_reset_kind"><text>"ADMIN_RESET"</text></inputEntry>
-        <inputEntry id="Rule_admin_reset_status"><text>"ON_RECRUITER_REVIEW"</text></inputEntry>
-        <inputEntry id="Rule_admin_reset_role"><text>"CANDIDATE,RECRUITER"</text></inputEntry>
-        <outputEntry id="Rule_admin_reset_code"><text>"ADMIN_RESET|INTERVIEW_CANCELLED|CANDIDATE,RECRUITER|Interview was reset by administrator: {resetReason}"</text></outputEntry>
-      </rule>
-      <rule id="Rule_recruiter_cancel">
+<rule id="Rule_recruiter_cancel">
         <inputEntry id="Rule_recruiter_cancel_kind"><text>"RECRUITER_CANCEL"</text></inputEntry>
         <inputEntry id="Rule_recruiter_cancel_status"><text>"ON_RECRUITER_REVIEW"</text></inputEntry>
         <inputEntry id="Rule_recruiter_cancel_role"><text>"CANDIDATE"</text></inputEntry>

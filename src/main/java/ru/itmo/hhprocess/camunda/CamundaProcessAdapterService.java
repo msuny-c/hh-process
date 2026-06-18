@@ -204,13 +204,6 @@ public class CamundaProcessAdapterService {
         return permissionVariables(primaryRole(user), "RESPOND_INVITATION", ownership, user);
     }
 
-    @Transactional(readOnly = true)
-    public Map<String, Object> resolveAdminResetPermission(String starterUserId, UUID adminUserId) {
-        UserEntity user = resolvePermissionUser(starterUserId, adminUserId);
-        boolean ownership = user != null && user.isEnabled() && hasRole(user, "ADMIN");
-        return permissionVariables(primaryRole(user), "ADMIN_RESET", ownership, user);
-    }
-
     @Transactional
     public Map<String, Object> provisionUserFromAdminForm(String starterUserId, String role, String email,
                                                           String password, String firstName, String lastName) {
@@ -291,7 +284,7 @@ public class CamundaProcessAdapterService {
     private String defaultNotificationRecipientRole(String notificationKind) {
         return switch (notificationKind == null ? "" : notificationKind) {
             case "NEW_APPLICATION", "CANDIDATE_RESPONSE" -> "RECRUITER";
-            case "TIMEOUT", "ADMIN_RESET" -> "CANDIDATE,RECRUITER";
+            case "TIMEOUT" -> "CANDIDATE,RECRUITER";
             default -> "CANDIDATE";
         };
     }
@@ -726,65 +719,6 @@ public class CamundaProcessAdapterService {
     }
 
     @Transactional
-    public Map<String, Object> resetInterviewByAdmin(UUID interviewId, UUID adminUserId, String reason) {
-        Map<String, Object> dbResult = resetInterviewByAdminInDb(interviewId, adminUserId, reason);
-        UUID applicationId = (UUID) dbResult.get("applicationId");
-        Map<String, Object> notificationResult = notifyAdminInterviewReset(applicationId, reason);
-        Map<String, Object> result = new LinkedHashMap<>(dbResult);
-        result.putAll(notificationResult);
-        return result;
-    }
-
-    @Transactional
-    public Map<String, Object> resetInterviewByAdminInDb(UUID interviewId, UUID adminUserId, String reason) {
-        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
-        UserEntity adminUser = userRepository.findById(adminUserId)
-                .orElseThrow(() -> new IllegalArgumentException("Admin user not found: " + adminUserId));
-        ApplicationEntity application = interview.getApplication();
-        ApplicationStatus oldStatus = application.getStatus();
-        if (interview.getStatus() == InterviewStatus.CANCELLED) {
-            return Map.of(
-                    "interviewReset", true,
-                    "interviewId", interview.getId(),
-                    "applicationId", application.getId(),
-                    "status", interview.getStatus().name(),
-                    "idempotent", true
-            );
-        }
-        if (interview.getStatus() != InterviewStatus.SCHEDULED) {
-            throw new IllegalArgumentException("Interview is not active: " + interviewId);
-        }
-
-        interviewService.cancel(interview, reason);
-        scheduleService.releaseForInterview(interview);
-
-        application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
-        clearInvitationFields(application, reason);
-        applicationRepository.save(application);
-
-        historyService.record(application, oldStatus, ApplicationStatus.ON_RECRUITER_REVIEW, adminUser);
-
-        return Map.of(
-                "interviewReset", true,
-                "interviewId", interview.getId(),
-                "applicationId", application.getId(),
-                "status", interview.getStatus().name(),
-                "applicationStatus", application.getStatus().name()
-        );
-    }
-
-    @Transactional
-    public Map<String, Object> notifyAdminInterviewReset(UUID applicationId, String reason) {
-        ApplicationEntity application = getApplication(applicationId);
-        notificationService.create(application.getCandidateUser(), application,
-                NotificationType.INTERVIEW_CANCELLED, "Interview was reset by administrator: " + reason);
-        notificationService.create(application.getVacancy().getRecruiterUser(), application,
-                NotificationType.INTERVIEW_CANCELLED, "Interview was reset by administrator: " + reason);
-        return Map.of("adminResetNotificationSent", true, "applicationId", application.getId(),
-                "status", application.getStatus().name());
-    }
-
-    @Transactional
     public Map<String, Object> rollbackApplicationTransaction(UUID applicationId, String reason) {
         ApplicationEntity application = getApplication(applicationId);
         ApplicationStatus oldStatus = application.getStatus();
@@ -1208,62 +1142,6 @@ public class CamundaProcessAdapterService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> validateAdminResetForm(UUID interviewId, UUID adminUserId, String reason) {
-        formValidator.requiredText(reason, "Reset reason", 5_000);
-        interviewService.getByIdForUpdate(interviewId);
-        userRepository.findById(adminUserId).orElseThrow(() -> new CamundaFormValidationException("Admin user not found: " + adminUserId));
-        return Map.of("formValidated", true, "formErrorMessage", "");
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> validateInterviewCanBeReset(UUID interviewId, UUID adminUserId) {
-        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
-        if (interview.getStatus() != InterviewStatus.SCHEDULED && interview.getStatus() != InterviewStatus.CANCELLED) {
-            throw new IllegalArgumentException("Interview is not active: " + interviewId);
-        }
-        return Map.of("interviewCanBeReset", true, "applicationId", interview.getApplication().getId());
-    }
-
-    @Transactional
-    public Map<String, Object> cancelInterviewByAdmin(UUID interviewId, String reason) {
-        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
-        if (interview.getStatus() != InterviewStatus.CANCELLED) {
-            interviewService.cancel(interview, reason);
-        }
-        return Map.of("interviewCancelled", true, "applicationId", interview.getApplication().getId());
-    }
-
-    @Transactional
-    public Map<String, Object> releaseAdminResetSlot(UUID interviewId) {
-        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
-        scheduleService.releaseForInterview(interview);
-        return Map.of("slotReleased", true, "applicationId", interview.getApplication().getId());
-    }
-
-    @Transactional
-    public Map<String, Object> returnApplicationToReview(UUID interviewId, UUID adminUserId, String reason) {
-        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
-        ApplicationEntity application = interview.getApplication();
-        ApplicationStatus oldStatus = application.getStatus();
-        application.setStatus(ApplicationStatus.ON_RECRUITER_REVIEW);
-        clearInvitationFields(application, reason);
-        applicationRepository.save(application);
-        return Map.of("applicationReturnedToReview", true, "applicationId", application.getId(),
-                "oldApplicationStatus", oldStatus.name(), "applicationStatus", application.getStatus().name());
-    }
-
-    @Transactional
-    public Map<String, Object> recordAdminResetHistory(UUID interviewId, UUID adminUserId) {
-        InterviewEntity interview = interviewService.getByIdForUpdate(interviewId);
-        UserEntity adminUser = userRepository.findById(adminUserId)
-                .orElseThrow(() -> new IllegalArgumentException("Admin user not found: " + adminUserId));
-        ApplicationEntity application = interview.getApplication();
-        historyService.record(application, ApplicationStatus.INVITATION_RESPONDED, ApplicationStatus.ON_RECRUITER_REVIEW, adminUser);
-        return Map.of("adminResetHistoryRecorded", true, "applicationId", application.getId(),
-                "applicationStatus", application.getStatus().name());
-    }
-
-    @Transactional(readOnly = true)
     public Map<String, Object> validateVacancyStatusUpdate(UUID vacancyId, UUID recruiterUserId, String starterUserId, String requestedStatus) {
         VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
                 .orElseThrow(() -> new CamundaFormValidationException("Vacancy not found: " + vacancyId));
@@ -1649,9 +1527,7 @@ public class CamundaProcessAdapterService {
                         "RECRUITER", "Candidate responded to interview invitation");
                 case "TIMEOUT" -> new NotificationDecision(kind, NotificationType.INVITATION_TIMEOUT,
                         "CANDIDATE,RECRUITER", "Interview invitation expired for vacancy: {vacancyTitle}");
-                case "ADMIN_RESET" -> new NotificationDecision(kind, NotificationType.INTERVIEW_CANCELLED,
-                        "CANDIDATE,RECRUITER", "Interview was reset by administrator: {resetReason}");
-                case "RECRUITER_CANCEL" -> new NotificationDecision(kind, NotificationType.INTERVIEW_CANCELLED,
+case "RECRUITER_CANCEL" -> new NotificationDecision(kind, NotificationType.INTERVIEW_CANCELLED,
                         "CANDIDATE", "Interview was cancelled: {cancelReason}");
                 case "VACANCY_CLOSED" -> new NotificationDecision(kind, NotificationType.VACANCY_CLOSED,
                         "CANDIDATE", "Vacancy was closed: {vacancyTitle}");

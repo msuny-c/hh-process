@@ -317,16 +317,6 @@ def cancel_interview(api: API, recruiter: SessionCtx, interview_id: str, reason:
     )
 
 
-def admin_reset_interview(api: API, admin: SessionCtx, interview_id: str, reason: str = 'Admin reset') -> Dict[str, Any]:
-    return api.json(
-        'POST',
-        f'/api/v1/admin/interviews/{interview_id}/reset',
-        auth=admin.auth,
-        expected=[200],
-        payload={'reason': reason},
-    )
-
-
 def notifications(api: API, ctx: SessionCtx) -> List[Dict[str, Any]]:
     return api.json('GET', '/api/v1/notifications', auth=ctx.auth, expected=[200])
 

@@ -9,7 +9,7 @@ class CamundaDeploymentServiceTest {
     @Test
     void scanDeploymentResourcesFindsAllBpmnAndForms() {
         CamundaDeploymentService service = new CamundaDeploymentService(
-                null, null, null, null);
+                null, null, null, null, null, null);
 
         var resources = service.scanDeploymentResources();
 

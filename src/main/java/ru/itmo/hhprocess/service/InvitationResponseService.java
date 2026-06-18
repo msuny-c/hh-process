@@ -22,8 +22,6 @@ public class InvitationResponseService {
 
     private final ApplicationRepository applicationRepository;
     private final InvitationResponseRepository invitationResponseRepository;
-    private final HistoryService historyService;
-    private final NotificationService notificationService;
     private final AuthService authService;
     private final ru.itmo.hhprocess.camunda.CamundaWorkflowFacade camundaWorkflowFacade;
 

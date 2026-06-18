@@ -46,14 +46,7 @@
         <inputEntry id="Rule_candidate_respond_invitation_ownership"><text>true</text></inputEntry>
         <outputEntry id="Rule_candidate_respond_invitation_allowed"><text>true</text></outputEntry>
       </rule>
-      <rule id="Rule_admin_reset">
-        <description>Admin may reset interviews.</description>
-        <inputEntry id="Rule_admin_reset_role"><text>"ADMIN"</text></inputEntry>
-        <inputEntry id="Rule_admin_reset_operation"><text>"ADMIN_RESET"</text></inputEntry>
-        <inputEntry id="Rule_admin_reset_ownership"><text>true</text></inputEntry>
-        <outputEntry id="Rule_admin_reset_allowed"><text>true</text></outputEntry>
-      </rule>
-      <rule id="Rule_default_denied">
+<rule id="Rule_default_denied">
         <description>Everything not explicitly allowed is denied.</description>
         <inputEntry id="Rule_default_denied_role"><text>-</text></inputEntry>
         <inputEntry id="Rule_default_denied_operation"><text>-</text></inputEntry>

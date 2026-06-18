@@ -43,7 +43,6 @@ public class CamundaExternalTaskWorker {
     private static final String TOPIC_VACANCY_STATUS_UPDATE = "vacancy-status-update";
     private static final String TOPIC_INTERVIEW_CANCEL = "interview-cancel";
     private static final String TOPIC_ROLLBACK = "transaction-rollback";
-    private static final String TOPIC_ADMIN_INTERVIEW_RESET = "admin-interview-reset";
     private static final String TOPIC_ADMIN_USER_PROVISION = "admin-user-provision";
     private static final String TOPIC_UI_QUERY = "ui-query";
     private static final String TOPIC_PERMISSION_CHECK = "permission-check";
@@ -52,7 +51,6 @@ public class CamundaExternalTaskWorker {
     private static final String TOPIC_NOTIFICATION_DISPATCH = "notification-dispatch";
     private static final String APPLICATION_TRANSACTION_FAILED = "APPLICATION_TX_FAILED";
     private static final String VACANCY_TRANSACTION_FAILED = "VACANCY_TX_FAILED";
-    private static final String ADMIN_RESET_FAILED = "ADMIN_RESET_FAILED";
     private static final String FORM_VALIDATION_FAILED = "FORM_VALIDATION_FAILED";
 
     private static final List<String> VARIABLES = List.of(
@@ -90,7 +88,6 @@ public class CamundaExternalTaskWorker {
         register(TOPIC_VACANCY_STATUS_UPDATE, this::handleVacancyStatusUpdateTask);
         register(TOPIC_INTERVIEW_CANCEL, this::handleInterviewCancelTask);
         register(TOPIC_ROLLBACK, this::handleRollbackTask);
-        register(TOPIC_ADMIN_INTERVIEW_RESET, this::handleAdminInterviewResetTask);
         register(TOPIC_ADMIN_USER_PROVISION, this::handleAdminUserProvisionTask);
         register(TOPIC_UI_QUERY, this::handleUiQueryTask);
         register(TOPIC_PERMISSION_CHECK, this::handlePermissionTask);
@@ -270,24 +267,6 @@ public class CamundaExternalTaskWorker {
         return Map.of("timeoutTaskIgnored", true, "activityId", activityId);
     }
 
-    private Map<String, Object> handleAdminInterviewResetTask(String activityId, ExternalTask task) {
-        UUID interviewId = requiredUuid(task, "interviewId");
-        UUID adminUserId = requiredUuid(task, "adminUserId");
-        String resetReason = str(task, "resetReason");
-        return switch (activityId) {
-            case "ValidateAdminResetForm" -> adapterService.validateAdminResetForm(interviewId, adminUserId, resetReason);
-            case "ValidateInterviewCanBeReset" -> adapterService.validateInterviewCanBeReset(interviewId, adminUserId);
-            case "CancelInterviewByAdmin" -> adapterService.cancelInterviewByAdmin(interviewId, resetReason);
-            case "ReleaseAdminResetSlot" -> adapterService.releaseAdminResetSlot(interviewId);
-            case "ReturnApplicationToReview" -> adapterService.returnApplicationToReview(interviewId, adminUserId, resetReason);
-            case "RecordAdminResetHistory" -> adapterService.recordAdminResetHistory(interviewId, adminUserId);
-            case "ResetInterviewToDb" -> adapterService.resetInterviewByAdminInDb(interviewId, adminUserId, resetReason);
-            case "NotifyAdminResetParticipants" -> adapterService.notifyAdminInterviewReset(
-                    requiredUuid(task, "applicationId"), resetReason);
-            default -> adapterService.resetInterviewByAdmin(interviewId, adminUserId, resetReason);
-        };
-    }
-
     private Map<String, Object> handleAdminUserProvisionTask(String activityId, ExternalTask task) {
         String role = switch (activityId) {
             case "ProvisionCandidateUser" -> "CANDIDATE";
@@ -394,8 +373,6 @@ public class CamundaExternalTaskWorker {
                     str(task, "starterUserId"), uuid(task, "applicationId"));
             case "ResolveCandidateResponsePermission" -> adapterService.resolveCandidateResponsePermission(
                     str(task, "starterUserId"), uuid(task, "applicationId"));
-            case "ResolveAdminResetPermission" -> adapterService.resolveAdminResetPermission(
-                    str(task, "starterUserId"), uuid(task, "adminUserId"));
             default -> adapterService.resolveOperationPermission("SYSTEM", "UNKNOWN", false);
         };
     }
@@ -440,7 +417,7 @@ public class CamundaExternalTaskWorker {
 
     private Map<String, Object> handleRollbackTask(String activityId, ExternalTask task) {
         return switch (activityId) {
-            case "RollbackApplicationTransaction", "RollbackAdminReset", "RollbackRecruiterCancel" ->
+            case "RollbackApplicationTransaction", "RollbackRecruiterCancel" ->
                     adapterService.rollbackApplicationTransaction(
                             requiredUuid(task, "applicationId"), str(task, "rollbackReason"));
             case "RollbackVacancyTransaction" -> adapterService.rollbackVacancyTransaction(
@@ -472,9 +449,6 @@ public class CamundaExternalTaskWorker {
             case "CloseActiveApplications", "CloseVacancyAndApplicationsToDb", "NotifyVacancyClosedCandidates",
                  "MarkVacancyClosed", "CancelActiveInterviewsForVacancy", "ReleaseScheduleSlotsForClosedVacancy",
                  "CloseActiveApplicationsForVacancy", "RecordVacancyClosedHistory" -> VACANCY_TRANSACTION_FAILED;
-            case "ResetInterviewTransaction", "ResetInterviewToDb", "NotifyAdminResetParticipants",
-                 "ValidateInterviewCanBeReset", "CancelInterviewByAdmin", "ReleaseAdminResetSlot",
-                 "ReturnApplicationToReview", "RecordAdminResetHistory" -> ADMIN_RESET_FAILED;
             default -> APPLICATION_TRANSACTION_FAILED;
         };
         Map<String, Object> variables = new LinkedHashMap<>();

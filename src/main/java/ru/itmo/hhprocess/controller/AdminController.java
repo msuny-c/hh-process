@@ -5,20 +5,14 @@ import lombok.extern.slf4j.Slf4j;
 import ru.itmo.hhprocess.dto.admin.AdminCreateUserRequest;
 import ru.itmo.hhprocess.dto.admin.AdminUserProvisionResponse;
 import ru.itmo.hhprocess.dto.admin.JobResultResponse;
-import ru.itmo.hhprocess.dto.admin.ResetInterviewRequest;
-import ru.itmo.hhprocess.dto.admin.ResetInterviewResponse;
 import ru.itmo.hhprocess.service.AdminUserProvisioningService;
-import ru.itmo.hhprocess.service.InterviewProcessService;
 import ru.itmo.hhprocess.service.TimeoutService;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
-import java.util.UUID;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,7 +25,6 @@ import io.swagger.v3.oas.annotations.Operation;
 public class AdminController {
 
     private final TimeoutService timeoutService;
-    private final InterviewProcessService interviewProcessService;
     private final AdminUserProvisioningService adminUserProvisioningService;
 
     @Operation(summary = "Закрыть просроченные приглашения")
@@ -55,15 +48,6 @@ public class AdminController {
             long durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000;
             log.info("Admin timeout endpoint leaving controller method; durationMs={}", durationMs);
         }
-    }
-
-    @Operation(summary = "Моментально сбросить интервью без ожидания шедулера")
-    @PostMapping("/interviews/{interviewId}/reset")
-    @PreAuthorize("hasAuthority('INTERVIEW_RESET_ANY')")
-    public ResetInterviewResponse resetInterview(@PathVariable @NotNull UUID interviewId,
-                                                 @Valid @RequestBody ResetInterviewRequest request) {
-        log.info("Admin interview reset endpoint invoked; interviewId={}", interviewId);
-        return interviewProcessService.resetInterviewByAdmin(interviewId, request);
     }
 
     @Operation(summary = "Создать кандидата в приложении и Camunda")

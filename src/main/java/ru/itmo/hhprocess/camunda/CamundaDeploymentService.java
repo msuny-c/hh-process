@@ -35,7 +35,9 @@ public class CamundaDeploymentService {
 
     private final CamundaRestClient camundaRestClient;
     private final CamundaWorkflowFacade camundaWorkflowFacade;
-    private final CamundaIdentityProviderService camundaIdentityProviderService;
+    private final CamundaAuthorizationService camundaAuthorizationService;
+    private final CamundaIdentitySyncService camundaIdentitySyncService;
+    private final CamundaTasklistFilterService camundaTasklistFilterService;
     private final CamundaProperties properties;
 
     @EventListener(ApplicationReadyEvent.class)
@@ -53,7 +55,9 @@ public class CamundaDeploymentService {
 
         camundaRestClient.deploy(properties.getDeploymentName(), resources)
                 .ifPresent(id -> log.info("Deployed BPMN/resources to Camunda deploymentId={}", id));
-        camundaIdentityProviderService.provisionApplicationIdentity();
+        camundaAuthorizationService.configureStartAuthorizations();
+        camundaIdentitySyncService.syncUsersGroupsAndMemberships();
+        camundaTasklistFilterService.configureTasklistFilters();
         cleanupDefaultDemoArtifactsWithRetries();
         camundaWorkflowFacade.startTimeoutSchedulerIfNeeded();
     }
