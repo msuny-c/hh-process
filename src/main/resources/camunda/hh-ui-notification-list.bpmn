@@ -1,5 +1,5 @@
-<?xml version='1.0' encoding='UTF-8'?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_notification_list" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_notification_list" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.48.0">
   <bpmn:collaboration id="Collaboration_hhUiNotificationList" name="Пул: экран уведомлений">
     <bpmn:participant id="Participant_hhUiNotificationList" name="Пул: экран уведомлений" processRef="hhUiNotificationList" />
   </bpmn:collaboration>
@@ -12,40 +12,49 @@
         <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Пользователь открыл список уведомлений" />
-    <bpmn:serviceTask id="LoadNotificationList" name="Загрузить только уведомления текущего пользователя" camunda:type="external" camunda:topic="ui-query" />
-    <bpmn:userTask id="DisplayNotificationList" name="Показать уведомления текущего пользователя" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
-    <bpmn:endEvent id="End" name="Уведомления показаны пользователю" />
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" />
     <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadNotificationList" />
     <bpmn:sequenceFlow id="F2" sourceRef="LoadNotificationList" targetRef="DisplayNotificationList" />
     <bpmn:sequenceFlow id="F3" sourceRef="DisplayNotificationList" targetRef="End" />
+    <bpmn:serviceTask id="LoadNotificationList" name="Загрузить только уведомления текущего пользователя" camunda:type="external" camunda:topic="ui-query" />
+    <bpmn:userTask id="DisplayNotificationList" name="Показать уведомления текущего пользователя" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
+    <bpmn:endEvent id="End" name="Уведомления показаны пользователю" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_hhUiNotificationList">
     <bpmndi:BPMNPlane id="BPMNPlane_hhUiNotificationList" bpmnElement="Collaboration_hhUiNotificationList">
       <bpmndi:BPMNShape id="BPMNShape_Participant_hhUiNotificationList" bpmnElement="Participant_hhUiNotificationList" isHorizontal="true">
-        <dc:Bounds x="0" y="90" width="1316" height="200" />
+        <dc:Bounds x="160" y="90" width="880" height="200" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_hhUiNotificationList_RoleSystem" bpmnElement="Lane_hhUiNotificationList_RoleSystem" isHorizontal="true">
-        <dc:Bounds x="100" y="110" width="1196" height="160" />
+        <dc:Bounds x="260" y="110" width="760" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Start" bpmnElement="Start">
-        <dc:Bounds x="140" y="172" width="36" height="36" />
+        <dc:Bounds x="300" y="172" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_LoadNotificationList" bpmnElement="LoadNotificationList">
-        <dc:Bounds x="380" y="150" width="170" height="80" />
+        <dc:Bounds x="405" y="150" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_DisplayNotificationList" bpmnElement="DisplayNotificationList">
-        <dc:Bounds x="620" y="150" width="170" height="80" />
+        <dc:Bounds x="635" y="150" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_End" bpmnElement="End">
-        <dc:Bounds x="860" y="172" width="36" height="36" />
+        <dc:Bounds x="892" y="172" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="874" y="208" width="72" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_F1" bpmnElement="F1">
-        <di:waypoint x="176" y="190.0" /><di:waypoint x="380" y="190.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="336" y="190" />
+        <di:waypoint x="405" y="190" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F2" bpmnElement="F2">
-        <di:waypoint x="550" y="190.0" /><di:waypoint x="620" y="190.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="575" y="190" />
+        <di:waypoint x="635" y="190" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F3" bpmnElement="F3">
-        <di:waypoint x="790" y="190.0" /><di:waypoint x="860" y="190.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="805" y="190" />
+        <di:waypoint x="892" y="190" />
+      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

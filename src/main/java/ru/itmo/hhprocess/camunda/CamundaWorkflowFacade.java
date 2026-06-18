@@ -138,17 +138,7 @@ public class CamundaWorkflowFacade {
                 "decidedAt", Instant.now(),
                 "completedByGroup", RECRUITER_GROUP
         );
-        if (completeApplicationTask(application.getId(), RECRUITER_DECISION_TASK, null, recruiterUser.getId(), variables)) {
-            return true;
-        }
-        return completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, Map.of(
-                "responseType", "RECRUITER_REJECT",
-                "decision", "REJECT",
-                "recruiterComment", safe(comment),
-                "decidedAt", Instant.now(),
-                "completedByUserId", recruiterUser.getId(),
-                "completedByGroup", RECRUITER_GROUP
-        ));
+        return completeApplicationTask(application.getId(), RECRUITER_DECISION_TASK, null, recruiterUser.getId(), variables);
     }
 
     public boolean recruiterInvited(ApplicationEntity application, UserEntity recruiterUser, String message, Instant scheduledAt, Integer durationMinutes, Instant expiresAt) {
@@ -181,38 +171,7 @@ public class CamundaWorkflowFacade {
     }
 
     public boolean invitationTimedOut(ApplicationEntity application) {
-        Map<String, Object> variables = Map.of(
-                "responseType", "TIMEOUT",
-                "timeoutAt", Instant.now(),
-                "applicationId", application.getId()
-        );
-        if (camundaRestClient.correlateMessage("MSG_INVITATION_EXPIRED", applicationBusinessKey(application.getId()), variables)) {
-            return true;
-        }
-        return completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, Map.of(
-                "responseType", "TIMEOUT",
-                "timeoutAt", Instant.now()
-        ));
-    }
-
-    public boolean returnInvitationToRecruiterReview(ApplicationEntity application, String reason, String responseType) {
-        Map<String, Object> variables = Map.of(
-                "responseType", responseType,
-                "cancelReason", safe(reason),
-                "returnedToRecruiterReviewAt", Instant.now()
-        );
-        String messageName = switch (responseType) {
-            case "RECRUITER_CANCEL" -> "MSG_INTERVIEW_CANCELLED";
-            default -> "";
-        };
-        if (!messageName.isBlank()
-                && camundaRestClient.correlateMessage(messageName, applicationBusinessKey(application.getId()), variables)) {
-            return true;
-        }
-        if (completeApplicationTask(application.getId(), CANDIDATE_RESPONSE_TASK, variables)) {
-            return true;
-        }
-        return !camundaRestClient.findActiveTasks(applicationBusinessKey(application.getId()), RECRUITER_DECISION_TASK).isEmpty();
+        return false;
     }
 
     public boolean applicationClosedByVacancy(ApplicationEntity application, String reason) {

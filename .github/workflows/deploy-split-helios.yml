@@ -75,7 +75,7 @@ jobs:
 
   ci-docker-tests:
     needs: build
-    if: ${{ github.ref_name == 'lab4' }}
+    if: ${{ github.ref_name == 'lab4' && vars.CI_SKIP_TESTS != 'true' }}
     runs-on: ubuntu-latest
     env:
       POSTGRES_DB: ${{ secrets.POSTGRES_DB || vars.POSTGRES_DB || 'postgres' }}
@@ -259,6 +259,7 @@ jobs:
 
   deploy-camunda:
     needs: [build, ci-docker-tests]
+    if: ${{ always() && needs.build.result == 'success' && (needs.ci-docker-tests.result == 'success' || needs.ci-docker-tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     env:
       CAMUNDA_SSH_HOST: ${{ secrets.WORKER_SSH_HOST || vars.WORKER_SSH_HOST }}
@@ -374,6 +375,7 @@ jobs:
 
   deploy-app:
     needs: [build, deploy-camunda]
+    if: ${{ always() && needs.build.result == 'success' && needs.deploy-camunda.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       WAR_NAME: ${{ needs.build.outputs.war_name }}

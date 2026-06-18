@@ -1,5 +1,5 @@
-<?xml version='1.0' encoding='UTF-8'?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_recruiter_application_list" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.47.0">
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_hh_ui_recruiter_application_list" targetNamespace="http://itmo.ru/hhprocess/camunda" exporter="Camunda Modeler" exporterVersion="5.48.0">
   <bpmn:collaboration id="Collaboration_hhUiRecruiterApplicationList" name="Пул: экран откликов рекрутера">
     <bpmn:participant id="Participant_hhUiRecruiterApplicationList" name="Пул: экран откликов рекрутера" processRef="hhUiRecruiterApplicationList" />
   </bpmn:collaboration>
@@ -12,40 +12,49 @@
         <bpmn:flowNodeRef>End</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" name="Рекрутер открыл список откликов" />
+    <bpmn:startEvent id="Start" camunda:initiator="starterUserId" />
     <bpmn:serviceTask id="LoadRecruiterApplicationList" name="Загрузить отклики по вакансиям текущего рекрутера" camunda:type="external" camunda:topic="ui-query" />
-    <bpmn:userTask id="DisplayRecruiterApplicationList" name="Показать рекрутеру отклики по его вакансиям" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
-    <bpmn:endEvent id="End" name="Список откликов показан рекрутеру" />
     <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="LoadRecruiterApplicationList" />
     <bpmn:sequenceFlow id="F2" sourceRef="LoadRecruiterApplicationList" targetRef="DisplayRecruiterApplicationList" />
     <bpmn:sequenceFlow id="F3" sourceRef="DisplayRecruiterApplicationList" targetRef="End" />
+    <bpmn:userTask id="DisplayRecruiterApplicationList" name="Показать рекрутеру отклики по его вакансиям" camunda:formRef="ui-json-display-form" camunda:formRefBinding="latest" camunda:assignee="${starterUserId}" />
+    <bpmn:endEvent id="End" name="Список откликов показан рекрутеру" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_hhUiRecruiterApplicationList">
     <bpmndi:BPMNPlane id="BPMNPlane_hhUiRecruiterApplicationList" bpmnElement="Collaboration_hhUiRecruiterApplicationList">
       <bpmndi:BPMNShape id="BPMNShape_Participant_hhUiRecruiterApplicationList" bpmnElement="Participant_hhUiRecruiterApplicationList" isHorizontal="true">
-        <dc:Bounds x="60" y="20" width="1316" height="200" />
+        <dc:Bounds x="160" y="80" width="860" height="200" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_hhUiRecruiterApplicationList_RoleSystem" bpmnElement="Lane_hhUiRecruiterApplicationList_RoleSystem" isHorizontal="true">
-        <dc:Bounds x="160" y="40" width="1196" height="160" />
+        <dc:Bounds x="260" y="100" width="740" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Start" bpmnElement="Start">
-        <dc:Bounds x="200" y="102" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_End" bpmnElement="End">
-        <dc:Bounds x="920" y="102" width="36" height="36" />
+        <dc:Bounds x="300" y="162" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_LoadRecruiterApplicationList" bpmnElement="LoadRecruiterApplicationList">
-        <dc:Bounds x="365" y="80" width="170" height="80" />
+        <dc:Bounds x="405" y="140" width="170" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_DisplayRecruiterApplicationList" bpmnElement="DisplayRecruiterApplicationList">
-        <dc:Bounds x="605" y="80" width="170" height="80" />
+        <dc:Bounds x="635" y="140" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_End" bpmnElement="End">
+        <dc:Bounds x="872" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="848" y="198" width="85" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_F1" bpmnElement="F1">
-        <di:waypoint x="236" y="120.0" /><di:waypoint x="365" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="336" y="180" />
+        <di:waypoint x="405" y="180" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F2" bpmnElement="F2">
-        <di:waypoint x="535" y="120.0" /><di:waypoint x="605" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="575" y="180" />
+        <di:waypoint x="635" y="180" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_F3" bpmnElement="F3">
-        <di:waypoint x="775" y="120.0" /><di:waypoint x="920" y="120.0" /></bpmndi:BPMNEdge>
+        <di:waypoint x="805" y="180" />
+        <di:waypoint x="872" y="180" />
+      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

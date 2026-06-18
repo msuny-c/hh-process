@@ -190,9 +190,7 @@ def main() -> int:
     print('OK executable application BPMN uses split notification/message topics')
 
     required_decisions = {
-        'hhOperationPermissions',
         'hhAutoScreening',
-        'hhStatusTransitions',
         'hhNotificationTemplates',
     }
     for key in required_decisions:

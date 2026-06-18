@@ -104,8 +104,6 @@ public class InterviewProcessService {
                         "Camunda recruiter interview cancel process was not started"));
 
         interview = waitForInterviewCancelled(interviewId);
-        application = waitForApplicationStatus(application.getId(), ApplicationStatus.ON_RECRUITER_REVIEW);
-        camundaWorkflowFacade.returnInvitationToRecruiterReview(application, request.getReason(), "RECRUITER_CANCEL");
 
         return InterviewActionResponse.builder()
                 .interviewId(interview.getId())

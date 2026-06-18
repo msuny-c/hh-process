@@ -51,41 +51,11 @@ def ensure(condition: bool, message: str) -> None:
 def main() -> int:
     wait_camunda()
 
-    permission = evaluate('hhOperationPermissions', {
-        'permissionRole': 'RECRUITER',
-        'permissionOperation': 'CREATE_VACANCY',
-        'permissionOwnership': True,
-    })
-    ensure(permission.get('allowed') is True, f'permission allow rule failed: {permission}')
-
-    denied = evaluate('hhOperationPermissions', {
-        'permissionRole': 'CANDIDATE',
-        'permissionOperation': 'CREATE_VACANCY',
-        'permissionOwnership': True,
-    })
-    ensure(denied.get('allowed') is False, f'permission deny rule failed: {denied}')
-
     screening_passed = evaluate('hhAutoScreening', {'screeningScoreDelta': 0})
     ensure(screening_passed.get('passed') is True, f'autoscreening pass rule failed: {screening_passed}')
 
     screening_failed = evaluate('hhAutoScreening', {'screeningScoreDelta': -1})
     ensure(screening_failed.get('passed') is False, f'autoscreening fail rule failed: {screening_failed}')
-
-    transition = evaluate('hhStatusTransitions', {
-        'currentStatus': 'ON_RECRUITER_REVIEW',
-        'statusAction': 'INVITE_APPLICATION',
-        'requestedStatus': '',
-    })
-    ensure(transition.get('allowed') is True and transition.get('nextStatus') == 'INVITED',
-           f'status transition invite rule failed: {transition}')
-
-    blocked_transition = evaluate('hhStatusTransitions', {
-        'currentStatus': 'SCREENING_FAILED',
-        'statusAction': 'RESPOND_INVITATION',
-        'requestedStatus': '',
-    })
-    ensure(blocked_transition.get('allowed') is False,
-           f'status transition deny rule failed: {blocked_transition}')
 
     template = evaluate('hhNotificationTemplates', {
         'notificationKind': 'INVITATION',

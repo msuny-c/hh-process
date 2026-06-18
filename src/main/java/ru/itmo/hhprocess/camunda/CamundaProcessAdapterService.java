@@ -153,57 +153,6 @@ public class CamundaProcessAdapterService {
         return variables;
     }
 
-    @Transactional(readOnly = true)
-    public Map<String, Object> resolveOperationPermission(String role, String operation, boolean ownership) {
-        return Map.of(
-                "permissionRole", role,
-                "permissionOperation", operation,
-                "permissionOwnership", ownership,
-                "permissionChecked", true
-        );
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> resolveCreateVacancyPermission(String starterUserId, UUID recruiterUserId) {
-        UserEntity user = resolvePermissionUser(starterUserId, recruiterUserId);
-        boolean ownership = user != null && user.isEnabled() && hasRole(user, "RECRUITER");
-        return permissionVariables(primaryRole(user), "CREATE_VACANCY", ownership, user);
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> resolveRecruiterDecisionPermission(String starterUserId, UUID applicationId) {
-        UserEntity user = resolvePermissionUser(starterUserId, null);
-        boolean ownership = false;
-        if (user != null && applicationId != null && hasRole(user, "RECRUITER")) {
-            ownership = applicationRepository.findDetailedById(applicationId)
-                    .map(application -> application.getVacancy().getRecruiterUser().getId().equals(user.getId()))
-                    .orElse(false);
-        } else if (applicationId != null) {
-            ownership = applicationRepository.findDetailedById(applicationId)
-                    .map(application -> application.getVacancy().getRecruiterUser() != null)
-                    .orElse(false);
-            return permissionVariables("RECRUITER", "REVIEW_APPLICATION", ownership, null);
-        }
-        return permissionVariables(primaryRole(user), "REVIEW_APPLICATION", ownership, user);
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> resolveCandidateResponsePermission(String starterUserId, UUID applicationId) {
-        UserEntity user = resolvePermissionUser(starterUserId, null);
-        boolean ownership = false;
-        if (user != null && applicationId != null && hasRole(user, "CANDIDATE")) {
-            ownership = applicationRepository.findDetailedById(applicationId)
-                    .map(application -> application.getCandidateUser().getId().equals(user.getId()))
-                    .orElse(false);
-        } else if (applicationId != null) {
-            ownership = applicationRepository.findDetailedById(applicationId)
-                    .map(application -> application.getCandidateUser() != null)
-                    .orElse(false);
-            return permissionVariables("CANDIDATE", "RESPOND_INVITATION", ownership, null);
-        }
-        return permissionVariables(primaryRole(user), "RESPOND_INVITATION", ownership, user);
-    }
-
     @Transactional
     public Map<String, Object> provisionUserFromAdminForm(String starterUserId, String role, String email,
                                                           String password, String firstName, String lastName) {
@@ -293,7 +242,7 @@ public class CamundaProcessAdapterService {
                                                              String invitationMessage, String closeReason, String cancelReason,
                                                              String resetReason) {
         if ("VACANCY_CLOSED".equals(decision.kind())) {
-            return notifyVacancyClosedCandidates(requiredUuid(vacancyId, "vacancyId"), decision);
+            return notifyVacancyClosedCandidates(requiredUuid(vacancyId, "vacancyId"));
         }
         ApplicationEntity application = getApplication(requiredUuid(applicationId, "applicationId"));
         int sent = 0;
@@ -568,7 +517,6 @@ public class CamundaProcessAdapterService {
     public Map<String, Object> closeVacancyApplications(UUID vacancyId, String reason) {
         Map<String, Object> dbResult = closeVacancyApplicationsInDb(vacancyId, reason);
         notifyVacancyClosedCandidates(vacancyId);
-        correlateVacancyClosedApplications(vacancyId, reason);
         return dbResult;
     }
 
@@ -606,64 +554,7 @@ public class CamundaProcessAdapterService {
 
 
     @Transactional
-    public Map<String, Object> correlateVacancyClosedApplications(UUID vacancyId, String reason) {
-        VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
-                .orElseThrow(() -> new IllegalArgumentException("Vacancy not found: " + vacancyId));
-        List<ApplicationEntity> applications = applicationRepository.findByVacancyIdAndStatusIn(
-                vacancyId, List.of(ApplicationStatus.CLOSED_BY_VACANCY));
-        int correlated = 0;
-        int missed = 0;
-        for (ApplicationEntity application : applications) {
-            Map<String, Object> variables = new LinkedHashMap<>();
-            variables.put("applicationId", application.getId());
-            variables.put("vacancyId", vacancyId);
-            variables.put("vacancyTitle", vacancy.getTitle());
-            variables.put("closeReason", reason == null ? "" : reason);
-            variables.put("status", application.getStatus().name());
-            boolean sent = camundaRestClient.correlateMessage("MSG_VACANCY_CLOSED", "application:" + application.getId(), variables);
-            if (sent) {
-                correlated++;
-            } else {
-                missed++;
-            }
-        }
-        return Map.of(
-                "vacancyClosedMessageCorrelated", true,
-                "correlatedApplications", correlated,
-                "missedApplications", missed
-        );
-    }
-
-    @Transactional
-    public Map<String, Object> handleVacancyClosedMessage(UUID applicationId, String reason) {
-        ApplicationEntity application = getApplication(applicationId);
-        ApplicationStatus oldStatus = application.getStatus();
-        if (oldStatus != ApplicationStatus.CLOSED_BY_VACANCY && !oldStatus.isTerminal()) {
-            application.setStatus(ApplicationStatus.CLOSED_BY_VACANCY);
-            application.setClosedAt(Instant.now());
-            application.setRecruiterComment(reason);
-            applicationRepository.save(application);
-            historyService.record(application, oldStatus, ApplicationStatus.CLOSED_BY_VACANCY,
-                    application.getVacancy().getRecruiterUser());
-        }
-        return Map.of(
-                "vacancyClosedMessageHandled", true,
-                "applicationId", application.getId(),
-                "oldApplicationStatus", oldStatus.name(),
-                "status", application.getStatus().name()
-        );
-    }
-
-    @Transactional
     public Map<String, Object> notifyVacancyClosedCandidates(UUID vacancyId) {
-        return notifyVacancyClosedCandidates(vacancyId, new NotificationDecision(
-                "VACANCY_CLOSED",
-                NotificationType.VACANCY_CLOSED,
-                "CANDIDATE",
-                "Vacancy was closed: {vacancyTitle}"));
-    }
-
-    private Map<String, Object> notifyVacancyClosedCandidates(UUID vacancyId, NotificationDecision decision) {
         VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
                 .orElseThrow(() -> new IllegalArgumentException("Vacancy not found: " + vacancyId));
         List<ApplicationEntity> applications = applicationRepository.findByVacancyIdAndStatusIn(
@@ -671,51 +562,11 @@ public class CamundaProcessAdapterService {
         int notifiedCount = 0;
         for (ApplicationEntity application : applications) {
             notificationService.createIfAbsent(application.getCandidateUser(), application,
-                    decision.type(), renderTemplate(decision.template(), application, "", "", "", ""));
+                    NotificationType.VACANCY_CLOSED,
+                    renderTemplate("Vacancy was closed: {vacancyTitle}", application, "", "", "", ""));
             notifiedCount++;
         }
         return Map.of("notificationSent", true, "notifiedCount", notifiedCount, "status", vacancy.getStatus().name());
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> prepareStatusTransition(String currentStatus, String action, String requestedStatus) {
-        return Map.of(
-                "currentStatus", currentStatus == null ? "UNKNOWN" : currentStatus,
-                "statusAction", action == null ? "UNKNOWN" : action,
-                "requestedStatus", requestedStatus == null ? "" : requestedStatus
-        );
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> prepareRecruiterDecisionTransition(UUID applicationId, String decision) {
-        ApplicationEntity application = getApplication(applicationId);
-        String action = switch (decision == null ? "" : decision) {
-            case "INVITE" -> "INVITE_APPLICATION";
-            case "REJECT" -> "REJECT_APPLICATION";
-            case "VACANCY_CLOSED" -> "CLOSE_BY_TIMEOUT";
-            default -> "UNKNOWN";
-        };
-        return prepareStatusTransition(application.getStatus().name(), action, "");
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> prepareCandidateResponseTransition(UUID applicationId, String responseType) {
-        ApplicationEntity application = getApplication(applicationId);
-        return prepareStatusTransition(application.getStatus().name(), "RESPOND_INVITATION", "");
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> prepareCloseVacancyTransition(UUID vacancyId) {
-        VacancyEntity vacancy = vacancyRepository.findById(vacancyId)
-                .orElseThrow(() -> new CamundaFormValidationException("Vacancy not found: " + vacancyId));
-        return prepareStatusTransition(vacancy.getStatus().name(), "CLOSE_VACANCY", VacancyStatus.CLOSED.name());
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> prepareVacancyStatusTransition(UUID vacancyId, String requestedStatus) {
-        VacancyEntity vacancy = vacancyRepository.findById(vacancyId)
-                .orElseThrow(() -> new CamundaFormValidationException("Vacancy not found: " + vacancyId));
-        return prepareStatusTransition(vacancy.getStatus().name(), "UPDATE_VACANCY_STATUS", requestedStatus);
     }
 
     @Transactional
@@ -879,7 +730,7 @@ public class CamundaProcessAdapterService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> validateRecruiterDecisionForm(UUID applicationId, String decision, String comment) {
-        formValidator.requiredChoice(decision, "Recruiter decision", Set.of("INVITE", "REJECT", "VACANCY_CLOSED"));
+        formValidator.requiredChoice(decision, "Recruiter decision", Set.of("INVITE", "REJECT"));
         if ("REJECT".equals(decision)) {
             formValidator.requireNotBlank(comment, "Rejection comment is required");
         }
@@ -1430,45 +1281,6 @@ public class CamundaProcessAdapterService {
         return user;
     }
 
-    private UserEntity resolvePermissionUser(String starterUserId, UUID explicitUserId) {
-        try {
-            if (explicitUserId != null) {
-                return userRepository.findById(explicitUserId).orElse(null);
-            }
-            return resolveUserFromCamundaStarter(starterUserId, null);
-        } catch (RuntimeException ignored) {
-            return null;
-        }
-    }
-
-    private Map<String, Object> permissionVariables(String role, String operation, boolean ownership, UserEntity user) {
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("permissionRole", role);
-        variables.put("permissionOperation", operation);
-        variables.put("permissionOwnership", ownership);
-        variables.put("permissionChecked", true);
-        if (user != null) {
-            variables.put("permissionSubjectUserId", user.getId());
-        }
-        return variables;
-    }
-
-    private String primaryRole(UserEntity user) {
-        if (user == null) {
-            return "UNKNOWN";
-        }
-        if (hasRole(user, "ADMIN")) {
-            return "ADMIN";
-        }
-        if (hasRole(user, "RECRUITER")) {
-            return "RECRUITER";
-        }
-        if (hasRole(user, "CANDIDATE")) {
-            return "CANDIDATE";
-        }
-        return "UNKNOWN";
-    }
-
     private boolean hasRole(UserEntity user, String roleCode) {
         return user.getRoles().stream().anyMatch(role -> roleCode.equalsIgnoreCase(role.getCode()));
     }
@@ -1527,7 +1339,7 @@ public class CamundaProcessAdapterService {
                         "RECRUITER", "Candidate responded to interview invitation");
                 case "TIMEOUT" -> new NotificationDecision(kind, NotificationType.INVITATION_TIMEOUT,
                         "CANDIDATE,RECRUITER", "Interview invitation expired for vacancy: {vacancyTitle}");
-case "RECRUITER_CANCEL" -> new NotificationDecision(kind, NotificationType.INTERVIEW_CANCELLED,
+                case "RECRUITER_CANCEL" -> new NotificationDecision(kind, NotificationType.INTERVIEW_CANCELLED,
                         "CANDIDATE", "Interview was cancelled: {cancelReason}");
                 case "VACANCY_CLOSED" -> new NotificationDecision(kind, NotificationType.VACANCY_CLOSED,
                         "CANDIDATE", "Vacancy was closed: {vacancyTitle}");

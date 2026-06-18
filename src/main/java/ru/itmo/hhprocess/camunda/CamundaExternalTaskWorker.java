@@ -45,8 +45,6 @@ public class CamundaExternalTaskWorker {
     private static final String TOPIC_ROLLBACK = "transaction-rollback";
     private static final String TOPIC_ADMIN_USER_PROVISION = "admin-user-provision";
     private static final String TOPIC_UI_QUERY = "ui-query";
-    private static final String TOPIC_PERMISSION_CHECK = "permission-check";
-    private static final String TOPIC_STATUS_TRANSITION = "status-transition";
     private static final String TOPIC_NOTIFICATION_DECISION = "notification-decision";
     private static final String TOPIC_NOTIFICATION_DISPATCH = "notification-dispatch";
     private static final String APPLICATION_TRANSACTION_FAILED = "APPLICATION_TX_FAILED";
@@ -62,8 +60,7 @@ public class CamundaExternalTaskWorker {
             "screeningTotalSkills", "requestedStatus", "resumeText", "coverLetter", "screeningPassed", "status",
             "action", "decision", "recruiterComment", "invitationMessage", "scheduledAt", "durationMinutes",
             "responseType", "responseMessage", "closeReason", "cancelReason", "resetReason", "rollbackReason",
-            "permissionRole", "permissionOperation", "permissionOwnership", "permissionAllowed", "permissionChecked",
-            "currentStatus", "statusAction", "statusTransition", "notificationStatus", "recipientRole",
+            "notificationStatus", "recipientRole",
             "notificationTemplateCode", "notificationTemplate", "notificationType", "notificationKind",
             "notificationDispatched", "applicationIdText", "weekOffset", "uiTitle", "uiPayload",
             "email", "password", "firstName", "lastName");
@@ -90,8 +87,6 @@ public class CamundaExternalTaskWorker {
         register(TOPIC_ROLLBACK, this::handleRollbackTask);
         register(TOPIC_ADMIN_USER_PROVISION, this::handleAdminUserProvisionTask);
         register(TOPIC_UI_QUERY, this::handleUiQueryTask);
-        register(TOPIC_PERMISSION_CHECK, this::handlePermissionTask);
-        register(TOPIC_STATUS_TRANSITION, this::handleStatusTransitionTask);
         register(TOPIC_NOTIFICATION_DECISION, (id, t) -> handleNotificationDecisionTask(t));
         register(TOPIC_NOTIFICATION_DISPATCH, (id, t) -> handleNotificationDispatchTask(t));
     }
@@ -241,8 +236,6 @@ public class CamundaExternalTaskWorker {
                     str(task, "responseMessage")
             );
             case "NotifyCandidateResponse" -> adapterService.notifyCandidateResponse(applicationId);
-            case "HandleVacancyClosedMessage" -> adapterService.handleVacancyClosedMessage(
-                    applicationId, str(task, "closeReason"));
             default -> Map.of("adapterCompleted", true, "activityId", activityId);
         };
     }
@@ -309,7 +302,6 @@ public class CamundaExternalTaskWorker {
             case "RecordVacancyClosedHistory" -> adapterService.recordVacancyClosedHistory(vacancyId);
             case "CloseVacancyAndApplicationsToDb" -> adapterService.closeVacancyApplicationsInDb(vacancyId, closeReason);
             case "NotifyVacancyClosedCandidates" -> adapterService.notifyVacancyClosedCandidates(vacancyId);
-            case "CorrelateVacancyClosedApplications" -> adapterService.correlateVacancyClosedApplications(vacancyId, closeReason);
             default -> adapterService.closeVacancyApplications(vacancyId, closeReason);
         };
     }
@@ -362,32 +354,6 @@ public class CamundaExternalTaskWorker {
             case "LoadNotificationList" -> adapterService.loadNotificationList(str(task, "starterUserId"));
             case "RunTimeoutReview" -> adapterService.runTimeoutReview(str(task, "starterUserId"));
             default -> Map.of("uiQueryIgnored", true, "activityId", activityId);
-        };
-    }
-
-    private Map<String, Object> handlePermissionTask(String activityId, ExternalTask task) {
-        return switch (activityId) {
-            case "ResolveCreateVacancyPermission" -> adapterService.resolveCreateVacancyPermission(
-                    str(task, "starterUserId"), uuid(task, "recruiterUserId"));
-            case "ResolveRecruiterDecisionPermission" -> adapterService.resolveRecruiterDecisionPermission(
-                    str(task, "starterUserId"), uuid(task, "applicationId"));
-            case "ResolveCandidateResponsePermission" -> adapterService.resolveCandidateResponsePermission(
-                    str(task, "starterUserId"), uuid(task, "applicationId"));
-            default -> adapterService.resolveOperationPermission("SYSTEM", "UNKNOWN", false);
-        };
-    }
-
-    private Map<String, Object> handleStatusTransitionTask(String activityId, ExternalTask task) {
-        return switch (activityId) {
-            case "PrepareRecruiterDecisionTransition" -> adapterService.prepareRecruiterDecisionTransition(
-                    requiredUuid(task, "applicationId"), str(task, "decision"));
-            case "PrepareCandidateResponseTransition" -> adapterService.prepareCandidateResponseTransition(
-                    requiredUuid(task, "applicationId"), str(task, "responseType"));
-            case "PrepareCloseVacancyTransition" -> adapterService.prepareCloseVacancyTransition(
-                    requiredUuid(task, "vacancyId"));
-            case "PrepareVacancyStatusTransition" -> adapterService.prepareVacancyStatusTransition(
-                    requiredUuid(task, "vacancyId"), str(task, "requestedStatus"));
-            default -> adapterService.prepareStatusTransition("UNKNOWN", "UNKNOWN", "");
         };
     }
 

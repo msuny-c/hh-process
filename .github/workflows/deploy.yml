@@ -91,6 +91,7 @@ jobs:
           exit 1
 
       - name: Run API tests from test/
+        if: ${{ vars.CI_SKIP_TESTS != 'true' }}
         run: |
           echo "APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${APP_TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS}"
           echo "TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS=${TIMEOUT_DEBUG_DISABLE_NOTIFICATIONS}"

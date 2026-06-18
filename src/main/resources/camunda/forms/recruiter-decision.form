@@ -22,8 +22,7 @@
       "label": "Решение по отклику",
       "values": [
         { "label": "Пригласить", "value": "INVITE" },
-        { "label": "Отказать", "value": "REJECT" },
-        { "label": "Вакансия закрыта", "value": "VACANCY_CLOSED" }
+        { "label": "Отказать", "value": "REJECT" }
       ],
       "validate": { "required": true }
     },

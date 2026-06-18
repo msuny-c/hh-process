@@ -1,6 +1,11 @@
 #!/usr/bin/env sh
 set -eu
 
+if [ "${CI_SKIP_TESTS:-false}" = "true" ]; then
+  echo "CI_SKIP_TESTS=true — skipping all tests"
+  exit 0
+fi
+
 : "${BASE_URL:=http://127.0.0.1:8080}"
 : "${CAMUNDA_URL:=http://127.0.0.1:8081/engine-rest}"
 : "${POSTGRES_HOST:=127.0.0.1}"

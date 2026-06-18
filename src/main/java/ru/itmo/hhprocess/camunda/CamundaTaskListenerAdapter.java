@@ -59,7 +59,7 @@ public class CamundaTaskListenerAdapter {
         return switch (taskDefinitionKey) {
             case "ApplyToVacancyTask", "CandidateInvitationResponseTask", "ScreeningResultTask",
                  "RejectionResultTask", "TimeoutResultTask", "CandidateResponseResultTask",
-                 "VacancyClosedApplicationResultTask", "EnterCandidateApplicationId",
+                 "EnterCandidateApplicationId",
                  "DisplayCandidateApplicationView", "DisplayCandidateApplicationList",
                  "DisplayCandidateVacancyList" -> ownerFromVariable(variables, "candidateUserId", "CANDIDATE")
                     .or(() -> ownerFromStarter(variables, "CANDIDATE"));
