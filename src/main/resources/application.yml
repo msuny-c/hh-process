@@ -84,8 +84,8 @@ app:
       id: ${CAMUNDA_WORKER_ID:hh-process-worker}
       max-tasks: ${CAMUNDA_WORKER_MAX_TASKS:10}
       lock-duration-ms: ${CAMUNDA_WORKER_LOCK_DURATION_MS:30000}
-      async-response-timeout-ms: ${CAMUNDA_WORKER_ASYNC_RESPONSE_TIMEOUT_MS:2000}
-      poll-interval-ms: ${CAMUNDA_WORKER_POLL_INTERVAL_MS:3000}
+      async-response-timeout-ms: ${CAMUNDA_WORKER_ASYNC_RESPONSE_TIMEOUT_MS:500}
+      poll-interval-ms: ${CAMUNDA_WORKER_POLL_INTERVAL_MS:500}
       initial-delay-ms: ${CAMUNDA_WORKER_INITIAL_DELAY_MS:10000}
     task-listener:
       enabled: ${CAMUNDA_TASK_LISTENER_ENABLED:true}
