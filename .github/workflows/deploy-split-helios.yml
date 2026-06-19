@@ -3,10 +3,11 @@ name: Deploy hh-process split Helios
 on:
   workflow_dispatch:
     inputs:
-      deploy_branch:
-        description: "Deploy is intended to run from lab4 only"
+      skip_tests:
+        description: "Skip Docker CI tests"
         required: false
-        default: "lab4"
+        default: false
+        type: boolean
   push:
     branches: ["lab4"]
 
@@ -75,7 +76,7 @@ jobs:
 
   ci-docker-tests:
     needs: build
-    if: ${{ github.ref_name == 'lab4' && vars.CI_SKIP_TESTS != 'true' }}
+    if: ${{ github.ref_name == 'lab4' && vars.CI_SKIP_TESTS != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.skip_tests == true) }}
     runs-on: ubuntu-latest
     env:
       POSTGRES_DB: ${{ secrets.POSTGRES_DB || vars.POSTGRES_DB || 'postgres' }}
