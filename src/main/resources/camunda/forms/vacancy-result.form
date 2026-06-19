@@ -12,10 +12,6 @@
     },
     { "type": "text", "id": "resultHeader", "text": "## Результат процесса вакансии" },
     { "type": "textfield", "id": "vacancyId", "key": "vacancyId", "label": "ID вакансии", "readonly": true },
-    { "type": "textfield", "id": "status", "key": "status", "label": "Итоговый статус вакансии", "readonly": true },
-    { "type": "textfield", "id": "vacancyTitle", "key": "vacancyTitle", "label": "Вакансия", "readonly": true },
-    { "type": "number", "id": "closedApplicationsCount", "key": "closedApplicationsCount", "label": "Закрыто откликов", "readonly": true },
-    { "type": "number", "id": "correlatedApplications", "key": "correlatedApplications", "label": "Оповещено application-процессов", "readonly": true },
-    { "type": "textarea", "id": "closeReason", "key": "closeReason", "label": "Причина закрытия", "readonly": true }
+    { "type": "textfield", "id": "status", "key": "status", "label": "Итоговый статус вакансии", "readonly": true }
   ]
 }

@@ -532,7 +532,6 @@ public class CamundaProcessAdapterService {
 
         List<ApplicationEntity> applications = applicationRepository.findByVacancyIdAndStatusIn(
                 vacancyId, ACTIVE_APPLICATION_STATUSES);
-        int closedCount = 0;
         Instant now = Instant.now();
         for (ApplicationEntity application : applications) {
             ApplicationStatus oldStatus = application.getStatus();
@@ -547,9 +546,8 @@ public class CamundaProcessAdapterService {
             application.setClosedAt(now);
             clearInvitationFields(application, reason);
             historyService.record(application, oldStatus, ApplicationStatus.CLOSED_BY_VACANCY, vacancy.getRecruiterUser());
-            closedCount++;
         }
-        return Map.of("vacancyClosed", true, "closedApplicationsCount", closedCount, "status", vacancy.getStatus().name());
+        return Map.of("vacancyClosed", true, "status", vacancy.getStatus().name());
     }
 
 
@@ -933,7 +931,7 @@ public class CamundaProcessAdapterService {
             vacancy.setStatus(VacancyStatus.CLOSED);
             vacancyHistoryService.record(vacancy, oldVacancyStatus, VacancyStatus.CLOSED, vacancy.getRecruiterUser());
         }
-        return Map.of("vacancyClosed", true, "oldVacancyStatus", oldVacancyStatus.name(), "status", vacancy.getStatus().name());
+        return Map.of("vacancyClosed", true, "status", vacancy.getStatus().name());
     }
 
     @Transactional
@@ -969,7 +967,6 @@ public class CamundaProcessAdapterService {
         VacancyEntity vacancy = vacancyRepository.findByIdForUpdate(vacancyId)
                 .orElseThrow(() -> new IllegalArgumentException("Vacancy not found: " + vacancyId));
         List<ApplicationEntity> applications = applicationRepository.findByVacancyIdAndStatusIn(vacancyId, ACTIVE_APPLICATION_STATUSES);
-        int closedCount = 0;
         Instant now = Instant.now();
         for (ApplicationEntity application : applications) {
             ApplicationStatus oldStatus = application.getStatus();
@@ -980,9 +977,8 @@ public class CamundaProcessAdapterService {
             application.setClosedAt(now);
             clearInvitationFields(application, reason);
             historyService.record(application, oldStatus, ApplicationStatus.CLOSED_BY_VACANCY, vacancy.getRecruiterUser());
-            closedCount++;
         }
-        return Map.of("closedApplicationsCount", closedCount, "status", vacancy.getStatus().name());
+        return Map.of("status", vacancy.getStatus().name());
     }
 
     @Transactional(readOnly = true)
@@ -1007,7 +1003,6 @@ public class CamundaProcessAdapterService {
         return Map.of(
                 "formValidated", true,
                 "formErrorMessage", "",
-                "oldVacancyStatus", vacancy.getStatus().name(),
                 "recruiterUserId", recruiter.getId(),
                 "recruiterCamundaUserId", CamundaIdentitySyncService.camundaUserId(recruiter)
         );
@@ -1028,7 +1023,6 @@ public class CamundaProcessAdapterService {
         return Map.of(
                 "vacancyStatusUpdated", true,
                 "vacancyId", vacancy.getId(),
-                "oldVacancyStatus", oldStatus.name(),
                 "status", vacancy.getStatus().name()
         );
     }

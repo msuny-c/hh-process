@@ -22,7 +22,7 @@ skinparam node {
 skinparam ArrowColor #334155
 skinparam ArrowThickness 2
 
-title Архитектура HH Process на Helios и точки интеграции Camunda
+title Архитектура HH Process
 
 actor "Пользователь\nкандидат / рекрутер / админ" as User
 
@@ -47,7 +47,7 @@ User --> Tasklist : Camunda Forms
 User --> Api : пользовательские REST-сценарии
 User --> Tasklist : мониторинг и выполнение задач
 
-Api --> EngineRest : запуск процессов\nкорреляция сообщений
+Api --> EngineRest : запуск процессов
 Adapter --> EngineRest : fetch & complete\nexternal tasks
 Adapter --> EngineRest : синхронизация пользователей\nгрупп и авторизаций
 Services --> Db : JTA / JDBC
@@ -56,7 +56,7 @@ Db -[hidden] ScheduleData
 
 note bottom
 Camunda управляет маршрутом процесса, задачами, формами, таймерами и DMN.
-WildFly-приложение выполняет бизнес-операции, server-side валидацию,
+WildFly-приложение выполняет бизнес-операции, валидацию,
 транзакции и работу с PostgreSQL.
 end note
 @enduml

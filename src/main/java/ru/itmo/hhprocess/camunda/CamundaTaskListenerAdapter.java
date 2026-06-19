@@ -24,8 +24,8 @@ public class CamundaTaskListenerAdapter {
     private final CamundaRestClient camundaRestClient;
     private final UserRepository userRepository;
 
-    @Scheduled(fixedDelayString = "${app.camunda.task-listener.poll-interval-ms:5000}",
-            initialDelayString = "${app.camunda.task-listener.initial-delay-ms:12000}")
+    @Scheduled(fixedDelayString = "${app.camunda.task-listener.poll-interval-ms:1000}",
+            initialDelayString = "${app.camunda.task-listener.initial-delay-ms:2000}")
     public void reconcileActiveUserTasks() {
         if (!camundaRestClient.isEnabled()) {
             return;

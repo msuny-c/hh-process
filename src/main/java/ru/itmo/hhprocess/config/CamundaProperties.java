@@ -49,7 +49,7 @@ private String vacancyStatusUpdateProcessKey = "hhVacancyStatusUpdateProcess";
     @Setter
     public static class TaskListener {
         private boolean enabled = true;
-        private long pollIntervalMs = 5000;
-        private long initialDelayMs = 12000;
+        private long pollIntervalMs = 1000;
+        private long initialDelayMs = 2000;
     }
 }
