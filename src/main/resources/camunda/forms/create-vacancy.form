@@ -10,8 +10,6 @@
       "content": "<div style=\"padding:12px;border-radius:6px;background:#fee2e2;color:#991b1b;\"><strong>Ошибка формы:</strong> {{formErrorMessage}}<br/><span>Поля: {{formErrorFields}}</span></div>",
       "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
     },
-    { "type": "text", "id": "contextHeader", "text": "## Контекст процесса" },
-    { "type": "textfield", "id": "recruiterUserId", "key": "recruiterUserId", "label": "ID рекрутера", "readonly": true },
     { "type": "text", "id": "inputHeader", "text": "## Данные вакансии" },
     { "type": "textfield", "id": "title", "key": "title", "label": "Название вакансии", "validate": { "required": true, "maxLength": 255 } },
     { "type": "textarea", "id": "description", "key": "description", "label": "Описание", "validate": { "maxLength": 10000 } },

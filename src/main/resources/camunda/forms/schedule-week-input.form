@@ -11,7 +11,6 @@
       "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
     },
     { "type": "text", "id": "header", "text": "## Неделя расписания" },
-    { "type": "textfield", "id": "starterUserId", "key": "starterUserId", "label": "Camunda пользователь", "readonly": true },
     { "type": "number", "id": "weekOffset", "key": "weekOffset", "label": "Смещение недели", "defaultValue": 0, "validate": { "required": true, "min": -52, "max": 52 } }
   ]
 }

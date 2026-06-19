@@ -13,8 +13,6 @@
     { "type": "text", "id": "header", "text": "## Пользователь создан" },
     { "type": "textfield", "id": "provisionedEmail", "key": "provisionedEmail", "label": "Email в приложении", "readonly": true },
     { "type": "textfield", "id": "provisionedRole", "key": "provisionedRole", "label": "Роль", "readonly": true },
-    { "type": "textfield", "id": "provisionedUserId", "key": "provisionedUserId", "label": "ID пользователя в БД", "readonly": true },
-    { "type": "textfield", "id": "provisionedCamundaUserId", "key": "provisionedCamundaUserId", "label": "Логин Camunda", "readonly": true },
     { "type": "textarea", "id": "provisioningResultMessage", "key": "provisioningResultMessage", "label": "Результат", "readonly": true }
   ]
 }
