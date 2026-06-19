@@ -170,10 +170,6 @@ public class CamundaWorkflowFacade {
         ));
     }
 
-    public boolean invitationTimedOut(ApplicationEntity application) {
-        return false;
-    }
-
     public boolean applicationClosedByVacancy(ApplicationEntity application, String reason) {
         Map<String, Object> variables = Map.of(
                 "decision", "VACANCY_CLOSED",

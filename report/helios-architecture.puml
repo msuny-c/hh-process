@@ -53,10 +53,4 @@ Adapter --> EngineRest : синхронизация пользователей\n
 Services --> Db : JTA / JDBC
 Db -[hidden] AppData
 Db -[hidden] ScheduleData
-
-note bottom
-Camunda управляет маршрутом процесса, задачами, формами, таймерами и DMN.
-WildFly-приложение выполняет бизнес-операции, валидацию,
-транзакции и работу с PostgreSQL.
-end note
 @enduml

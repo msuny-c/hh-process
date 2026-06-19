@@ -11,7 +11,6 @@
       "conditional": { "hide": "=formErrorMessage = null or formErrorMessage = \"\"" }
     },
     { "type": "text", "id": "contextHeader", "text": "## Контекст отклика" },
-    { "type": "textfield", "id": "vacancyTitle", "key": "vacancyTitle", "label": "Вакансия", "readonly": true },
     { "type": "textfield", "id": "vacancyId", "key": "vacancyId", "label": "ID вакансии", "validate": { "required": true } },
     { "type": "text", "id": "inputHeader", "text": "## Данные резюме" },
     { "type": "textarea", "id": "resumeText", "key": "resumeText", "label": "Текст резюме", "validate": { "required": true, "minLength": 20, "maxLength": 50000 } },

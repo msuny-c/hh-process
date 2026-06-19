@@ -251,11 +251,6 @@ public class CamundaExternalTaskWorker {
             case "CloseExpiredInvitationApplication" -> { return timeoutBatchProcessor.closeExpiredInvitationApplication(requiredUuid(task, "expiredApplicationId")); }
             case "RecordExpiredInvitationHistory" -> { return timeoutBatchProcessor.recordExpiredInvitationHistory(requiredUuid(task, "expiredApplicationId")); }
             case "NotifyExpiredInvitationParticipants" -> { return timeoutBatchProcessor.notifyExpiredInvitationParticipants(requiredUuid(task, "expiredApplicationId")); }
-            case "CompleteExpiredInvitationProcess" -> { return timeoutBatchProcessor.completeExpiredInvitationProcess(requiredUuid(task, "expiredApplicationId")); }
-            case "ProcessOneExpiredInvitation" -> {
-                int batchClosed = timeoutBatchProcessor.processOneExpired();
-                return Map.of("batchClosed", batchClosed, "expiredFound", batchClosed > 0, "timeoutBatchIterationCompleted", true);
-            }
         }
         return Map.of("timeoutTaskIgnored", true, "activityId", activityId);
     }

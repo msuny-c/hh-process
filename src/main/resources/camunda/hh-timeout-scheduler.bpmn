@@ -7,9 +7,9 @@
     <bpmn:laneSet id="LaneSet_Timeout">
       <bpmn:lane id="Lane_Timer_T" name="Таймер">
         <bpmn:flowNodeRef>TimeoutTimerStart</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>NoExpiredInvitationsEnd</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>FindOneExpiredInvitation</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ExpiredFoundGateway</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>NoExpiredInvitationsEnd</bpmn:flowNodeRef>
       </bpmn:lane>
       <bpmn:lane id="Lane_System_T" name="Система">
         <bpmn:flowNodeRef>CancelExpiredInvitationInterview</bpmn:flowNodeRef>
@@ -17,7 +17,6 @@
         <bpmn:flowNodeRef>CloseExpiredInvitationApplication</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>RecordExpiredInvitationHistory</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>NotifyExpiredInvitationParticipants</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>CompleteExpiredInvitationProcess</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
     <bpmn:startEvent id="TimeoutTimerStart">
@@ -39,7 +38,6 @@
         <camunda:out source="notificationKind" target="lastNotificationKind" />
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:serviceTask id="CompleteExpiredInvitationProcess" name="Сообщить процессу отклика о таймауте" camunda:type="external" camunda:topic="timeout-close-expired" />
     <bpmn:sequenceFlow id="TF1" sourceRef="TimeoutTimerStart" targetRef="FindOneExpiredInvitation" />
     <bpmn:sequenceFlow id="TF2" sourceRef="FindOneExpiredInvitation" targetRef="ExpiredFoundGateway" />
     <bpmn:sequenceFlow id="TF3" sourceRef="ExpiredFoundGateway" targetRef="NoExpiredInvitationsEnd">
@@ -52,32 +50,25 @@
     <bpmn:sequenceFlow id="TTX2" sourceRef="ReleaseExpiredInvitationSlot" targetRef="CloseExpiredInvitationApplication" />
     <bpmn:sequenceFlow id="TTX3" sourceRef="CloseExpiredInvitationApplication" targetRef="RecordExpiredInvitationHistory" />
     <bpmn:sequenceFlow id="TF5" sourceRef="RecordExpiredInvitationHistory" targetRef="NotifyExpiredInvitationParticipants" />
-    <bpmn:sequenceFlow id="TF6" sourceRef="NotifyExpiredInvitationParticipants" targetRef="CompleteExpiredInvitationProcess" />
-    <bpmn:sequenceFlow id="TF7" sourceRef="CompleteExpiredInvitationProcess" targetRef="FindOneExpiredInvitation" />
+    <bpmn:sequenceFlow id="TF6" sourceRef="NotifyExpiredInvitationParticipants" targetRef="FindOneExpiredInvitation" />
     <bpmn:exclusiveGateway id="ExpiredFoundGateway" name="Есть просроченное приглашение?" />
     <bpmn:endEvent id="NoExpiredInvitationsEnd" name="Просроченных приглашений нет" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_AutoLayout">
     <bpmndi:BPMNPlane id="BPMNPlane_AutoLayout" bpmnElement="Collaboration_hhTimeoutSchedulerProcess">
       <bpmndi:BPMNShape id="BPMNShape_Participant_hhTimeoutSchedulerProcess" bpmnElement="Participant_hhTimeoutSchedulerProcess" isHorizontal="true">
-        <dc:Bounds x="160" y="80" width="1780" height="520" />
+        <dc:Bounds x="160" y="80" width="1630" height="520" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_System_T" bpmnElement="Lane_System_T" isHorizontal="true">
-        <dc:Bounds x="260" y="240" width="1660" height="360" />
+        <dc:Bounds x="260" y="240" width="1510" height="360" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_Lane_Timer_T" bpmnElement="Lane_Timer_T" isHorizontal="true">
-        <dc:Bounds x="260" y="80" width="1660" height="160" />
+        <dc:Bounds x="260" y="80" width="1510" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_TimeoutTimerStart" bpmnElement="TimeoutTimerStart">
         <dc:Bounds x="320" y="142" width="36" height="36" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="302" y="178" width="74" height="66" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_NoExpiredInvitationsEnd" bpmnElement="NoExpiredInvitationsEnd">
-        <dc:Bounds x="882" y="147" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="857" y="196" width="88" height="27" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_FindOneExpiredInvitation" bpmnElement="FindOneExpiredInvitation">
@@ -99,13 +90,16 @@
         <dc:Bounds x="1430" y="340" width="170" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_CompleteExpiredInvitationProcess" bpmnElement="CompleteExpiredInvitationProcess">
-        <dc:Bounds x="1680" y="340" width="170" height="80" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_ExpiredFoundGateway" bpmnElement="ExpiredFoundGateway" isMarkerVisible="true">
         <dc:Bounds x="740" y="135" width="50" height="50" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="800" y="110" width="74" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_NoExpiredInvitationsEnd" bpmnElement="NoExpiredInvitationsEnd">
+        <dc:Bounds x="882" y="147" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="857" y="196" width="88" height="27" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BPMNEdge_TF1" bpmnElement="TF1">
@@ -144,11 +138,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_TF6" bpmnElement="TF6">
         <di:waypoint x="1600" y="380" />
-        <di:waypoint x="1680" y="380" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="BPMNEdge_TF7" bpmnElement="TF7">
-        <di:waypoint x="1765" y="420" />
-        <di:waypoint x="1765" y="560" />
+        <di:waypoint x="1700" y="380" />
+        <di:waypoint x="1700" y="560" />
         <di:waypoint x="370" y="560" />
         <di:waypoint x="370" y="180" />
         <di:waypoint x="455" y="180" />
