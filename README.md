@@ -1,5 +1,15 @@
 # HH Process
 
+![Java](https://img.shields.io/badge/Java-17-007396?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.3-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![Flyway](https://img.shields.io/badge/Flyway-Migrations-CC0200?style=for-the-badge&logo=flyway&logoColor=white)
+![Camunda](https://img.shields.io/badge/Camunda-BPM-FC5D0D?style=for-the-badge&logo=camunda&logoColor=white)
+![WildFly](https://img.shields.io/badge/WildFly-Application%20Server-50A4D8?style=for-the-badge)
+![Narayana](https://img.shields.io/badge/Narayana-JTA-6A5ACD?style=for-the-badge)
+![Docker](https://img.shields.io/badge/Docker%20Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Maven](https://img.shields.io/badge/Maven-C71A36?style=for-the-badge&logo=apachemaven&logoColor=white)
+
 Проект показывает процесс обработки отклика на вакансию. Кандидат отправляет заявку, система проводит первичную проверку, рекрутер принимает решение, а дальнейшие действия идут через BPMN-процессы Camunda.
 
 ![Процесс отклика](report/HH.ru.png)
@@ -13,10 +23,6 @@
 - Flyway-миграции, JTA/Narayana-транзакции и WebSocket-уведомления.
 
 ![BPMN-процесс заявки](report/application-process-bpmn.png)
-
-## Технологии
-
-Java 17, Spring Boot, Spring Security, Spring Data JPA, PostgreSQL, Flyway, Camunda BPM, WildFly, Narayana, Docker Compose, Maven.
 
 ## Как запустить
 
